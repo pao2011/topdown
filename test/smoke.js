@@ -32,6 +32,12 @@ const path = require('path');
   await page.tap('#bPlay');
   await page.waitForTimeout(300);
   assert.strictEqual(await ev(() => __apagon.state), 'play');
+  // Regresión: un fogonazo casi apagado (alfa 1e-12) congelaba el juego al dibujarse
+  await page.keyboard.press('Escape');
+  await ev(() => { const p = __apagon.room.p; __apagon.room.flashes.push({ x: p.x, y: p.y, r: 50, t: 1e-12, max: 0.08, poly: [p.x, p.y, p.x + 40, p.y, p.x, p.y + 40] }); });
+  await page.waitForTimeout(150);
+  assert.deepStrictEqual(errors, [], 'dibujar un fogonazo casi apagado no debe fallar');
+  await page.click('#bResume');
   const cdp = await ctx.newCDPSession(page);
   const touch = async (id, x0, y0, x1, y1, ms) => {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0, id }] });
@@ -69,6 +75,34 @@ const path = require('path');
   });
   assert.deepStrictEqual(heard, { s1: 'suspicious', s2: 'investigate', urgent: true });
 
+  // Todo oscuro: un guardia a tu espalda, fuera de la linterna, es un píxel negro
+  const dark = await ev(() => {
+    const A = __apagon, r = A.room;
+    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+      if (A.castRay(e.x, e.y, c, s, 150) < 150) continue;
+      r.p.x = e.x + c * 130; r.p.y = e.y + s * 130; r.p.a = a; // de espaldas al guardia
+      if (A.lit(e.x, e.y)) continue;
+      Object.assign(e, { state: 'patrol', aware: 0, a: a + Math.PI, lookA: a + Math.PI, waitT: 5, lookT: 5 });
+      window.__dark = e; r.enemies.splice(0, r.enemies.length, e); return true; // solo él: nada lo atrae hacia tu luz
+    }
+    return false;
+  });
+  if (dark) {
+    await page.waitForTimeout(700);
+    let px;
+    for (let i = 0; i < 6 && !(px && px.every(v => v < 10)); i++) { // un fogonazo ajeno sí ilumina: se reintenta
+      await page.waitForTimeout(80);
+      px = await ev(() => {
+        const { cam, S, cw, ch } = __apagon.view, e = window.__dark;
+        const x = Math.round(cw / 2 + (e.x - cam.x) * S), y = Math.round(ch / 2 + (e.y - cam.y) * S);
+        return [...document.getElementById('c').getContext('2d').getImageData(x, y, 1, 1).data].slice(0, 3);
+      });
+    }
+    const dbg = await ev(() => { const A = __apagon, r = A.room, e = window.__dark; return { st: e.state, d: Math.round(Math.hypot(e.x - r.p.x, e.y - r.p.y)), lit: A.lit(e.x, e.y), fl: r.flashes.length, alive: r.enemies.includes(e), pa: r.p.a.toFixed(2) }; });
+    assert(px.every(v => v < 10), 'un guardia fuera de tu luz debe quedar a oscuras, píxel: ' + px + ' ' + JSON.stringify(dbg));
+  } else console.warn('aviso: ningún guardia apto; se omite la prueba de oscuridad');
+
   // Vista: plantado delante de un guardia, acaba detectándote
   const placed = await ev(() => {
     const A = __apagon, r = A.room;
@@ -78,7 +112,8 @@ const path = require('path');
         r.p.x = e.x + c * 70; r.p.y = e.y + s * 70;
         Object.assign(e, { state: 'patrol', aware: 0, path: null, waitT: 5, lookA: e.a, lookT: 5 });
         window.__target = e;
-        return r.enemies.indexOf(e);
+        r.enemies.splice(0, r.enemies.length, e); // solo él: que no lo distraigan los disparos de otros
+        return 0;
       }
     }
     return -1;

@@ -2,7 +2,7 @@
 (() => {
 // ================= Datos =================
 const T = 40; // tamaño de casilla en px de mundo
-const STICK_R = 56, SNEAK = 0.55, FIRE = 0.8;
+const STICK_R = 56, SNEAK = 0.55, FIRE = 0.8, LS = 0.5; // LS: escala de la máscara de oscuridad
 
 const WEAPONS = {
   pistol:   { name: 'Pistola',  price: 0,   dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, reserve: 48, pellets: 1 },
@@ -23,7 +23,6 @@ const FOES = {
   heavy: { hp: 160, walk: 45, run: 95,  dmg: 6,  rate: 0.9, spread: 0.28, pellets: 5, vision: 220, reward: 60, r: 16, color: '#9e3f36' },
   elite: { hp: 90,  walk: 66, run: 145, dmg: 11, rate: 4.2, spread: 0.08, pellets: 1, vision: 290, reward: 50, r: 13, color: '#e0843a' },
 };
-const LIGHT = { patrol: '150,195,255', suspicious: '255,181,71', investigate: '255,181,71', search: '255,181,71', combat: '255,84,68' };
 const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIR8 = [...DIR4, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -344,11 +343,20 @@ function enterCombat(e) {
   if (e.state !== 'combat') {
     e.state = 'combat'; e.reactT = Math.max(0.2, rnd(0.35, 0.7) - run.level * 0.015); e.aware = 1; e.path = null;
     room.detected = true;
-    popup(e.x, e.y - 24, '!', '#ff5444');
+    if (lit(e.x, e.y)) popup(e.x, e.y - 24, '!', '#ff5444');
     sfx('alert', e.x, e.y);
     noise(e.x, e.y, 340, 'alert', e, p.x, p.y); // avisa a los compañeros de dónde estás
   }
   e.last = { x: p.x, y: p.y }; e.lostT = 0; e.alertLvl = Math.max(e.alertLvl, 1);
+}
+// ¿Lo alumbra algo que el jugador ve? (linterna, halo o lámpara); coincide con la máscara de luz
+function lit(x, y) {
+  const p = room.p;
+  if (p.dead) return false;
+  const d = Math.hypot(x - p.x, y - p.y);
+  if (d < (run.light ? 75 : 120) && los(p.x, p.y, x, y)) return true;
+  if (run.light && d < 340 && Math.abs(angDiff(p.a, Math.atan2(y - p.y, x - p.x))) < 0.62 && los(p.x, p.y, x, y)) return true;
+  return room.lamps.some(l => l.on && Math.hypot(l.x - x, l.y - y) < l.r && los(l.x, l.y, x, y));
 }
 function exposure() {
   const p = room.p;
@@ -413,7 +421,7 @@ function updateEnemy(e, dt) {
     const bd = Math.hypot(b.x - e.x, b.y - e.y);
     if (bd < F.vision * 0.9 && Math.abs(angDiff(e.a, Math.atan2(b.y - e.y, b.x - e.x))) < 0.62 && los(e.x, e.y, b.x, b.y)) {
       e.seen.add(b); e.alertLvl = 2;
-      popup(e.x, e.y - 24, '?!', '#ffb547');
+      if (lit(e.x, e.y)) popup(e.x, e.y - 24, '?!', '#ffb547');
       investigate(e, b.x, b.y, true);
       noise(e.x, e.y, 260, 'alert', e, b.x, b.y);
     }
@@ -516,7 +524,7 @@ function assist(a) { // ayuda de apuntado suave para pantallas táctiles
   let best = null, bd = 0.22;
   for (const e of room.enemies) {
     const d = dist(p, e), da = Math.abs(angDiff(a, ang(p, e)));
-    if (d < 420 && da < bd && los(p.x, p.y, e.x, e.y)) { best = e; bd = da; }
+    if (d < 420 && da < bd && lit(e.x, e.y)) { best = e; bd = da; }
   }
   return best ? ang(p, best) : a;
 }
@@ -734,9 +742,10 @@ function fillPoly(c, pts) {
   for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
   c.closePath(); c.fill();
 }
-function glow(c, x, y, r, rgba0) {
+// alfa como número + toFixed: un alfa diminuto (1e-11) en texto rompe addColorStop y congelaba el juego
+function glow(c, x, y, r, rgb, a) {
   const g = c.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, rgba0); g.addColorStop(0.65, rgba0.replace(/[\d.]+\)$/, m => parseFloat(m) * 0.7 + ')')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`); g.addColorStop(0.65, `rgba(${rgb},${(a * 0.7).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
   return g;
 }
 function render() {
@@ -815,37 +824,30 @@ function render() {
   // ---- Oscuridad: se recortan los polígonos de luz ----
   lctx.setTransform(1, 0, 0, 1, 0, 0);
   lctx.globalCompositeOperation = 'source-over';
-  lctx.fillStyle = '#000'; lctx.fillRect(0, 0, cw, ch);
-  lctx.setTransform(S, 0, 0, S, ox, oy);
+  lctx.fillStyle = '#000'; lctx.fillRect(0, 0, lightCv.width, lightCv.height);
+  lctx.setTransform(S * LS, 0, 0, S * LS, ox * LS, oy * LS);
   lctx.globalCompositeOperation = 'destination-out';
   const tints = [];
   if (!p.dead) {
     if (run.light) {
       const cone = visPoly(p.x, p.y, p.a, 0.62, 340, 90);
-      lctx.fillStyle = glow(lctx, p.x, p.y, 340, 'rgba(0,0,0,1)'); fillPoly(lctx, cone);
-      tints.push([cone, p.x, p.y, 340, 'rgba(255,217,138,0.08)']);
+      lctx.fillStyle = glow(lctx, p.x, p.y, 340, '0,0,0', 1); fillPoly(lctx, cone);
+      tints.push([cone, p.x, p.y, 340, '255,217,138', 0.08]);
     }
     const amb = run.light ? 75 : 120;
-    lctx.fillStyle = glow(lctx, p.x, p.y, amb, `rgba(0,0,0,${run.light ? 0.9 : 0.6})`);
+    lctx.fillStyle = glow(lctx, p.x, p.y, amb, '0,0,0', run.light ? 0.9 : 0.6);
     fillPoly(lctx, visPoly(p.x, p.y, 0, Math.PI, amb, 36));
   }
   for (const l of room.lamps) if (l.on && onScreen(l.x, l.y, l.r)) {
-    lctx.fillStyle = glow(lctx, l.x, l.y, l.r, 'rgba(0,0,0,0.75)'); fillPoly(lctx, l.poly);
-    tints.push([l.poly, l.x, l.y, l.r, 'rgba(255,200,120,0.06)']);
+    lctx.fillStyle = glow(lctx, l.x, l.y, l.r, '0,0,0', 0.75); fillPoly(lctx, l.poly);
+    tints.push([l.poly, l.x, l.y, l.r, '255,200,120', 0.06]);
   }
-  for (const e of room.enemies) {
-    const rr = FOES[e.type].vision * 0.9;
-    if (!onScreen(e.x, e.y, rr)) continue;
-    const cone = visPoly(e.x, e.y, e.a, 0.55, rr, 30);
-    lctx.fillStyle = glow(lctx, e.x, e.y, rr, 'rgba(0,0,0,0.5)'); fillPoly(lctx, cone);
-    tints.push([cone, e.x, e.y, rr, `rgba(${LIGHT[e.state]},${e.state === 'combat' ? 0.16 : 0.1})`]);
-  }
-  for (const f of room.flashes) { lctx.fillStyle = glow(lctx, f.x, f.y, f.r, `rgba(0,0,0,${f.t / f.max})`); fillPoly(lctx, f.poly); }
+  for (const f of room.flashes) { lctx.fillStyle = glow(lctx, f.x, f.y, f.r, '0,0,0', f.t / f.max); fillPoly(lctx, f.poly); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = 0.95; ctx.drawImage(lightCv, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(lightCv, 0, 0, cw, ch);
   ctx.setTransform(S, 0, 0, S, ox, oy);
   ctx.globalCompositeOperation = 'lighter';
-  for (const [poly, x, y, r, c] of tints) { ctx.fillStyle = glow(ctx, x, y, r, c); fillPoly(ctx, poly); }
+  for (const [poly, x, y, r, rgb, a] of tints) { ctx.fillStyle = glow(ctx, x, y, r, rgb, a); fillPoly(ctx, poly); }
   ctx.globalCompositeOperation = 'source-over';
 
   // ---- Lo que brilla por encima de la oscuridad ----
@@ -862,14 +864,15 @@ function render() {
     ctx.strokeStyle = 'rgba(255,60,60,0.55)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(p.x + Math.cos(p.a) * 22, p.y + Math.sin(p.a) * 22); ctx.lineTo(p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); ctx.stroke();
   }
-  for (const r of room.rings) { // el ruido se ve: así sabes cuánto has hecho
+  for (const r of room.rings) { // tu ruido se ve: así sabes cuánto has hecho
+    if (r.kind === 'alert' || r.kind === 'eshot') continue; // el de los guardias delataría dónde están
     const k = r.t / 0.7;
-    ctx.strokeStyle = r.kind === 'alert' || r.kind === 'eshot' ? `rgba(255,84,68,${0.5 * (1 - k)})` : `rgba(200,225,255,${0.45 * (1 - k)})`;
+    ctx.strokeStyle = `rgba(200,225,255,${0.45 * (1 - k)})`;
     ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.25 + 0.75 * k), 0, 7); ctx.stroke();
   }
   ctx.font = '700 18px "Saira Semi Condensed", sans-serif';
   for (const e of room.enemies) {
-    if (e.state === 'patrol' && e.aware < 0.05) continue;
+    if ((e.state === 'patrol' && e.aware < 0.05) || !lit(e.x, e.y)) continue;
     const yy = e.y - e.r - 14;
     if (e.state === 'combat') { ctx.fillStyle = '#ff5444'; ctx.fillText('!', e.x, yy); continue; }
     ctx.strokeStyle = 'rgba(255,181,71,0.25)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, yy, 9, 0, 7); ctx.stroke();
@@ -889,7 +892,7 @@ function drawHud() {
   if (p.hurtT > 0 || run.hp < 30) {
     const a = Math.max(p.hurtT / 0.35 * 0.5, run.hp < 30 ? 0.2 + 0.1 * Math.sin(room.time * 5) : 0);
     const g = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.3, vw / 2, vh / 2, Math.max(vw, vh) * 0.7);
-    g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(200,20,20,${a})`);
+    g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(200,20,20,${a.toFixed(3)})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
   }
   if (touchMode) {
@@ -1072,9 +1075,10 @@ function show(id) {
 }
 function resize() {
   vw = innerWidth; vh = innerHeight;
-  dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(5e6 / (vw * vh))); // tope de píxeles en monitores grandes
-  cw = cv.width = lightCv.width = Math.round(vw * dpr);
-  ch = cv.height = lightCv.height = Math.round(vh * dpr);
+  dpr = Math.min(window.devicePixelRatio || 1, touchMode ? 1.5 : 2, Math.sqrt(4e6 / (vw * vh))); // tope de píxeles: los móviles van justos de relleno
+  cw = cv.width = Math.round(vw * dpr);
+  ch = cv.height = Math.round(vh * dpr);
+  lightCv.width = Math.round(cw * LS); lightCv.height = Math.round(ch * LS);
   // móvil: zoom por el lado corto; monitores grandes: se ven unos 720 px de mundo en vertical
   zoom = Math.max(clamp(Math.min(vw, vh) / 430, 0.62, 1.5), Math.min(vw, vh) / 720);
   ui = Math.max(1, Math.min(vw, vh) / 720);
@@ -1181,15 +1185,15 @@ $('shopList').addEventListener('click', e => { const b = e.target.closest('butto
 
 let last = performance.now();
 function frame(now) {
+  requestAnimationFrame(frame); // primero: si algo falla en este fotograma, el juego no se congela
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
   if (state === 'play') update(dt);
   if (room) render();
   else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, cw, ch); }
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 // Gancho para las pruebas automáticas (test/smoke.js)
-window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer };
+window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, lit, get view() { return { cam, S: zoom * dpr, cw, ch }; } };
 })();
