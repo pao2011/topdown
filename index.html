@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Apagón</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&family=Saira+Semi+Condensed:wght@400;600;700&display=swap">
+<style>
+/* Layout: lienzo a sangre completa; HUD anclado a las esquinas seguras; menús como expedientes centrados */
+:root {
+  --night: #07090d;
+  --panel: #0e131a;
+  --line: #263243;
+  --ink: #d9e2ec;
+  --dim: #7d8ca0;
+  --beam: #ffd98a;
+  --alarm: #ff5444;
+  --ok: #62d6ad;
+  --display: 'Saira Stencil One', Impact, 'Arial Narrow', sans-serif;
+  --ui: 'Saira Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--night); color: var(--ink); font-family: var(--ui); font-size: 15px; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
+#safe { position: fixed; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+
+/* ---- HUD ---- */
+.btn { position: relative; width: 54px; height: 54px; padding: 0; border-radius: 50%; border: 1.5px solid rgba(217, 226, 236, .26); background: rgba(14, 19, 26, .55); display: grid; place-items: center; touch-action: none; }
+.btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.btn.press { background: rgba(255, 217, 138, .22); border-color: var(--beam); }
+.btn small { position: absolute; top: calc(100% + 3px); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.btn b { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--beam); color: var(--night); font-size: 11px; line-height: 18px; }
+.btn.big { width: 64px; height: 64px; }
+.btn.big svg { width: 30px; height: 30px; }
+.btn.off { opacity: .45; }
+#acts { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-45%); display: grid; grid-template-columns: auto auto; gap: 22px 14px; place-items: center; }
+#top { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 10px; }
+#top .btn { width: 40px; height: 40px; }
+#top .btn svg { width: 20px; height: 20px; }
+#bWeapon { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); min-width: 150px; padding: 6px 16px 8px; border-radius: 6px; border: 1px solid rgba(217, 226, 236, .2); background: linear-gradient(90deg, rgba(255, 217, 138, .25) var(--p, 0%), rgba(14, 19, 26, .6) var(--p, 0%)); display: grid; gap: 0; text-align: center; touch-action: none; }
+#wName { font-size: 11px; letter-spacing: .14em; color: var(--dim); }
+#wAmmo { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+
+/* ---- Pantallas ---- */
+.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(5, 7, 10, .84); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: calc(12px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)); -webkit-user-select: text; user-select: text; }
+.panel { width: min(680px, 100%); max-height: 100%; overflow: auto; box-sizing: border-box; padding: 22px 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; display: flex; flex-direction: column; gap: 14px; }
+.eyebrow { margin: 0; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--dim); }
+.title { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(54px, 13vw, 96px); line-height: .9; letter-spacing: .04em;
+  background: radial-gradient(circle at 30% 55%, var(--beam) 0, #f3e2b8 14%, #3a4555 34%) 0 0 / 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: sweep 6s ease-in-out infinite alternate; }
+@keyframes sweep { to { background-position: 100% 0; } }
+@media (prefers-reduced-motion: reduce) { .title { animation: none; } }
+.lead { margin: 0; max-width: 46ch; color: var(--ink); line-height: 1.45; }
+.cta { align-self: flex-start; padding: 12px 30px; border: 0; border-radius: 3px; background: var(--beam); color: var(--night); font-weight: 700; font-size: 17px; letter-spacing: .1em; text-transform: uppercase; }
+.ghost { padding: 11px 20px; border: 1px solid var(--line); border-radius: 3px; background: transparent; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.hint { display: none; margin: 0; color: var(--beam); font-size: 13px; }
+@media (orientation: portrait) and (pointer: coarse) { .hint { display: block; } }
+.help { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 22px; margin: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.help div { min-width: 0; }
+.help dt { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--beam); }
+.help dd { margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--dim); }
+kbd { font-family: inherit; color: var(--ink); }
+
+.shop header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.shop h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 30px; letter-spacing: .03em; }
+.cash { font-size: 26px; font-weight: 700; color: var(--beam); font-variant-numeric: tabular-nums; }
+#shopStats { width: 100%; margin: 0; font-size: 13px; color: var(--dim); }
+#shopStats b { color: var(--ok); font-weight: 600; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--dim); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.tabs button.on { color: var(--ink); border-color: var(--beam); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { padding: 5px 12px; border: 1px solid var(--line); border-radius: 20px; background: none; font-size: 13px; }
+.chips button.on { border-color: var(--beam); color: var(--beam); }
+#shopList { display: flex; flex-direction: column; gap: 8px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; }
+.item .info { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.item b { font-weight: 600; font-size: 16px; }
+.item span { font-size: 13px; color: var(--dim); }
+.item button { min-width: 92px; padding: 8px 12px; border: 1px solid var(--beam); border-radius: 3px; background: none; color: var(--beam); font-weight: 700; font-variant-numeric: tabular-nums; }
+.item button:disabled { border-color: var(--line); color: var(--dim); cursor: default; }
+.item button.own { border-color: var(--ok); color: var(--ok); }
+#bNext { position: sticky; bottom: 0; box-shadow: 0 0 0 10px var(--panel); }
+.over h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--alarm); }
+.over p, .pause p { margin: 0; color: var(--dim); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+
+<div id="hud" hidden>
+  <div id="top">
+    <button id="bLight" class="btn" aria-label="Linterna"><svg viewBox="0 0 24 24"><path d="M7 3h10l-2 7H9z"/><path d="M9 10h6v11H9z"/><path d="M12 14v2"/></svg></button>
+    <button id="bPause" class="btn" aria-label="Pausa"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+  </div>
+  <div id="acts">
+    <button id="bReload" class="btn" aria-label="Recargar"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg><small>Recargar</small></button>
+    <button id="bNoise" class="btn" aria-label="Hacer ruido"><svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><small>Ruido</small></button>
+    <button id="bNade" class="btn" aria-label="Granada"><svg viewBox="0 0 24 24"><circle cx="11" cy="14" r="6"/><path d="M11 8V5h4l3 3"/></svg><b id="nadeN">2</b><small>Granada</small></button>
+    <button id="bKnife" class="btn big" aria-label="Cuchillo"><svg viewBox="0 0 24 24"><path d="M4 20l5-5"/><path d="M8 16l4 4"/><path d="M10 14L20 4c1 4-1 8-5 11z"/></svg><small>Cuchillo</small></button>
+  </div>
+  <button id="bWeapon" aria-label="Cambiar arma"><span id="wName">PISTOLA</span><span id="wAmmo">12/12</span></button>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <p class="eyebrow">Infiltración táctica · sala a sala</p>
+    <h1 class="title">APAGÓN</h1>
+    <p class="lead">Cruza cada sala hasta la salida de emergencia. La linterna te deja ver, pero también te delata.</p>
+    <button id="bPlay" class="cta">Jugar</button>
+    <p class="hint">Gira el teléfono: se juega en horizontal.</p>
+    <dl class="help">
+      <div><dt>Stick izquierdo</dt><dd>Moverte. Poco recorrido es sigilo silencioso; a fondo corres y haces ruido.</dd></div>
+      <div><dt>Stick derecho</dt><dd>Apunta la linterna. Llévalo hasta el borde para disparar.</dd></div>
+      <div><dt>Cuchillo</dt><dd>Casi no hace ruido. Por la espalda o sin que te hayan detectado, elimina al instante.</dd></div>
+      <div><dt>Ruido y granadas</dt><dd>El ruido atrae guardias hacia donde estás. Una granada se oye en todo el edificio.</dd></div>
+      <div><dt>Luz y sombra</dt><dd>Con la linterna apagada cuesta más verte. Dispara a las lámparas para crear sombras.</dd></div>
+      <div><dt>Teclado</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> sigilo · ratón apunta y dispara · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>Q</kbd> ruido · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>Tab</kbd> arma</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div id="shop" class="overlay" hidden>
+  <div class="panel shop">
+    <header>
+      <h2 id="shopTitle">Sala 1 superada</h2>
+      <div id="shopCash" class="cash">$0</div>
+      <p id="shopStats"></p>
+    </header>
+    <nav class="tabs">
+      <button data-tab="arm" class="on">Armas</button>
+      <button data-tab="mod">Mejoras</button>
+      <button data-tab="eq">Equipo</button>
+    </nav>
+    <div id="shopList"></div>
+    <button id="bNext" class="cta">Entrar en la sala 2</button>
+  </div>
+</div>
+
+<div id="pause" class="overlay pause" hidden>
+  <div class="panel">
+    <h2 class="title" style="font-size:48px">PAUSA</h2>
+    <p id="pauseInfo"></p>
+    <div class="row">
+      <button id="bResume" class="cta">Continuar</button>
+      <button id="bRestart" class="ghost">Reiniciar sala</button>
+      <button id="bQuit" class="ghost">Menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="overlay over" hidden>
+  <div class="panel">
+    <h2>TE HAN ABATIDO</h2>
+    <p id="overInfo"></p>
+    <div class="row">
+      <button id="bRetry" class="cta">Reintentar sala</button>
+      <button id="bNew" class="ghost">Nueva partida</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
