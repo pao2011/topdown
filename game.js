@@ -450,6 +450,7 @@ function lookAround(e, dt, spread) {
 function updateEnemy(e, dt) {
   const p = room.p, F = FOES[e.type], X = room.exposure;
   e.fireT -= dt; e.moveA = null;
+  if (F.boss && !e.called && e.hp < e.maxHp / 2) { e.called = true; reinforcements(); } // aunque no te vea en ese momento
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
   const combat = e.state === 'combat';
   const range = visionRange(e);
@@ -545,7 +546,6 @@ function snipe(e) {
 // El Alcaide: ráfagas de ametralladora, granadas y, a media vida, refuerzos
 function bossAttack(e, dt, d) {
   const rage = e.hp < e.maxHp / 2;
-  if (rage && !e.called) { e.called = true; reinforcements(); }
   if (e.burstT > 0) {
     e.burstT -= dt;
     if ((e.gunT -= dt) <= 0) {
