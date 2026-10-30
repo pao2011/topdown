@@ -69,11 +69,12 @@ const path = require('path');
   // Oído: un ruido leve da sospecha; un disparo, investigación urgente
   const heard = await ev(() => {
     const A = __apagon, e = A.room.enemies[0]; e.state = 'patrol';
-    A.noise(e.x + 20, e.y, 100, 'whistle'); const s1 = e.state;
+    A.room.warns.length = 0;
+    A.noise(e.x + 20, e.y, 100, 'whistle'); const s1 = e.state, warned = A.room.warns.some(w => w.e === e);
     A.noise(e.x + 20, e.y, 500, 'shot');
-    return { s1, s2: e.state, urgent: e.urgent };
+    return { s1, warned, s2: e.state, urgent: e.urgent };
   });
-  assert.deepStrictEqual(heard, { s1: 'suspicious', s2: 'investigate', urgent: true });
+  assert.deepStrictEqual(heard, { s1: 'suspicious', warned: true, s2: 'investigate', urgent: true });
 
   // Todo oscuro: un guardia a tu espalda, fuera de la linterna, es un píxel negro
   const dark = await ev(() => {

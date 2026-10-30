@@ -3,6 +3,8 @@
 // ================= Datos =================
 const T = 40; // tamaño de casilla en px de mundo
 const STICK_R = 56, SNEAK = 0.55, FIRE = 0.8, LS = 0.5; // LS: escala de la máscara de oscuridad
+const BEAM = 270, HALO_ON = 58, HALO_OFF = 92, LAMP_R = 125; // alcance de la luz (px de mundo)
+const CONE = { patrol: '150,195,255', suspicious: '255,181,71', investigate: '255,181,71', search: '255,181,71', combat: '255,84,68' };
 
 const WEAPONS = {
   pistol:   { name: 'Pistola',  price: 0,   dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, reserve: 48, pellets: 1 },
@@ -39,6 +41,20 @@ const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (
 // ================= Estado =================
 const cv = $('c'), ctx = cv.getContext('2d');
 const lightCv = document.createElement('canvas'), lctx = lightCv.getContext('2d');
+const fogCv = document.createElement('canvas');
+fogCv.width = fogCv.height = 256;
+{ // manchas que tragan luz, repetidas en los bordes para que la textura no tenga costuras
+  const f = fogCv.getContext('2d');
+  for (let i = 0; i < 18; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, r = rnd(35, 95);
+    for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) {
+      const g = f.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+      g.addColorStop(0, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      f.fillStyle = g; f.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+    }
+  }
+}
+let fogPat = null;
 let dpr = 1, vw = 0, vh = 0, cw = 0, ch = 0, zoom = 1, ui = 1;
 let inset = { t: 0, r: 0, b: 0, l: 0 };
 let W = 0, H = 0, map = null;
@@ -179,14 +195,14 @@ function buildRoom(level, seed) {
 
   const r = {
     level, W, H, map, leaves, start: center(start), exit: center(exit),
-    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [],
+    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [],
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0,
   };
   for (const L of leaves) {
     const c = ((L.y0 + L.y1) >> 1) * W + ((L.x0 + L.x1) >> 1);
     if (L !== L0 && !map[c] && rand() < 0.55) {
       const p = center(c);
-      r.lamps.push({ x: p.x, y: p.y, r: 150, on: true, poly: visPoly(p.x, p.y, 0, Math.PI, 150, 48) });
+      r.lamps.push({ x: p.x, y: p.y, r: LAMP_R, on: true, poly: visPoly(p.x, p.y, 0, Math.PI, LAMP_R, 48) });
     }
   }
   // Enemigos lejos de la entrada y separados entre sí
@@ -317,7 +333,13 @@ function hear(e, x, y, kind, d) {
     investigate(e, tx, ty, true);
   } else if (!(e.state === 'investigate' && e.urgent)) {
     suspicious(e, tx, ty);
-  }
+  } else return;
+  if (fromPlayer) warn(e, '#ffb547');
+}
+// Flecha junto al jugador hacia el guardia: solo la dirección del momento, no lo sigue
+function warn(e, c) {
+  room.warns = room.warns.filter(w => w.e !== e);
+  room.warns.push({ e, a: ang(room.p, e), c, t: 1.6 });
 }
 function suspicious(e, x, y) {
   if (e.state !== 'suspicious') e.stateT = rnd(0.6, 1.3);
@@ -343,6 +365,7 @@ function enterCombat(e) {
   if (e.state !== 'combat') {
     e.state = 'combat'; e.reactT = Math.max(0.2, rnd(0.35, 0.7) - run.level * 0.015); e.aware = 1; e.path = null;
     room.detected = true;
+    warn(e, '#ff5444');
     if (lit(e.x, e.y)) popup(e.x, e.y - 24, '!', '#ff5444');
     sfx('alert', e.x, e.y);
     noise(e.x, e.y, 340, 'alert', e, p.x, p.y); // avisa a los compañeros de dónde estás
@@ -354,8 +377,8 @@ function lit(x, y) {
   const p = room.p;
   if (p.dead) return false;
   const d = Math.hypot(x - p.x, y - p.y);
-  if (d < (run.light ? 75 : 120) && los(p.x, p.y, x, y)) return true;
-  if (run.light && d < 340 && Math.abs(angDiff(p.a, Math.atan2(y - p.y, x - p.x))) < 0.62 && los(p.x, p.y, x, y)) return true;
+  if (d < (run.light ? HALO_ON : HALO_OFF) && los(p.x, p.y, x, y)) return true;
+  if (run.light && d < BEAM * 0.85 && Math.abs(angDiff(p.a, Math.atan2(y - p.y, x - p.x))) < 0.62 && los(p.x, p.y, x, y)) return true;
   return room.lamps.some(l => l.on && Math.hypot(l.x - x, l.y - y) < l.r && los(l.x, l.y, x, y));
 }
 function exposure() {
@@ -388,6 +411,8 @@ function moveTo(e, tx, ty, speed, dt) {
   }
   return false;
 }
+const visionHalf = e => e.state === 'combat' ? 1.2 : 0.62;
+const visionRange = e => FOES[e.type].vision * (1 + 0.15 * e.alertLvl) * (e.state === 'combat' ? 1.4 : 0.6 + 0.4 * Math.min(1, room.exposure));
 function lookAround(e, dt, spread) {
   if ((e.lookT -= dt) <= 0) { e.lookT = rnd(0.7, 1.8); e.lookA = e.a + rnd(-spread, spread); }
   return e.lookA;
@@ -397,8 +422,8 @@ function updateEnemy(e, dt) {
   e.fireT -= dt; e.moveA = null;
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
   const combat = e.state === 'combat';
-  const range = F.vision * (1 + 0.15 * e.alertLvl) * (combat ? 1.4 : 0.6 + 0.4 * Math.min(1, X));
-  const sees = !p.dead && ((d < range && Math.abs(angDiff(e.a, toP)) < (combat ? 1.2 : 0.62) && los(e.x, e.y, p.x, p.y)) ||
+  const range = visionRange(e);
+  const sees = !p.dead && ((d < range && Math.abs(angDiff(e.a, toP)) < visionHalf(e) && los(e.x, e.y, p.x, p.y)) ||
     (d < e.r + p.r + 20 && !p.sneak) || (combat && d < 130 && los(e.x, e.y, p.x, p.y)));
 
   if (sees) {
@@ -411,7 +436,7 @@ function updateEnemy(e, dt) {
   } else if (!combat) {
     e.aware = Math.max(0, e.aware - dt * 0.18);
     // la linterna del jugador sobre un guardia de espaldas le hace girarse
-    if (run.light && !p.dead && d < 330 && Math.abs(angDiff(p.a, toP + Math.PI)) < 0.6 && los(e.x, e.y, p.x, p.y)) {
+    if (run.light && !p.dead && d < BEAM && Math.abs(angDiff(p.a, toP + Math.PI)) < 0.6 && los(e.x, e.y, p.x, p.y)) {
       e.aware += dt * 0.35;
       if (e.aware > 0.3 && e.state === 'patrol') suspicious(e, p.x, p.y);
     }
@@ -704,6 +729,8 @@ function updateFx(dt) {
   room.texts = room.texts.filter(t => t.t > 0);
   for (const f of room.flashes) f.t -= dt;
   room.flashes = room.flashes.filter(f => f.t > 0);
+  for (const w of room.warns) w.t -= dt;
+  room.warns = room.warns.filter(w => w.t > 0);
   cam.shake *= Math.exp(-9 * dt);
 }
 
@@ -745,7 +772,7 @@ function fillPoly(c, pts) {
 // alfa como número + toFixed: un alfa diminuto (1e-11) en texto rompe addColorStop y congelaba el juego
 function glow(c, x, y, r, rgb, a) {
   const g = c.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`); g.addColorStop(0.65, `rgba(${rgb},${(a * 0.7).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`); g.addColorStop(0.4, `rgba(${rgb},${(a * 0.7).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
   return g;
 }
 function render() {
@@ -767,6 +794,12 @@ function render() {
   for (let y = y0; y <= y1 + 1; y++) { ctx.moveTo(x0 * T, y * T); ctx.lineTo((x1 + 1) * T, y * T); }
   ctx.stroke();
   for (const d of room.decals) { ctx.fillStyle = d.scorch ? 'rgba(0,0,0,0.5)' : 'rgba(110,20,20,0.75)'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); }
+  for (const e of room.enemies) {
+    const rr = visionRange(e);
+    if (!onScreen(e.x, e.y, rr)) continue;
+    ctx.fillStyle = `rgba(${CONE[e.state]},${e.state === 'combat' ? 0.2 : 0.14})`;
+    fillPoly(ctx, visPoly(e.x, e.y, e.a, visionHalf(e), rr, 24));
+  }
   // cuerpos
   for (const b of room.bodies) {
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a);
@@ -830,19 +863,26 @@ function render() {
   const tints = [];
   if (!p.dead) {
     if (run.light) {
-      const cone = visPoly(p.x, p.y, p.a, 0.62, 340, 90);
-      lctx.fillStyle = glow(lctx, p.x, p.y, 340, '0,0,0', 1); fillPoly(lctx, cone);
-      tints.push([cone, p.x, p.y, 340, '255,217,138', 0.08]);
+      const cone = visPoly(p.x, p.y, p.a, 0.62, BEAM, 90);
+      lctx.fillStyle = glow(lctx, p.x, p.y, BEAM, '0,0,0', 0.85); fillPoly(lctx, cone);
+      tints.push([cone, p.x, p.y, BEAM, '255,217,138', 0.06]);
     }
-    const amb = run.light ? 75 : 120;
-    lctx.fillStyle = glow(lctx, p.x, p.y, amb, '0,0,0', run.light ? 0.9 : 0.6);
+    const amb = run.light ? HALO_ON : HALO_OFF;
+    lctx.fillStyle = glow(lctx, p.x, p.y, amb, '0,0,0', run.light ? 0.7 : 0.45);
     fillPoly(lctx, visPoly(p.x, p.y, 0, Math.PI, amb, 36));
   }
   for (const l of room.lamps) if (l.on && onScreen(l.x, l.y, l.r)) {
-    lctx.fillStyle = glow(lctx, l.x, l.y, l.r, '0,0,0', 0.75); fillPoly(lctx, l.poly);
+    lctx.fillStyle = glow(lctx, l.x, l.y, l.r, '0,0,0', 0.55); fillPoly(lctx, l.poly);
     tints.push([l.poly, l.x, l.y, l.r, '255,200,120', 0.06]);
   }
   for (const f of room.flashes) { lctx.fillStyle = glow(lctx, f.x, f.y, f.r, '0,0,0', f.t / f.max); fillPoly(lctx, f.poly); }
+  // niebla: se pinta sobre la máscara (media resolución), así solo enturbia lo que está iluminado
+  fogPat = fogPat || lctx.createPattern(fogCv, 'repeat');
+  const fx = (room.time * 9) % 256, fy = (room.time * 4) % 256;
+  lctx.globalCompositeOperation = 'source-over';
+  lctx.save(); lctx.translate(fx, fy); lctx.fillStyle = fogPat;
+  lctx.fillRect(cx - hw - fx - 256, cy - hh - fy - 256, hw * 2 + 512, hh * 2 + 512);
+  lctx.restore();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(lightCv, 0, 0, cw, ch);
   ctx.setTransform(S, 0, 0, S, ox, oy);
@@ -864,6 +904,15 @@ function render() {
     ctx.strokeStyle = 'rgba(255,60,60,0.55)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(p.x + Math.cos(p.a) * 22, p.y + Math.sin(p.a) * 22); ctx.lineTo(p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); ctx.stroke();
   }
+  if (!p.dead) for (const w of room.warns) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(w.a);
+    ctx.globalAlpha = Math.min(1, w.t * 1.5);
+    ctx.fillStyle = ctx.strokeStyle = w.c; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, 40, -0.32, 0.32); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(56, 0); ctx.lineTo(45, -7); ctx.lineTo(48, 0); ctx.lineTo(45, 7); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
   for (const r of room.rings) { // tu ruido se ve: así sabes cuánto has hecho
     if (r.kind === 'alert' || r.kind === 'eshot') continue; // el de los guardias delataría dónde están
     const k = r.t / 0.7;
@@ -1026,7 +1075,10 @@ function initAudio() {
   if (ac) { ac.resume(); return; }
   try {
     ac = new (window.AudioContext || window.webkitAudioContext)();
-    master = ac.createGain(); master.gain.value = 0.45; master.connect(ac.destination);
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.2;
+    comp.connect(ac.destination);
+    master = ac.createGain(); master.gain.value = 0.8; master.connect(comp);
     noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -1044,17 +1096,24 @@ function tone(f0, f1, dur, vol, type = 'square', delay = 0) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g).connect(master); o.start(t); o.stop(t + dur);
 }
+function gunshot(vol, pitch) {
+  pitch *= rnd(0.92, 1.08); // que dos tiros seguidos no suenen idénticos
+  burst(0.045, 1.3 * vol, 3200 * pitch, 'highpass');
+  burst(0.25, 1.2 * vol, 1500 * pitch);
+  tone(180 * pitch, 38, 0.22, 1.1 * vol, 'sine');
+  burst(0.8, 0.32 * vol, 650 * pitch);
+}
 function sfx(k, x, y) {
   if (!ac || ac.state !== 'running') return;
   const v = x === undefined ? 1 : clamp(1 - Math.hypot(x - room.p.x, y - room.p.y) / 900, 0.05, 1);
   switch (k) {
-    case 'shot': burst(0.18, 0.7, 1800); tone(160, 50, 0.12, 0.3); break;
+    case 'shot': gunshot(1, 1); break;
     case 'sil': burst(0.07, 0.3, 3200, 'bandpass', 1.5); break;
-    case 'shotgun': burst(0.35, 0.9, 1100); tone(120, 40, 0.2, 0.4); break;
+    case 'shotgun': gunshot(1.3, 0.7); burst(0.5, 0.8, 500); break;
     case 'bolt': tone(900, 300, 0.08, 0.12, 'triangle'); burst(0.05, 0.2, 5000, 'highpass'); break;
-    case 'eshot': burst(0.16, 0.5 * v, 1400); break;
+    case 'eshot': gunshot(0.9 * v, 0.95); break;
     case 'knife': burst(0.12, 0.3, 6000, 'highpass'); break;
-    case 'boom': burst(1.0, v, 380); tone(90, 30, 0.6, 0.6 * v, 'sine'); break;
+    case 'boom': burst(0.08, 1.4 * v, 2500, 'highpass'); burst(1.5, 1.4 * v, 320); tone(85, 24, 0.9, 1.2 * v, 'sine'); break;
     case 'step': burst(0.04, 0.1, 600); break;
     case 'whistle': tone(1400, 2100, 0.14, 0.15, 'sine'); tone(1500, 2300, 0.22, 0.15, 'sine', 0.17); break;
     case 'alert': tone(700, 1100, 0.15, 0.18 * v); break;
