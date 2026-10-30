@@ -12,7 +12,8 @@ const path = require('path');
   page.on('console', m => { if (m.type() === 'error' && !/fonts|ERR_/.test(m.text())) errors.push(m.text()); });
   const shot = name => process.env.SHOTS && page.screenshot({ path: path.join(process.env.SHOTS, name + '.png') });
   const ev = fn => page.evaluate(fn);
-  await page.goto('file://' + path.resolve(__dirname, '../index.html'));
+  const url = 'file://' + path.resolve(__dirname, '../index.html');
+  await page.goto(url);
   await shot('menu');
 
   // Generación: la salida y todos los enemigos son alcanzables desde la entrada
@@ -47,6 +48,17 @@ const path = require('path');
   await touch(2, 560, 300, 620, 300, 500);
   assert(await ev(() => __apagon.run.weapons[0].ammo < 12 || __apagon.room.p.reloadT > 0), 'el stick derecho a fondo debe disparar');
   await shot('play');
+
+  // Munición limitada: recargar gasta reserva, sin reserva no dispara, las cajas la reponen
+  await ev(() => { const w = __apagon.run.weapons[0]; w.ammo = 0; w.reserve = 5; __apagon.room.p.reloadT = 0; });
+  await page.keyboard.press('KeyR');
+  await page.waitForTimeout(1200);
+  assert.deepStrictEqual(await ev(() => { const w = __apagon.run.weapons[0]; return [w.ammo, w.reserve]; }), [5, 0]);
+  await ev(() => { __apagon.run.weapons[0].ammo = 0; });
+  await touch(2, 560, 300, 620, 300, 400);
+  assert.strictEqual(await ev(() => __apagon.room.bullets.filter(b => b.mine).length), 0, 'sin munición no debe disparar');
+  const got = await ev(async () => { const r = __apagon.room; r.items.push({ x: r.p.x, y: r.p.y }); await new Promise(f => setTimeout(f, 150)); return __apagon.run.weapons[0].reserve; });
+  assert.strictEqual(got, 12, 'una caja da el 25 % de la reserva máxima');
 
   // Oído: un ruido leve da sospecha; un disparo, investigación urgente
   const heard = await ev(() => {
@@ -113,10 +125,37 @@ const path = require('path');
   await page.click('[data-act="mod:silencer"]');
   const bought = await ev(() => ({ money: __apagon.run.money, w: __apagon.run.weapons.map(w => w.id + ':' + w.mods.join(',')) }));
   assert.deepStrictEqual(bought, { money: 1000 - 350 - 180, w: ['pistol:', 'smg:silencer'] });
+
+  // Guardado: tras recargar la página, «Nueva partida» pide confirmación y «Continuar» recupera la tienda
+  await page.reload();
+  assert.match(await page.textContent('#bCont'), /sala 2/);
+  await page.click('#bPlay');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('bPlay').textContent]), ['menu', '¿Borrar la partida guardada?']);
+  await page.click('#bCont');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.money, __apagon.run.weapons.length]), ['shop', 470, 2]);
   await shot('shop');
   await page.click('#bNext');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['play', 2]);
   await page.waitForTimeout(1500);
+
+  // PC: sin botones táctiles, HUD escalado, ratón apunta y dispara; una partida corrupta se ignora
+  const desk = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const dp = await desk.newPage();
+  dp.on('pageerror', e => errors.push(e.message));
+  await dp.goto(url);
+  await dp.evaluate(() => localStorage.setItem('apagon-partida-v1', '{"run":{"level":"x"}}'));
+  await dp.reload();
+  assert(await dp.isHidden('#bCont'), 'una partida corrupta no debe ofrecer continuar');
+  await dp.click('#bPlay');
+  await dp.waitForTimeout(300);
+  assert(await dp.isHidden('#acts'), 'en PC no se muestran los botones táctiles');
+  assert.strictEqual(await dp.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--hud').trim()), '1.5');
+  await dp.mouse.move(1500, 540);
+  await dp.mouse.down(); await dp.waitForTimeout(400); await dp.mouse.up();
+  assert(await dp.evaluate(() => __apagon.run.weapons[0].ammo < 12), 'el clic debe disparar');
+  assert(await dp.evaluate(() => Math.abs(__apagon.room.p.a) < 0.3), 'debe apuntar hacia el ratón');
+  if (process.env.SHOTS) await dp.screenshot({ path: path.join(process.env.SHOTS, 'desktop.png') });
+  await desk.close();
 
   assert.deepStrictEqual(errors, [], 'errores en consola');
   await browser.close();

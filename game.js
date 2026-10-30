@@ -5,11 +5,11 @@ const T = 40; // tamaño de casilla en px de mundo
 const STICK_R = 56, SNEAK = 0.55, FIRE = 0.8;
 
 const WEAPONS = {
-  pistol:   { name: 'Pistola',  price: 0,   dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, pellets: 1 },
-  smg:      { name: 'Subfusil', price: 350, dmg: 15,  rate: 11,  mag: 32, reload: 1.4, spread: 0.10,  noise: 460, speed: 1000, pellets: 1 },
-  shotgun:  { name: 'Escopeta', price: 450, dmg: 15,  rate: 1.3, mag: 6,  reload: 1.9, spread: 0.22,  noise: 620, speed: 900,  pellets: 8 },
-  crossbow: { name: 'Ballesta', price: 500, dmg: 120, rate: 0.9, mag: 1,  reload: 1.1, spread: 0.01,  noise: 40,  speed: 760,  pellets: 1, bolt: true },
-  rifle:    { name: 'Fusil',    price: 750, dmg: 32,  rate: 7.5, mag: 26, reload: 1.6, spread: 0.045, noise: 560, speed: 1150, pellets: 1 },
+  pistol:   { name: 'Pistola',  price: 0,   dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, reserve: 48, pellets: 1 },
+  smg:      { name: 'Subfusil', price: 350, dmg: 15,  rate: 11,  mag: 32, reload: 1.4, spread: 0.10,  noise: 460, speed: 1000, reserve: 128, pellets: 1 },
+  shotgun:  { name: 'Escopeta', price: 450, dmg: 15,  rate: 1.3, mag: 6,  reload: 1.9, spread: 0.22,  noise: 620, speed: 900,  reserve: 24, pellets: 8 },
+  crossbow: { name: 'Ballesta', price: 500, dmg: 120, rate: 0.9, mag: 1,  reload: 1.1, spread: 0.01,  noise: 40,  speed: 760,  reserve: 10, pellets: 1, bolt: true },
+  rifle:    { name: 'Fusil',    price: 750, dmg: 32,  rate: 7.5, mag: 26, reload: 1.6, spread: 0.045, noise: 560, speed: 1150, reserve: 104, pellets: 1 },
 };
 const MODS = {
   silencer: { name: 'Silenciador',       desc: 'Ruido −70 %, daño −10 %',            price: 180, apply: s => { s.noise *= 0.3; s.dmg *= 0.9; s.silenced = true; } },
@@ -40,7 +40,7 @@ const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (
 // ================= Estado =================
 const cv = $('c'), ctx = cv.getContext('2d');
 const lightCv = document.createElement('canvas'), lctx = lightCv.getContext('2d');
-let dpr = 1, vw = 0, vh = 0, cw = 0, ch = 0, zoom = 1;
+let dpr = 1, vw = 0, vh = 0, cw = 0, ch = 0, zoom = 1, ui = 1;
 let inset = { t: 0, r: 0, b: 0, l: 0 };
 let W = 0, H = 0, map = null;
 let run = null, room = null, state = 'menu';
@@ -180,7 +180,7 @@ function buildRoom(level, seed) {
 
   const r = {
     level, W, H, map, leaves, start: center(start), exit: center(exit),
-    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [],
+    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [],
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0,
   };
   for (const L of leaves) {
@@ -201,6 +201,7 @@ function buildRoom(level, seed) {
     const type = level >= 4 && roll < 0.1 + level * 0.02 ? 'elite' : level >= 2 && roll > 0.68 ? 'heavy' : 'guard';
     r.enemies.push(makeEnemy(type, c, rand));
   }
+  for (let i = 0; i < 1 + (level >> 2) && cands.length; i++) r.items.push(center(cands[ri(cands.length)]));
   r.p = { x: r.start.x, y: r.start.y, vx: 0, vy: 0, a: 0, r: 12, speed: 0, sneak: true, stepT: 0, fireT: 0, reloadT: 0, meleeT: 0, nadeT: 0, noiseT: 0, swingT: 0, hurtT: 0, muzzleT: 0, dead: false };
   r.p.a = Math.atan2(r.exit.y - r.start.y, r.exit.x - r.start.x);
   return r;
@@ -230,13 +231,12 @@ function makeEnemy(type, c, rand) {
 
 // ================= Partida =================
 function newRun() {
-  run = { level: 1, money: 0, hp: 100, maxHp: 100, nades: 2, light: true, weapons: [{ id: 'pistol', mods: [], ammo: 12 }], cur: 0, seed: (Math.random() * 1e9) | 0, snap: null };
+  run = { level: 1, money: 0, hp: 100, maxHp: 100, nades: 2, light: true, weapons: [{ id: 'pistol', mods: [], ammo: 12, reserve: 36 }], cur: 0, seed: (Math.random() * 1e9) | 0, snap: null };
 }
 const curW = () => run.weapons[run.cur];
 function wstats(w) { const s = { ...WEAPONS[w.id] }; for (const m of w.mods) MODS[m].apply(s); return s; }
 
 function startRoom() {
-  for (const w of run.weapons) w.ammo = wstats(w).mag;
   const { snap, ...rest } = run;
   run.snap = JSON.stringify(rest);
   room = buildRoom(run.level, run.seed + run.level * 977);
@@ -244,6 +244,7 @@ function startRoom() {
   sticks.L = sticks.R = null; mouse.down = false;
   state = 'play';
   show(null);
+  save();
 }
 function retryRoom() {
   const snap = run.snap;
@@ -256,13 +257,40 @@ function completeRoom() {
   run.hp = Math.min(run.maxHp, run.hp + 20);
   run.level++;
   sfx('buy');
+  openShop(`Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
+    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + ` · +20 de vida`);
+}
+function openShop(stats) {
   state = 'shop';
   $('shopTitle').textContent = `Sala ${run.level - 1} superada`;
-  $('shopStats').innerHTML = `Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
-    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + ` · +20 de vida`;
+  $('shopStats').innerHTML = stats;
   shopTab = 'arm';
   renderShop();
   show('shop');
+  save();
+}
+// Guardado automático al entrar en cada sala y en la tienda
+const SAVE = 'apagon-partida-v1';
+function save() {
+  try { const { snap, ...rest } = run; localStorage.setItem(SAVE, JSON.stringify({ run: rest, shop: state === 'shop' })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
+}
+function loadSave() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SAVE)), r = d && d.run;
+    // lo guardado puede estar corrupto o venir de otra versión: solo se acepta si encaja
+    if (r && Number.isInteger(r.level) && r.level > 0 && r.hp > 0 && [r.money, r.nades, r.maxHp, r.seed].every(Number.isFinite) &&
+        Array.isArray(r.weapons) && r.weapons.length && Number.isInteger(r.cur) && r.weapons[r.cur] &&
+        r.weapons.every(w => WEAPONS[w.id] && Array.isArray(w.mods) && w.mods.every(m => MODS[m]) && Number.isFinite(w.ammo) && Number.isFinite(w.reserve))) return d;
+  } catch (e) { /* partida ilegible: se ignora */ }
+  return null;
+}
+function refreshMenu() {
+  const d = loadSave(), b = $('bPlay');
+  $('bCont').hidden = !d;
+  if (d) $('bCont').textContent = `Continuar · sala ${d.run.level}`;
+  delete b.dataset.sure;
+  b.textContent = d ? 'Nueva partida' : 'Jugar';
+  b.className = d ? 'ghost' : 'cta';
 }
 function gameOver() {
   state = 'over';
@@ -480,7 +508,7 @@ function updatePlayer(dt) {
     firing = mouse.down;
   } else if (mag > 0.1) aim = Math.atan2(my, mx);
   if (aim !== null) p.a += angDiff(p.a, aim) * Math.min(1, dt * 18);
-  if (p.reloadT > 0 && (p.reloadT -= dt) <= 0) curW().ammo = wstats(curW()).mag;
+  if (p.reloadT > 0 && (p.reloadT -= dt) <= 0) { const w = curW(), n = Math.min(wstats(w).mag - w.ammo, w.reserve); w.ammo += n; w.reserve -= n; }
   if (firing) shoot();
 }
 function assist(a) { // ayuda de apuntado suave para pantallas táctiles
@@ -504,7 +532,7 @@ function collide(o) {
 function shoot() {
   const p = room.p, w = curW(), s = wstats(w);
   if (p.reloadT > 0 || p.fireT > 0 || p.dead) return;
-  if (w.ammo <= 0) { reload(); return; }
+  if (w.ammo <= 0) { if (w.reserve) reload(); else { p.fireT = 0.35; sfx('empty'); } return; }
   w.ammo--;
   p.fireT = 1 / s.rate;
   const mx = p.x + Math.cos(p.a) * 18, my = p.y + Math.sin(p.a) * 18;
@@ -518,16 +546,20 @@ function shoot() {
 }
 function reload() {
   const p = room.p, w = curW(), s = wstats(w);
-  if (p.reloadT > 0 || w.ammo >= s.mag) return;
+  if (p.reloadT > 0 || w.ammo >= s.mag || !w.reserve) return;
   p.reloadT = s.reload;
   sfx('reload');
 }
-function cycleWeapon() {
-  if (run.weapons.length < 2) return;
-  run.cur = (run.cur + 1) % run.weapons.length;
+function selectWeapon(i) {
+  i = (i + run.weapons.length) % run.weapons.length;
+  if (i === run.cur) return;
+  run.cur = i;
   room.p.reloadT = 0; room.p.fireT = 0.25;
   sfx('reload');
 }
+const cycleWeapon = () => selectWeapon(run.cur + 1);
+function addAmmo(k) { for (const w of run.weapons) { const m = WEAPONS[w.id].reserve; w.reserve = Math.min(m, w.reserve + Math.ceil(m * k)); } }
+const ammoFull = () => run.weapons.every(w => w.reserve >= WEAPONS[w.id].reserve);
 function melee() {
   const p = room.p;
   if (p.meleeT > 0 || p.dead) return;
@@ -584,6 +616,7 @@ function hurtEnemy(e, dmg, a) {
   room.bodies.push({ x: e.x, y: e.y, a, type: e.type });
   room.decals.push({ x: e.x + Math.cos(a) * 8, y: e.y + Math.sin(a) * 8, r: 16 });
   room.enemies.splice(room.enemies.indexOf(e), 1);
+  if (Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10) });
   sfx('gore', e.x, e.y);
 }
 function hurtPlayer(dmg) {
@@ -687,6 +720,11 @@ function update(dt) {
   const k = Math.min(1, dt * 6);
   cam.x += (p.x + Math.cos(p.a) * look - cam.x) * k;
   cam.y += (p.y + Math.sin(p.a) * look - cam.y) * k;
+  for (const it of room.items) if (!p.dead && !ammoFull() && dist(p, it) < 24) {
+    it.got = true; addAmmo(0.25);
+    popup(it.x, it.y - 16, '+MUNICIÓN', '#ffd98a'); sfx('reload');
+  }
+  room.items = room.items.filter(it => !it.got);
   if (!p.dead && dist(p, room.exit) < 26) completeRoom();
 }
 
@@ -726,6 +764,7 @@ function render() {
     ctx.fillStyle = '#3a1716'; ctx.beginPath(); ctx.ellipse(4, 0, FOES[b.type].r + 3, FOES[b.type].r - 3, 0, 0, 7); ctx.fill();
     ctx.restore();
   }
+  for (const it of room.items) { ctx.fillStyle = '#5d5b2c'; ctx.fillRect(it.x - 8, it.y - 6, 16, 12); ctx.fillStyle = '#ffd98a'; ctx.fillRect(it.x - 8, it.y - 1, 16, 2); }
   // granadas
   for (const n of room.nades) { ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(n.x, n.y, 5, 0, 7); ctx.fill(); }
   // enemigos
@@ -853,7 +892,24 @@ function drawHud() {
     g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(200,20,20,${a})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
   }
-  const x = 14 + inset.l, y = 12 + inset.t, bw = Math.min(150, vw / 2 - 80);
+  if (touchMode) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    drawStick(sticks.L, 70 + inset.l, vh - 80 - inset.b, false);
+    drawStick(sticks.R, vw / 2 + (vw / 2 - 150 - inset.r) / 2, vh - 80 - inset.b, true);
+    if (sticks.L && (p.speed > 8)) {
+      ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = p.sneak ? '#62d6ad' : '#ffb547';
+      ctx.fillText(p.sneak ? 'SIGILO' : 'CORRIENDO', sticks.L.ox, sticks.L.oy - STICK_R - 18);
+    }
+    if (run.level === 1 && room.time < 14) {
+      ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
+      ctx.fillText('MOVER · suave = sigilo', 70 + inset.l, vh - 80 - inset.b - STICK_R - 16);
+      ctx.fillText('APUNTAR · al borde dispara', vw / 2 + (vw / 2 - 150 - inset.r) / 2, vh - 80 - inset.b - STICK_R - 16);
+    }
+  }
+  // el resto del HUD crece en pantallas grandes (PC)
+  ctx.setTransform(dpr * ui, 0, 0, dpr * ui, 0, 0);
+  const uw = vw / ui, uh = vh / ui, x = 14 + inset.l / ui, y = 12 + inset.t / ui, bw = Math.min(150, uw / 2 - 80);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 14, bw, 9);
   ctx.fillStyle = run.hp < 30 ? '#ff5444' : '#62d6ad'; ctx.fillRect(x, y + 14, bw * run.hp / run.maxHp, 9);
@@ -873,23 +929,13 @@ function drawHud() {
   const label = ['OCULTO', 'ALERTA', 'DETECTADO'][worst], col = ['#62d6ad', '#ffb547', '#ff5444'][worst];
   ctx.textAlign = 'center';
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
-  ctx.fillText(`SALA ${run.level} · ${room.enemies.length} HOSTILES`, vw / 2, y);
+  ctx.fillText(`SALA ${run.level} · ${room.enemies.length} HOSTILES`, uw / 2, y);
   ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = col;
-  ctx.fillText(label, vw / 2, y + 14);
+  ctx.fillText(label, uw / 2, y + 14);
 
-  if (touchMode) {
-    drawStick(sticks.L, 70 + inset.l, vh - 80 - inset.b, false);
-    drawStick(sticks.R, vw / 2 + (vw / 2 - 150 - inset.r) / 2, vh - 80 - inset.b, true);
-    if (sticks.L && (p.speed > 8)) {
-      ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center';
-      ctx.fillStyle = p.sneak ? '#62d6ad' : '#ffb547';
-      ctx.fillText(p.sneak ? 'SIGILO' : 'CORRIENDO', sticks.L.ox, sticks.L.oy - STICK_R - 18);
-    }
-    if (run.level === 1 && room.time < 14) {
-      ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-      ctx.fillText('MOVER · suave = sigilo', 70 + inset.l, vh - 80 - inset.b - STICK_R - 16);
-      ctx.fillText('APUNTAR · al borde dispara', vw / 2 + (vw / 2 - 150 - inset.r) / 2, vh - 80 - inset.b - STICK_R - 16);
-    }
+  if (!touchMode && run.level === 1 && room.time < 16) {
+    ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
+    ctx.fillText('WASD mover · Mayús sigilo · ratón apunta y dispara · E cuchillo · G granada · Q ruido · F linterna · R recargar · 1-5 / rueda arma', uw / 2, uh - 86);
   }
   syncHud();
 }
@@ -907,12 +953,13 @@ function drawStick(s, gx, gy, aim) {
 let hudKey = '';
 function syncHud() {
   const p = room.p, w = curW(), s = wstats(w);
-  const key = `${s.name}|${w.ammo}|${s.mag}|${run.nades}|${run.light}|${p.reloadT > 0}`;
+  const key = `${s.name}|${w.ammo}|${w.reserve}|${run.nades}|${run.light}|${p.reloadT > 0}|${touchMode}|${run.weapons.length}`;
   if (p.reloadT > 0) $('bWeapon').style.setProperty('--p', `${100 * (1 - p.reloadT / s.reload)}%`);
   if (key === hudKey) return;
   hudKey = key;
   $('wName').textContent = (s.name + (run.weapons.length > 1 ? ' ⇄' : '')).toUpperCase();
-  $('wAmmo').textContent = p.reloadT > 0 ? 'RECARGANDO' : `${w.ammo} / ${s.mag}`;
+  $('wAmmo').textContent = p.reloadT > 0 ? 'RECARGANDO' : w.ammo || w.reserve ? `${w.ammo} / ${w.reserve}` : 'SIN MUNICIÓN';
+  $('acts').hidden = !touchMode;
   if (p.reloadT <= 0) $('bWeapon').style.setProperty('--p', '0%');
   $('nadeN').textContent = run.nades;
   $('bNade').classList.toggle('off', !run.nades);
@@ -933,8 +980,8 @@ function renderShop() {
     for (const id in WEAPONS) {
       const s = WEAPONS[id], i = run.weapons.findIndex(w => w.id === id);
       const info = `Daño ${s.dmg}${s.pellets > 1 ? '×' + s.pellets : ''} · ${s.rate}/s · ${s.mag} bal. · ruido ${noiseLabel(s.noise)}`;
-      if (i < 0) html += item(s.name, info, `buyW:${id}`, `$${s.price}`, run.money < s.price);
-      else html += item(s.name, info, `equip:${i}`, i === run.cur ? 'En mano' : 'Equipar', i === run.cur, true);
+      if (i < 0) html += item(s.name, `${info} · reserva máx. ${s.reserve}`, `buyW:${id}`, `$${s.price}`, run.money < s.price);
+      else html += item(s.name, `${info} · reserva ${run.weapons[i].reserve}/${s.reserve}`, `equip:${i}`, i === run.cur ? 'En mano' : 'Equipar', i === run.cur, true);
     }
   } else if (shopTab === 'mod') {
     modSel = Math.min(modSel, run.weapons.length - 1);
@@ -947,6 +994,7 @@ function renderShop() {
       html += item(m.name, m.desc, `mod:${id}`, has ? 'Instalada' : `$${m.price}`, has || run.money < m.price, has);
     }
   } else {
+    html += item('Caja de munición', `+50 % de reserva en todas tus armas${ammoFull() ? ' (ya están llenas)' : ''}`, 'ammo', '$45', run.money < 45 || ammoFull());
     html += item('Granada', `Radio enorme, ruido enorme. Tienes ${run.nades} (máx. 5)`, 'nade', '$60', run.money < 60 || run.nades >= 5);
     html += item('Botiquín', `+40 de vida (${Math.ceil(run.hp)}/${run.maxHp})`, 'med', '$50', run.money < 50 || run.hp >= run.maxHp);
     html += item('Placas de blindaje', '+25 de vida máxima (tope 200)', 'maxhp', '$220', run.money < 220 || run.maxHp >= 200);
@@ -957,14 +1005,16 @@ function renderShop() {
 function shopAct(act) {
   const [k, v] = act.split(':');
   const pay = n => { run.money -= n; sfx('buy'); };
-  if (k === 'buyW') { pay(WEAPONS[v].price); run.weapons.push({ id: v, mods: [], ammo: WEAPONS[v].mag }); run.cur = run.weapons.length - 1; }
+  if (k === 'buyW') { pay(WEAPONS[v].price); run.weapons.push({ id: v, mods: [], ammo: WEAPONS[v].mag, reserve: Math.ceil(WEAPONS[v].reserve / 2) }); run.cur = run.weapons.length - 1; }
   else if (k === 'equip') run.cur = +v;
   else if (k === 'sel') modSel = +v;
   else if (k === 'mod') { pay(MODS[v].price); run.weapons[modSel].mods.push(v); }
+  else if (k === 'ammo') { pay(45); addAmmo(0.5); }
   else if (k === 'nade') { pay(60); run.nades++; }
   else if (k === 'med') { pay(50); run.hp = Math.min(run.maxHp, run.hp + 40); }
   else if (k === 'maxhp') { pay(220); run.maxHp += 25; run.hp += 25; }
   renderShop();
+  save();
 }
 
 // ================= Audio (sintetizado, sin archivos) =================
@@ -1021,11 +1071,14 @@ function show(id) {
   $('hud').hidden = id !== null;
 }
 function resize() {
-  dpr = Math.min(window.devicePixelRatio || 1, 2);
   vw = innerWidth; vh = innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(5e6 / (vw * vh))); // tope de píxeles en monitores grandes
   cw = cv.width = lightCv.width = Math.round(vw * dpr);
   ch = cv.height = lightCv.height = Math.round(vh * dpr);
-  zoom = clamp(Math.min(vw, vh) / 430, 0.62, 1.5);
+  // móvil: zoom por el lado corto; monitores grandes: se ven unos 720 px de mundo en vertical
+  zoom = Math.max(clamp(Math.min(vw, vh) / 430, 0.62, 1.5), Math.min(vw, vh) / 720);
+  ui = Math.max(1, Math.min(vw, vh) / 720);
+  document.documentElement.style.setProperty('--hud', ui);
   const cs = getComputedStyle($('safe'));
   inset = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
 }
@@ -1088,19 +1141,38 @@ addEventListener('keydown', e => {
   if (state !== 'play' || e.repeat) return;
   const act = { KeyE: melee, KeyG: throwNade, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
+  else if (/^Digit[1-5]$/.test(e.code) && run.weapons[e.code[5] - 1]) selectWeapon(e.code[5] - 1);
 });
+let wheelT = 0;
+addEventListener('wheel', e => {
+  if (state !== 'play' || e.timeStamp - wheelT < 250) return; // los touchpads disparan muchos eventos por gesto
+  wheelT = e.timeStamp;
+  selectWeapon(run.cur + (e.deltaY > 0 ? 1 : -1));
+}, { passive: true });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
-$('bPlay').addEventListener('click', () => {
+function begin() {
   initAudio();
   try { document.documentElement.requestFullscreen?.().catch(() => {}); screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) { /* opcional */ }
-  newRun(); startRoom();
+}
+$('bPlay').addEventListener('click', () => {
+  const b = $('bPlay');
+  if (loadSave() && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = '¿Borrar la partida guardada?'; return; }
+  begin(); newRun(); startRoom();
 });
+$('bCont').addEventListener('click', () => {
+  const d = loadSave();
+  if (!d) { refreshMenu(); return; }
+  begin();
+  run = { ...d.run, snap: null };
+  if (d.shop) openShop('Partida guardada. Prepárate para la siguiente sala.'); else startRoom();
+});
+refreshMenu();
 $('bResume').addEventListener('click', () => { state = 'play'; show(null); });
 $('bRestart').addEventListener('click', retryRoom);
-$('bQuit').addEventListener('click', () => { state = 'menu'; room = null; show('menu'); });
+$('bQuit').addEventListener('click', () => { state = 'menu'; room = null; refreshMenu(); show('menu'); });
 $('bRetry').addEventListener('click', () => { initAudio(); retryRoom(); });
 $('bNew').addEventListener('click', () => { initAudio(); newRun(); startRoom(); });
 $('bNext').addEventListener('click', () => { initAudio(); startRoom(); });
