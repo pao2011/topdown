@@ -21,11 +21,12 @@ const path = require('path');
     const A = window.__apagon, out = [];
     for (let lvl = 1; lvl <= 12; lvl++) for (let k = 0; k < 8; k++) {
       const r = A.buildRoom(lvl, lvl * 1000 + k), d = A.bfs(A.cellOf(r.start.x, r.start.y));
-      out.push({ lvl, k, n: r.enemies.length, exit: d[A.cellOf(r.exit.x, r.exit.y)] > 5, foes: r.enemies.every(e => d[A.cellOf(e.x, e.y)] >= 0), path: !!A.findPath(r.start.x, r.start.y, r.exit.x, r.exit.y) });
+      out.push({ lvl, k, n: r.enemies.length, exit: d[A.cellOf(r.exit.x, r.exit.y)] > 5, foes: r.enemies.every(e => d[A.cellOf(e.x, e.y)] >= 0), path: !!A.findPath(r.start.x, r.start.y, r.exit.x, r.exit.y),
+        loot: lvl % 8 === 0 ? !r.loot : d[A.cellOf(r.loot.x, r.loot.y)] > 5 });
     }
     return out;
   });
-  for (const g of gen) assert(g.exit && g.foes && g.path && g.n >= 3, 'mapa inválido ' + JSON.stringify(g));
+  for (const g of gen) assert(g.exit && g.foes && g.path && g.loot && g.n >= 3, 'mapa inválido ' + JSON.stringify(g));
   // castRay: desde el centro de la casilla (1,1) hacia el muro exterior izquierdo hay 20 px
   assert.strictEqual(await ev(() => __apagon.castRay(60, 60, -1, 0, 500)), 20);
   // Salen los 6 tipos de enemigo en las salas 1-7 y la sala 8 es la del jefe
@@ -115,11 +116,11 @@ const path = require('path');
   // Vista: plantado delante de un guardia, acaba detectándote
   const placed = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies) {
-      const c = Math.cos(e.a), s = Math.sin(e.a);
+    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+      const t = k * Math.PI / 4, c = Math.cos(t), s = Math.sin(t);
       if (A.castRay(e.x, e.y, c, s, 90) >= 90) {
         r.p.x = e.x + c * 70; r.p.y = e.y + s * 70;
-        Object.assign(e, { state: 'patrol', aware: 0, path: null, waitT: 5, lookA: e.a, lookT: 5 });
+        Object.assign(e, { state: 'patrol', aware: 0, path: null, a: t, waitT: 5, lookA: t, lookT: 5 });
         window.__target = e;
         r.enemies.splice(0, r.enemies.length, e); // solo él: que no lo distraigan los disparos de otros
         return 0;
@@ -190,10 +191,50 @@ const path = require('path');
   if (dog) assert.strictEqual(dog, 'combat', 'el perro debe olerte');
   else console.warn('aviso: sin hueco para el perro; se omite su prueba');
 
+  // Brecha: una carga junto a un muro interior abre un hueco
+  const wall = await ev(() => {
+    const A = __apagon, r = A.room, W = r.W;
+    for (let c = 0; c < r.map.length; c++) {
+      const x = c % W, y = (c / W) | 0;
+      if (r.map[c] !== 1 || x < 3 || y < 2 || x > W - 3 || y > r.H - 3 || r.map[c - 1] !== 0 || r.map[c - 2] !== 0) continue;
+      r.p.x = (x - 1) * 40 + 20; r.p.y = y * 40 + 20; r.p.a = 0; r.p.breachT = 0;
+      A.run.hp = 1000; // la onda le alcanza: aquí solo importa la pared
+      const before = A.run.charges; A.breach();
+      return { c, used: before - A.run.charges };
+    }
+    return null;
+  });
+  assert(wall && wall.used === 1, 'debe gastarse una carga');
+  await page.waitForTimeout(2700);
+  assert.strictEqual(await page.evaluate(c => __apagon.room.map[c], wall.c), 0, 'la carga debe abrir la pared');
+  await ev(() => { __apagon.run.hp = 100; });
+
+  // Una bala rompe una ventana
+  const glass = await ev(async () => {
+    const r = __apagon.room, W = r.W;
+    for (let c = 0; c < r.map.length; c++) if (r.map[c] === 5 && r.map[c - 1] === 0) {
+      const x = (c % W - 1) * 40 + 20, y = ((c / W) | 0) * 40 + 20;
+      r.bullets.push({ x, y, vx: 900, vy: 0, dmg: 26, mine: true, life: 1 });
+      await new Promise(f => setTimeout(f, 150));
+      return r.map[c];
+    }
+    return -1;
+  });
+  if (glass >= 0) assert.strictEqual(glass, 0, 'la bala debe romper la ventana'); else console.warn('aviso: sin ventana accesible');
+
   await page.tap('#bNade');
   await page.tap('#bNoise');
   await page.waitForTimeout(2200); // deja explotar la granada
 
+  // Golpe: la salida está cerrada sin botín; al cogerlo salta la alarma con cuenta atrás
+  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; });
+  await page.waitForTimeout(200);
+  assert.strictEqual(await ev(() => __apagon.state), 'play', 'sin botín la salida está cerrada');
+  await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; });
+  await page.waitForTimeout(200);
+  const alarm = await ev(() => { const r = __apagon.room; return { alarm: r.alarm, taken: r.loot.taken, timer: r.timer > 20 }; });
+  assert.deepStrictEqual(alarm, { alarm: true, taken: true, timer: true });
+  await shot('alarm');
   // Salida → tienda → comprar arma y mejora → siguiente sala
   await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; });
   await page.waitForTimeout(200);
@@ -217,6 +258,15 @@ const path = require('path');
   await page.click('#bNext');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['play', 2]);
   await page.waitForTimeout(1500);
+
+  // Si se acaba el tiempo tras la alarma, te atrapan
+  await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; });
+  await page.waitForTimeout(200);
+  await ev(() => { __apagon.room.timer = 0.05; __apagon.run.hp = 100; __apagon.room.p.dead = false; });
+  await page.waitForTimeout(300);
+  assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('overTitle').textContent]), ['over', 'TE HAN ATRAPADO']);
+  await page.click('#bRetry');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.room.alarm]), ['play', false]);
 
   // Jefe: con él vivo la salida está bloqueada; al abatirlo, victoria y luego tienda
   await ev(() => { __apagon.run.level = 8; __apagon.startRoom(); });
