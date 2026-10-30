@@ -28,6 +28,14 @@ const path = require('path');
   for (const g of gen) assert(g.exit && g.foes && g.path && g.n >= 3, 'mapa inválido ' + JSON.stringify(g));
   // castRay: desde el centro de la casilla (1,1) hacia el muro exterior izquierdo hay 20 px
   assert.strictEqual(await ev(() => __apagon.castRay(60, 60, -1, 0, 500)), 20);
+  // Salen los 6 tipos de enemigo en las salas 1-7 y la sala 8 es la del jefe
+  const kinds = await ev(() => {
+    const A = __apagon, seen = new Set();
+    for (let lvl = 1; lvl <= 7; lvl++) for (let k = 0; k < 4; k++) A.buildRoom(lvl, lvl * 31 + k).enemies.forEach(e => seen.add(e.type));
+    const b = A.buildRoom(8, 5);
+    return { seen: [...seen].sort(), bosses: b.enemies.filter(e => e.type === 'boss').length, boss: b.boss && b.boss.type };
+  });
+  assert.deepStrictEqual(kinds, { seen: ['dog', 'elite', 'guard', 'heavy', 'shield', 'sniper'], bosses: 1, boss: 'boss' });
 
   await page.tap('#bPlay');
   await page.waitForTimeout(300);
@@ -146,6 +154,42 @@ const path = require('path');
     assert(await ev(() => __apagon.room.silent === 1), 'el cuchillo por la espalda debe eliminar en silencio');
   } else console.warn('aviso: ningún guardia con hueco detrás; se omite la prueba de cuchillo');
 
+  // Escudo: para las balas de frente, no las de la espalda
+  const shield = await ev(async () => {
+    const A = __apagon, r = A.room, wait = ms => new Promise(f => setTimeout(f, ms));
+    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+      const t = k * Math.PI / 4;
+      if (A.castRay(e.x, e.y, Math.cos(t), Math.sin(t), 45) < 45 || A.castRay(e.x, e.y, -Math.cos(t), -Math.sin(t), 45) < 45) continue;
+      r.enemies.splice(0, r.enemies.length, e);
+      Object.assign(e, { type: 'shield', r: 15, hp: 120, state: 'patrol', a: t, lookA: t, waitT: 9, lookT: 9 });
+      const shoot = back => { const a = e.a + (back ? Math.PI : 0); r.bullets.push({ x: e.x + Math.cos(a) * 32, y: e.y + Math.sin(a) * 32, vx: -Math.cos(a) * 900, vy: -Math.sin(a) * 900, dmg: 26, mine: true, life: 1 }); };
+      shoot(false); await wait(150);
+      const front = e.hp;
+      e.a = t; shoot(true); await wait(150);
+      return [front, e.hp];
+    }
+    return null;
+  });
+  if (shield) assert.deepStrictEqual(shield, [120, 94], 'el escudo para de frente y no de espaldas');
+  else console.warn('aviso: ningún guardia con hueco; se omite la prueba de escudo');
+
+  // Perro: te huele aunque vayas a oscuras y en sigilo, por la espalda
+  const dog = await ev(async () => {
+    const A = __apagon, r = A.room, e = r.enemies[0];
+    for (let k = 0; e && k < 8; k++) {
+      const t = k * Math.PI / 4;
+      if (A.castRay(e.x, e.y, -Math.cos(t), -Math.sin(t), 75) < 75) continue;
+      Object.assign(e, { type: 'dog', r: 10, hp: 45, state: 'patrol', aware: 0, alertLvl: 0, a: t, lookA: t, waitT: 9, lookT: 9 });
+      A.run.light = false; r.p.x = e.x - Math.cos(t) * 60; r.p.y = e.y - Math.sin(t) * 60; r.p.vx = r.p.vy = 0;
+      await new Promise(f => setTimeout(f, 1200));
+      A.run.light = true;
+      return e.state;
+    }
+    return null;
+  });
+  if (dog) assert.strictEqual(dog, 'combat', 'el perro debe olerte');
+  else console.warn('aviso: sin hueco para el perro; se omite su prueba');
+
   await page.tap('#bNade');
   await page.tap('#bNoise');
   await page.waitForTimeout(2200); // deja explotar la granada
@@ -173,6 +217,19 @@ const path = require('path');
   await page.click('#bNext');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['play', 2]);
   await page.waitForTimeout(1500);
+
+  // Jefe: con él vivo la salida está bloqueada; al abatirlo, victoria y luego tienda
+  await ev(() => { __apagon.run.level = 8; __apagon.startRoom(); });
+  assert.strictEqual(await ev(() => __apagon.room.boss && __apagon.room.boss.type), 'boss');
+  await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; });
+  await page.waitForTimeout(300);
+  assert.strictEqual(await ev(() => __apagon.state), 'play', 'con el jefe vivo la salida está bloqueada');
+  await shot('boss');
+  await ev(() => { const A = __apagon; A.run.hp = 100; A.room.p.dead = false; A.hurtEnemy(A.room.boss, 1e6, 0); });
+  await page.waitForTimeout(300);
+  assert.strictEqual(await ev(() => __apagon.state), 'win');
+  await page.click('#bWinGo');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['shop', 9]);
 
   // PC: sin botones táctiles, HUD escalado, ratón apunta y dispara; una partida corrupta se ignora
   const desk = await browser.newContext({ viewport: { width: 1920, height: 1080 } });

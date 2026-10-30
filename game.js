@@ -24,7 +24,19 @@ const FOES = {
   guard: { hp: 60,  walk: 58, run: 125, dmg: 9,  rate: 1.7, spread: 0.13, pellets: 1, vision: 250, reward: 30, r: 13, color: '#c9584a' },
   heavy: { hp: 160, walk: 45, run: 95,  dmg: 6,  rate: 0.9, spread: 0.28, pellets: 5, vision: 220, reward: 60, r: 16, color: '#9e3f36' },
   elite: { hp: 90,  walk: 66, run: 145, dmg: 11, rate: 4.2, spread: 0.08, pellets: 1, vision: 290, reward: 50, r: 13, color: '#e0843a' },
+  // perro: te huele de cerca aunque vayas a oscuras, oye el doble y muerde
+  dog:    { hp: 45,  walk: 70, run: 205, dmg: 14, rate: 1.4, spread: 0,    pellets: 0, vision: 160, reward: 25, r: 10, color: '#8a6a4a', melee: true, nose: 95, ears: 2 },
+  // francotirador: no deja su puesto, cono largo y estrecho, apunta un segundo antes del tiro
+  sniper: { hp: 70,  walk: 45, run: 100, dmg: 45, rate: 0.35, spread: 0,   pellets: 1, vision: 430, reward: 55, r: 13, color: '#6f7f4a', post: true, half: 0.3 },
+  // escudo: para las balas de frente y gira despacio: hay que rodearlo
+  shield: { hp: 120, walk: 42, run: 90,  dmg: 8,  rate: 1.4, spread: 0.12, pellets: 1, vision: 230, reward: 60, r: 15, color: '#5a6f8f', shield: true },
+  boss:   { hp: 1400, walk: 50, run: 110, dmg: 7, rate: 1,   spread: 0.2,  pellets: 1, vision: 380, reward: 1000, r: 24, color: '#7a2e2e', boss: true },
 };
+const BOSS_EVERY = 8; // sala del jefe; después sigue el modo infinito con un jefe más duro cada 8 salas
+function pickFoe(level, roll) {
+  const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite'] : [])];
+  return pool[Math.floor(roll * pool.length)];
+}
 const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIR8 = [...DIR4, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -150,13 +162,18 @@ function findPath(ax, ay, bx, by) {
 }
 
 function buildRoom(level, seed) {
-  const rand = mulberry32(seed), ri = n => Math.floor(rand() * n);
-  W = Math.min(40, 20 + level * 2); H = Math.min(28, 14 + level);
+  const rand = mulberry32(seed), ri = n => Math.floor(rand() * n), boss = level % BOSS_EVERY === 0;
+  if (boss) { W = 30; H = 22; } else { W = Math.min(40, 20 + level * 2); H = Math.min(28, 14 + level); }
   map = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!x || !y || x === W - 1 || y === H - 1) map[y * W + x] = 1;
   // Partición binaria: cada corte es un muro con una puerta, así todo queda conectado
   const leaves = [], doors = [];
-  (function split(x0, y0, x1, y1) {
+  if (boss) { // vestíbulo a la izquierda y una gran arena con columnas
+    for (let y = 1; y < H - 1; y++) map[y * W + 6] = 1;
+    doors.push([6, 10, 1]);
+    leaves.push({ x0: 1, y0: 1, x1: 5, y1: H - 2 }, { x0: 7, y0: 1, x1: W - 2, y1: H - 2 });
+    for (const [px, py] of [[11, 5], [11, 15], [16, 10], [21, 5], [21, 15]]) for (let k = 0; k < 4; k++) map[(py + (k >> 1)) * W + px + (k & 1)] = 2;
+  } else (function split(x0, y0, x1, y1) {
     const w = x1 - x0 + 1, h = y1 - y0 + 1, canV = w >= 11, canH = h >= 9;
     if ((!canV && !canH) || (w * h < 90 && rand() < 0.35)) { leaves.push({ x0, y0, x1, y1 }); return; }
     if (canV && (!canH || rand() < w / (w + h))) {
@@ -178,7 +195,7 @@ function buildRoom(level, seed) {
   const floorCount = () => map.reduce((n, v) => n + (v === 0), 0);
   const connected = () => bfs(start).reduce((n, v) => n + (v >= 0), 0) === floorCount();
   // Cajas: cobertura que bloquea paso y visión; se descartan si aíslan alguna zona
-  for (const L of leaves) for (let i = ri(4); i > 0; i--) {
+  if (!boss) for (const L of leaves) for (let i = ri(4); i > 0; i--) {
     const x = L.x0 + 1 + ri(Math.max(1, L.x1 - L.x0 - 1)), y = L.y0 + 1 + ri(Math.max(1, L.y1 - L.y0 - 1));
     const c = y * W + x;
     if (map[c] || Math.abs(x - start % W) + Math.abs(y - ((start / W) | 0)) < 3) continue;
@@ -190,31 +207,34 @@ function buildRoom(level, seed) {
   }
 
   const dist0 = bfs(start);
-  let exit = start;
-  for (let i = 0; i < dist0.length; i++) if (dist0[i] > dist0[exit]) exit = i;
+  let exit = boss ? 10 * W + 27 : start;
+  if (!boss) for (let i = 0; i < dist0.length; i++) if (dist0[i] > dist0[exit]) exit = i;
 
   const r = {
     level, W, H, map, leaves, start: center(start), exit: center(exit),
     lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [],
-    detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0,
+    detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null,
   };
-  for (const L of leaves) {
-    const c = ((L.y0 + L.y1) >> 1) * W + ((L.x0 + L.x1) >> 1);
-    if (L !== L0 && !map[c] && rand() < 0.55) {
-      const p = center(c);
-      r.lamps.push({ x: p.x, y: p.y, r: LAMP_R, on: true, poly: visPoly(p.x, p.y, 0, Math.PI, LAMP_R, 48) });
-    }
+  const lampCells = boss ? [[9, 10], [19, 3], [19, 18], [25, 6], [25, 15]].map(([x, y]) => y * W + x)
+    : leaves.filter(L => L !== L0 && rand() < 0.55).map(L => ((L.y0 + L.y1) >> 1) * W + ((L.x0 + L.x1) >> 1));
+  for (const c of lampCells) if (!map[c]) {
+    const p = center(c);
+    r.lamps.push({ x: p.x, y: p.y, r: LAMP_R, on: true, poly: visPoly(p.x, p.y, 0, Math.PI, LAMP_R, 48) });
+  }
+  if (boss) {
+    const b = makeEnemy('boss', 10 * W + 24, rand);
+    b.hp = b.maxHp = Math.round(FOES.boss.hp * (1 + 0.5 * (level / BOSS_EVERY - 1)));
+    b.a = Math.PI; b.lookA = b.a; // mira hacia la entrada
+    r.enemies.push(b); r.boss = b;
   }
   // Enemigos lejos de la entrada y separados entre sí
-  const count = Math.min(18, 3 + Math.round(level * 1.5));
+  const count = boss ? 3 + (level >> 2) : Math.min(18, 3 + Math.round(level * 1.5));
   const cands = [];
-  for (let i = 0; i < dist0.length; i++) if (dist0[i] >= 8) cands.push(i);
+  for (let i = 0; i < dist0.length; i++) if (dist0[i] >= 8 && (!boss || i % W >= 9)) cands.push(i); // en la sala del jefe, solo en la arena
   for (let tries = 0; r.enemies.length < count && tries < 400 && cands.length; tries++) {
     const c = cands[ri(cands.length)], p = center(c);
     if (r.enemies.some(e => Math.hypot(e.x - p.x, e.y - p.y) < T * 3)) continue;
-    const roll = rand();
-    const type = level >= 4 && roll < 0.1 + level * 0.02 ? 'elite' : level >= 2 && roll > 0.68 ? 'heavy' : 'guard';
-    r.enemies.push(makeEnemy(type, c, rand));
+    r.enemies.push(makeEnemy(boss ? ['guard', 'elite', 'shield'][ri(3)] : pickFoe(level, rand()), c, rand));
   }
   for (let i = 0; i < 1 + (level >> 2) && cands.length; i++) r.items.push(center(cands[ri(cands.length)]));
   r.p = { x: r.start.x, y: r.start.y, vx: 0, vy: 0, a: 0, r: 12, speed: 0, sneak: true, stepT: 0, fireT: 0, reloadT: 0, meleeT: 0, nadeT: 0, noiseT: 0, swingT: 0, hurtT: 0, muzzleT: 0, dead: false };
@@ -234,12 +254,13 @@ const jitter = p => ({ x: p.x + rnd(-13, 13), y: p.y + rnd(-13, 13) });
 function makeEnemy(type, c, rand) {
   const F = FOES[type], p = center(c);
   const e = {
-    type, x: p.x, y: p.y, r: F.r, hp: F.hp, a: rand() * Math.PI * 2, state: 'patrol', aware: 0, alertLvl: 0,
+    type, x: p.x, y: p.y, r: F.r, hp: F.hp, maxHp: F.hp, a: rand() * Math.PI * 2, state: 'patrol', aware: 0, alertLvl: 0,
     seen: new Set(), fireT: 0, reactT: 0, waitT: rand() * 2, lookT: 0, lookA: 0, dir: 1, wpI: 0, path: null,
     target: null, urgent: false, spts: [], pauseT: 0, last: null, lostT: 0, moveA: null, chkT: 0, chkX: 0, chkY: 0,
+    aimT: 0, burstT: 0, gunT: 0, called: false,
   };
   e.lookA = e.a;
-  e.wps = makePatrol(c, rand);
+  e.wps = F.post || F.boss ? [center(c)] : makePatrol(c, rand);
   e.goal = jitter(e.wps[0]);
   return e;
 }
@@ -256,6 +277,7 @@ function startRoom() {
   run.snap = JSON.stringify(rest);
   room = buildRoom(run.level, run.seed + run.level * 977);
   cam.x = room.p.x; cam.y = room.p.y;
+  if (room.boss) banner('Sala final: abate al Alcaide para abrir la salida');
   sticks.L = sticks.R = null; mouse.down = false;
   state = 'play';
   show(null);
@@ -266,14 +288,21 @@ function retryRoom() {
   run = { ...JSON.parse(snap), snap };
   startRoom();
 }
+let winStats = '';
 function completeRoom() {
-  const bonus = 80 + 20 * run.level, ghost = room.detected ? 0 : 120;
+  const bonus = 80 + 20 * run.level, ghost = room.detected ? 0 : 120, wasBoss = run.level % BOSS_EVERY === 0;
   run.money += bonus + ghost;
   run.hp = Math.min(run.maxHp, run.hp + 20);
   run.level++;
   sfx('buy');
-  openShop(`Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
-    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + ` · +20 de vida`);
+  const stats = `Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
+    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + ` · +20 de vida`;
+  if (!wasBoss) { openShop(stats); return; }
+  winStats = stats;
+  state = 'win';
+  $('winInfo').textContent = `Has abatido al Alcaide en la sala ${run.level - 1}. Puedes seguir en modo infinito: cada ${BOSS_EVERY} salas vuelve un jefe más duro.`;
+  show('win');
+  save();
 }
 function openShop(stats) {
   state = 'shop';
@@ -287,7 +316,7 @@ function openShop(stats) {
 // Guardado automático al entrar en cada sala y en la tienda
 const SAVE = 'apagon-partida-v1';
 function save() {
-  try { const { snap, ...rest } = run; localStorage.setItem(SAVE, JSON.stringify({ run: rest, shop: state === 'shop' })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
+  try { const { snap, ...rest } = run; localStorage.setItem(SAVE, JSON.stringify({ run: rest, shop: state === 'shop' || state === 'win' })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
 }
 function loadSave() {
   try {
@@ -318,8 +347,8 @@ function noise(x, y, r, kind, src, tx = x, ty = y) {
   room.rings.push({ x, y, r, t: 0, kind });
   for (const e of room.enemies) {
     if (e === src) continue;
-    const d = Math.hypot(e.x - x, e.y - y);
-    if (d > r || (d > r * 0.6 && !los(x, y, e.x, e.y))) continue; // las paredes amortiguan
+    const d = Math.hypot(e.x - x, e.y - y), R = r * (FOES[e.type].ears || 1);
+    if (d > R || (d > R * 0.6 && !los(x, y, e.x, e.y))) continue; // las paredes amortiguan
     hear(e, tx, ty, kind, d);
   }
 }
@@ -346,6 +375,7 @@ function suspicious(e, x, y) {
   e.state = 'suspicious'; e.target = { x, y }; e.path = null;
 }
 function investigate(e, x, y, urgent) {
+  if (FOES[e.type].post) { suspicious(e, x, y); e.stateT = 3; return; } // el francotirador no deja su puesto: solo mira
   e.state = 'investigate'; e.target = { x, y }; e.urgent = urgent; e.path = null;
 }
 function search(e) {
@@ -357,7 +387,7 @@ function search(e) {
 }
 function backToPatrol(e) {
   e.state = 'patrol'; e.aware = 0; e.path = null; e.waitT = 0.6;
-  if (Math.random() < 0.6) e.wps = makePatrol(cellOf(e.x, e.y), Math.random); // patrulla nueva cerca de donde buscó
+  if (e.wps.length > 1 && Math.random() < 0.6) e.wps = makePatrol(cellOf(e.x, e.y), Math.random); // patrulla nueva cerca de donde buscó; los de puesto fijo vuelven a él
   e.wpI = 0; e.goal = jitter(e.wps[0]);
 }
 function enterCombat(e) {
@@ -411,7 +441,7 @@ function moveTo(e, tx, ty, speed, dt) {
   }
   return false;
 }
-const visionHalf = e => e.state === 'combat' ? 1.2 : 0.62;
+const visionHalf = e => FOES[e.type].half ? (e.state === 'combat' ? 0.45 : FOES[e.type].half) : e.state === 'combat' ? 1.2 : 0.62;
 const visionRange = e => FOES[e.type].vision * (1 + 0.15 * e.alertLvl) * (e.state === 'combat' ? 1.4 : 0.6 + 0.4 * Math.min(1, room.exposure));
 function lookAround(e, dt, spread) {
   if ((e.lookT -= dt) <= 0) { e.lookT = rnd(0.7, 1.8); e.lookA = e.a + rnd(-spread, spread); }
@@ -423,13 +453,14 @@ function updateEnemy(e, dt) {
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
   const combat = e.state === 'combat';
   const range = visionRange(e);
-  const sees = !p.dead && ((d < range && Math.abs(angDiff(e.a, toP)) < visionHalf(e) && los(e.x, e.y, p.x, p.y)) ||
+  const smell = !p.dead && F.nose && d < F.nose && los(e.x, e.y, p.x, p.y); // el perro te huele aunque vayas a oscuras
+  const sees = smell || !p.dead && ((d < range && Math.abs(angDiff(e.a, toP)) < visionHalf(e) && los(e.x, e.y, p.x, p.y)) ||
     (d < e.r + p.r + 20 && !p.sneak) || (combat && d < 130 && los(e.x, e.y, p.x, p.y)));
 
   if (sees) {
     if (combat) enterCombat(e);
     else {
-      e.aware += dt * X * (0.8 + 2.6 * (1 - d / range)) * (1 + 0.5 * e.alertLvl);
+      e.aware += dt * (smell ? Math.max(X, 1.2) : X) * (0.8 + 2.6 * Math.max(0, 1 - d / range)) * (1 + 0.5 * e.alertLvl);
       if (e.aware >= 1) enterCombat(e);
       else if (e.aware > 0.3 && e.state !== 'investigate') suspicious(e, p.x, p.y);
     }
@@ -465,7 +496,7 @@ function updateEnemy(e, dt) {
       break;
     case 'suspicious':
       face = Math.atan2(e.target.y - e.y, e.target.x - e.x);
-      if ((e.stateT -= dt) <= 0) investigate(e, e.target.x, e.target.y, false);
+      if ((e.stateT -= dt) <= 0) { if (F.post) backToPatrol(e); else investigate(e, e.target.x, e.target.y, false); }
       break;
     case 'investigate':
       if (moveTo(e, e.target.x, e.target.y, e.urgent ? F.run : F.walk * 1.25, dt)) search(e);
@@ -479,17 +510,73 @@ function updateEnemy(e, dt) {
       if (sees) {
         face = toP;
         e.reactT -= dt;
-        if (d > 170) moveTo(e, p.x, p.y, F.walk * 1.5, dt);
-        if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.3) enemyShoot(e);
+        if (F.melee) { // perro: corre hasta ti y muerde
+          moveTo(e, p.x, p.y, F.run, dt);
+          if (d < e.r + p.r + 10 && e.fireT <= 0 && e.reactT <= 0) { e.fireT = 1 / F.rate; hurtPlayer(F.dmg); sfx('bite', e.x, e.y); }
+        } else if (F.boss) {
+          if (d > 240 && e.burstT <= 0) moveTo(e, p.x, p.y, F.walk, dt);
+          bossAttack(e, dt, d);
+        } else if (F.post) { // francotirador: aviso rojo, un segundo apuntando y un tiro pesado
+          if (e.aimT > 0) { if ((e.aimT -= dt) <= 0) snipe(e); }
+          else if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.15) { e.aimT = 1.1; warn(e, '#ff5444'); sfx('charge', e.x, e.y); }
+        } else {
+          if (d > 170) moveTo(e, p.x, p.y, F.walk * 1.5, dt);
+          if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.3) enemyShoot(e);
+        }
       } else {
-        e.lostT += dt; e.reactT = Math.max(e.reactT, 0.3);
-        if (moveTo(e, e.last.x, e.last.y, F.run, dt) || e.lostT > 8) { e.alertLvl = 2; e.aware = 0.5; search(e); }
+        e.lostT += dt; e.reactT = Math.max(e.reactT, 0.3); e.aimT = 0; e.burstT = 0;
+        if (F.post) { face = Math.atan2(e.last.y - e.y, e.last.x - e.x); if (e.lostT > 5) { e.alertLvl = 2; backToPatrol(e); } }
+        else if (moveTo(e, e.last.x, e.last.y, F.run, dt) || e.lostT > 8) { e.alertLvl = 2; e.aware = 0.5; search(e); }
       }
       break;
   }
-  const want = face ?? e.moveA ?? e.a, turn = (combat ? 6 : 3.2) * dt;
+  // apuntando gira muy despacio (corriendo lo esquivas); escudo y jefe también, para poder rodearlos
+  const want = face ?? e.moveA ?? e.a, turn = (e.aimT > 0 ? 0.4 : F.boss ? 2.5 : F.shield && combat ? 2 : combat ? 6 : 3.2) * dt;
   e.a += clamp(angDiff(e.a, want), -turn, turn);
 }
+function snipe(e) {
+  const F = FOES[e.type], mx = e.x + Math.cos(e.a) * (e.r + 14), my = e.y + Math.sin(e.a) * (e.r + 14);
+  bullet(mx, my, e.a, 1400, F.dmg, false);
+  flash(mx, my, 140, 0.09);
+  noise(e.x, e.y, 520, 'eshot', e);
+  sfx('eshot', e.x, e.y);
+  e.fireT = 1 / F.rate;
+}
+// El Alcaide: ráfagas de ametralladora, granadas y, a media vida, refuerzos
+function bossAttack(e, dt, d) {
+  const rage = e.hp < e.maxHp / 2;
+  if (rage && !e.called) { e.called = true; reinforcements(); }
+  if (e.burstT > 0) {
+    e.burstT -= dt;
+    if ((e.gunT -= dt) <= 0) {
+      e.gunT = rage ? 0.07 : 0.1;
+      const mx = e.x + Math.cos(e.a) * (e.r + 10), my = e.y + Math.sin(e.a) * (e.r + 10);
+      bullet(mx, my, e.a + rnd(-0.2, 0.2), 600, FOES.boss.dmg, false);
+      flash(mx, my, 120, 0.06);
+      sfx('eshot', e.x, e.y);
+    }
+  } else if (e.fireT <= 0 && e.reactT <= 0) {
+    noise(e.x, e.y, 500, 'eshot', e);
+    if (d > 140 && Math.random() < 0.35) { bossNade(e); e.fireT = rage ? 1 : 1.7; }
+    else { e.burstT = rage ? 2.2 : 1.5; e.gunT = 0; e.fireT = e.burstT + (rage ? 0.9 : 1.6); }
+  }
+}
+function bossNade(e) {
+  const p = room.p, a = ang(e, p), v = Math.min(dist(e, p), 320) * 2.4; // con el rozamiento llega casi justo a ti
+  room.nades.push({ x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.5, foe: true });
+  sfx('throw', e.x, e.y);
+}
+function reinforcements() {
+  const d = bfs(cellOf(room.p.x, room.p.y)), far = [];
+  for (let i = 0; i < d.length; i++) if (d[i] >= 8) far.push(i);
+  for (let k = 0; k < 3 && far.length; k++) {
+    const e = makeEnemy(k ? 'guard' : 'elite', far[(Math.random() * far.length) | 0], Math.random);
+    room.enemies.push(e);
+    enterCombat(e);
+  }
+  banner('¡El Alcaide pide refuerzos!');
+}
+function banner(text) { room.banner = { text, t: 3.5 }; }
 function enemyShoot(e) {
   const F = FOES[e.type];
   e.fireT = rnd(0.8, 1.3) / F.rate;
@@ -612,7 +699,7 @@ function melee() {
   for (const e of [...room.enemies]) {
     if (dist(p, e) < e.r + p.r + 22 && Math.abs(angDiff(p.a, ang(p, e))) < 1.1) {
       const behind = Math.abs(angDiff(e.a, ang(e, p))) > 1.9;
-      hurtEnemy(e, e.state !== 'combat' || behind ? 999 : 55, p.a);
+      hurtEnemy(e, e.state !== 'combat' || behind ? (FOES[e.type].boss ? 300 : 999) : 55, p.a); // al jefe no se le remata de un tajo
     }
   }
 }
@@ -649,7 +736,8 @@ function hurtEnemy(e, dmg, a) {
   room.bodies.push({ x: e.x, y: e.y, a, type: e.type });
   room.decals.push({ x: e.x + Math.cos(a) * 8, y: e.y + Math.sin(a) * 8, r: 16 });
   room.enemies.splice(room.enemies.indexOf(e), 1);
-  if (Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10) });
+  if (!FOES[e.type].melee && Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10) });
+  if (e === room.boss) { room.boss = null; banner('¡Alcaide abatido! La salida está abierta'); cam.shake = 14; }
   sfx('gore', e.x, e.y);
 }
 function hurtPlayer(dmg) {
@@ -678,7 +766,12 @@ function updateBullets(dt) {
           l.on = false; b.dead = true; sparks(l.x, l.y, 12);
           noise(l.x, l.y, 160, 'impact'); sfx('glass', l.x, l.y);
         }
-        for (const e of room.enemies) if (Math.hypot(e.x - b.x, e.y - b.y) < e.r) { hurtEnemy(e, b.dmg, Math.atan2(b.vy, b.vx)); b.dead = true; break; }
+        for (const e of room.enemies) if (Math.hypot(e.x - b.x, e.y - b.y) < e.r) {
+          b.dead = true;
+          if (FOES[e.type].shield && Math.abs(angDiff(e.a, Math.atan2(-b.vy, -b.vx))) < 0.9) { sparks(b.x, b.y, 5); sfx('clank', e.x, e.y); enterCombat(e); }
+          else hurtEnemy(e, b.dmg, Math.atan2(b.vy, b.vx));
+          break;
+        }
       } else if (Math.hypot(p.x - b.x, p.y - b.y) < p.r) { hurtPlayer(b.dmg); b.dead = true; }
     }
     if ((b.life -= dt) <= 0) b.dead = true;
@@ -691,20 +784,21 @@ function updateNades(dt) {
     n.vx *= f; n.vy *= f;
     if (solidPx(n.x + n.vx * dt, n.y)) n.vx *= -0.55; else n.x += n.vx * dt;
     if (solidPx(n.x, n.y + n.vy * dt)) n.vy *= -0.55; else n.y += n.vy * dt;
-    if ((n.t -= dt) <= 0) explode(n.x, n.y);
+    if ((n.t -= dt) <= 0) explode(n.x, n.y, n.foe);
   }
   room.nades = room.nades.filter(n => n.t > 0);
 }
-function explode(x, y) {
+function explode(x, y, foe) {
   const R = 125, p = room.p;
   for (const e of [...room.enemies]) {
+    if (foe && FOES[e.type].boss) continue;
     const d = Math.hypot(e.x - x, e.y - y);
     if (d < R && los(x, y, e.x, e.y)) hurtEnemy(e, 170 * (1 - d / R) + 20, Math.atan2(e.y - y, e.x - x));
   }
   const dp = Math.hypot(p.x - x, p.y - y);
   if (dp < R && los(x, y, p.x, p.y)) hurtPlayer((170 * (1 - dp / R) + 20) * 0.6);
   for (const l of room.lamps) if (l.on && Math.hypot(l.x - x, l.y - y) < R) l.on = false;
-  noise(x, y, 800, 'boom');
+  noise(x, y, 800, foe ? 'eshot' : 'boom'); // la granada del jefe no cuenta como ruido tuyo
   flash(x, y, 280, 0.35);
   sparks(x, y, 30);
   room.decals.push({ x, y, r: 30, scorch: true });
@@ -760,7 +854,8 @@ function update(dt) {
     popup(it.x, it.y - 16, '+MUNICIÓN', '#ffd98a'); sfx('reload');
   }
   room.items = room.items.filter(it => !it.got);
-  if (!p.dead && dist(p, room.exit) < 26) completeRoom();
+  if (room.banner && (room.banner.t -= dt) <= 0) room.banner = null;
+  if (!p.dead && dist(p, room.exit) < 26) { if (!room.boss) completeRoom(); else if (!room.banner) banner('Salida bloqueada: abate al Alcaide'); }
 }
 
 // ================= Render =================
@@ -814,12 +909,23 @@ function render() {
     if (!onScreen(e.x, e.y, 30)) continue;
     const F = FOES[e.type];
     ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.a);
-    ctx.fillStyle = '#222'; ctx.fillRect(e.r - 4, -2.5, 14, 5);
+    ctx.fillStyle = '#222';
+    if (F.boss) ctx.fillRect(e.r - 6, -5, 26, 10);
+    else if (F.post) ctx.fillRect(e.r - 4, -2, 26, 4);
+    else if (!F.melee) ctx.fillRect(e.r - 4, -2.5, 14, 5);
     ctx.fillStyle = F.color; ctx.strokeStyle = '#1a0d0c'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    if (F.melee) ctx.ellipse(0, 0, e.r * 1.4, e.r * 0.8, 0, 0, 7); else ctx.arc(0, 0, e.r, 0, 7);
+    ctx.fill(); ctx.stroke();
+    if (F.shield) { ctx.fillStyle = '#9fb3cf'; ctx.fillRect(e.r - 1, -e.r - 2, 5, e.r * 2 + 4); }
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(-3, 0, e.r * 0.5, 0, 7); ctx.fill();
     if (e.type === 'elite') { ctx.strokeStyle = '#ffd98a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, e.r - 4, -1, 1); ctx.stroke(); }
     ctx.restore();
+  }
+  for (const e of room.enemies) if (e.aimT > 0) { // láser del francotirador: solo se ve donde llega tu luz
+    const c = Math.cos(e.a), sn = Math.sin(e.a), L = castRay(e.x, e.y, c, sn, 700);
+    ctx.strokeStyle = 'rgba(255,50,50,0.8)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + c * L, e.y + sn * L); ctx.stroke();
   }
   // jugador
   if (!p.dead) {
@@ -892,10 +998,10 @@ function render() {
 
   // ---- Lo que brilla por encima de la oscuridad ----
   const pulse = 0.6 + 0.4 * Math.sin(room.time * 4);
-  ctx.fillStyle = `rgba(70,230,140,${0.18 + 0.12 * pulse})`; ctx.fillRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
-  ctx.strokeStyle = '#46e68c'; ctx.lineWidth = 2; ctx.strokeRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
-  ctx.fillStyle = '#46e68c'; ctx.font = '700 10px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('SALIDA', room.exit.x, room.exit.y);
+  ctx.fillStyle = `rgba(${room.boss ? '255,84,68' : '70,230,140'},${(0.18 + 0.12 * pulse).toFixed(3)})`; ctx.fillRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
+  ctx.strokeStyle = ctx.fillStyle = room.boss ? '#ff5444' : '#46e68c'; ctx.lineWidth = 2; ctx.strokeRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
+  ctx.font = '700 10px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(room.boss ? 'BLOQUEADA' : 'SALIDA', room.exit.x, room.exit.y);
   for (const l of room.lamps) if (l.on) { ctx.fillStyle = '#fff3d6'; ctx.beginPath(); ctx.arc(l.x, l.y, 5, 0, 7); ctx.fill(); }
   for (const n of room.nades) if (Math.sin(n.t * (n.t < 0.6 ? 40 : 14)) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(n.x, n.y, 2.5, 0, 7); ctx.fill(); }
   const s = wstats(curW());
@@ -984,6 +1090,19 @@ function drawHud() {
   ctx.fillText(`SALA ${run.level} · ${room.enemies.length} HOSTILES`, uw / 2, y);
   ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = col;
   ctx.fillText(label, uw / 2, y + 14);
+  if (room.boss) {
+    const b = room.boss, bw2 = Math.min(300, uw - 320);
+    ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ff5444';
+    ctx.fillText('EL ALCAIDE', uw / 2, y + 38);
+    ctx.fillStyle = 'rgba(14,19,26,0.7)'; ctx.fillRect(uw / 2 - bw2 / 2, y + 54, bw2, 7);
+    ctx.fillStyle = '#ff5444'; ctx.fillRect(uw / 2 - bw2 / 2, y + 54, bw2 * Math.max(0, b.hp) / b.maxHp, 7);
+  }
+  if (room.banner) {
+    ctx.globalAlpha = Math.min(1, room.banner.t * 2);
+    ctx.font = '700 15px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a';
+    ctx.fillText(room.banner.text, uw / 2, y + (room.boss ? 70 : 40));
+    ctx.globalAlpha = 1;
+  }
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
@@ -1124,12 +1243,15 @@ function sfx(k, x, y) {
     case 'buy': tone(660, 990, 0.12, 0.15, 'triangle'); break;
     case 'throw': burst(0.1, 0.2, 1200, 'bandpass'); break;
     case 'gore': burst(0.12, 0.3 * v, 400); break;
+    case 'bite': burst(0.09, 0.5 * v, 900); tone(240, 90, 0.12, 0.35 * v, 'sawtooth'); break;
+    case 'clank': tone(1900, 1300, 0.07, 0.25 * v); burst(0.05, 0.3 * v, 4500, 'highpass'); break;
+    case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
   }
 }
 
 // ================= Entrada =================
 function show(id) {
-  for (const o of ['menu', 'shop', 'pause', 'over']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -1239,6 +1361,8 @@ $('bQuit').addEventListener('click', () => { state = 'menu'; room = null; refres
 $('bRetry').addEventListener('click', () => { initAudio(); retryRoom(); });
 $('bNew').addEventListener('click', () => { initAudio(); newRun(); startRoom(); });
 $('bNext').addEventListener('click', () => { initAudio(); startRoom(); });
+$('bWinGo').addEventListener('click', () => openShop(winStats));
+$('bWinNew').addEventListener('click', () => { begin(); newRun(); startRoom(); });
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { shopTab = b.dataset.tab; modSel = run.cur; renderShop(); } });
 $('shopList').addEventListener('click', e => { const b = e.target.closest('button[data-act]'); if (b && !b.disabled) shopAct(b.dataset.act); });
 
@@ -1254,5 +1378,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Gancho para las pruebas automáticas (test/smoke.js)
-window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, lit, get view() { return { cam, S: zoom * dpr, cw, ch }; } };
+window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, lit, get view() { return { cam, S: zoom * dpr, cw, ch }; } };
 })();
