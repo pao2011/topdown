@@ -26,7 +26,7 @@ Guarda el keystore y su contraseña. Para instalar una versión nueva encima de 
 
 Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego cambia solo según lo último que toques, y los botones táctiles se ocultan con teclado o mando.
 
-| Acción | Táctil | Teclado / ratón | Mando |
+| Acción | Táctil | Teclado / ratón | Mando (por defecto) |
 |---|---|---|---|
 | Moverte en sigilo, sin ruido | Stick izquierdo con poco recorrido, o botón Sigilo | `WASD` con el sigilo activado (`C`) | Stick izquierdo con poco recorrido, o `B` para fijar el sigilo |
 | Caminar (los pasos se oyen) | Stick izquierdo a fondo | `WASD` | Stick izquierdo a fondo |
@@ -52,6 +52,7 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
 
 **Mando:**
 - Vale cualquier mando con la distribución estándar del navegador (Xbox, PlayStation, Switch Pro y la mayoría de mandos Bluetooth o USB). Los nombres de la tabla son los de Xbox; en PlayStation, `A`/`B`/`X`/`Y` son ✕/○/□/△, `LB`/`RB` son L1/R1 y `LT`/`RT` son L2/R2.
+- **Reasignar botones:** en Ajustes → «Botones del mando» eliges una acción y pulsas en el mando el botón que quieras. Si ese botón ya tenía otra acción, se intercambian, así que ninguna se queda sin botón. «Restablecer» vuelve a la distribución de la tabla. La asignación se guarda con los ajustes, y los avisos del juego («Usar [A]», la ayuda de la persecución) muestran los botones que hayas elegido. Los menús siempre se manejan con la cruceta, `A` y `B`, para que no puedas quedarte atascado.
 - Se detecta solo: conéctalo y pulsa cualquier botón. Arriba aparece «Mando conectado» con su nombre. Si se desconecta en plena misión, el juego se pausa.
 - En los menús, la cruceta o el stick izquierdo mueven el foco (marcado en amarillo), `A` acepta y `B` vuelve. En Ajustes, `←`/`→` mueven los deslizadores. En la pantalla de carga y en los resultados, `A` adelanta la animación.
 - Vibra con los golpes y las explosiones si el mando lo admite y la vibración está activada en Ajustes.
@@ -217,7 +218,7 @@ SHOTS=capturas node test/smoke.js   # además guarda capturas
 node test/pad.js                    # el mando, con un gamepad simulado
 ```
 
-`test/pad.js` comprueba que se detecta el mando, que se navega por los menús con la cruceta, que se mueve, apunta y dispara, el sigilo con `B`, la pausa con `Start`, los deslizadores de Ajustes y la mira y el disparo en la persecución.
+`test/pad.js` comprueba que se detecta el mando, que se navega por los menús con la cruceta, que se mueve, apunta y dispara, el sigilo con `B`, la pausa con `Start`, los deslizadores de Ajustes, la reasignación de botones (con intercambio y guardado) y la mira y el disparo en la persecución.
 
 La prueba de humo comprueba:
 

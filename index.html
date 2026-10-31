@@ -248,6 +248,19 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
 #padNote { position: fixed; z-index: 60; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 16px; border: 1px solid var(--ok); border-radius: 20px; background: rgba(14, 19, 26, .92); color: var(--ok); font-weight: 600; font-size: 14px; letter-spacing: .04em; white-space: nowrap; pointer-events: none; }
 #padNote.in { animation: tagIn .35s both; }
 .padfocus { outline: 3px solid var(--beam) !important; outline-offset: 3px; box-shadow: 0 0 16px rgba(255, 217, 138, .45); }
+/* Reasignar botones del mando: dos columnas de acciones con su botón */
+.pm-panel { width: min(720px, 100%); gap: 10px; }
+.pm-note { margin: 0; font-size: 13px; color: var(--dim); }
+.pm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 10px; }
+.pm-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: none; text-align: left; font-size: 14px; }
+.pm-row b { min-width: 46px; padding: 2px 8px; border: 1px solid var(--beam); border-radius: 3px; color: var(--beam); text-align: center; font-size: 13px; }
+.pm-row { min-width: 0; } .pm-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .pm-row b { flex-shrink: 0; }
+.pm-row.wait { border-color: var(--ok); } .pm-row.wait b { border-color: var(--ok); color: var(--ok); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+@media (max-height: 380px) and (orientation: landscape) { .pm-row { font-size: 12px; gap: 4px; padding: 3px 6px; } .pm-note { display: none; } }
+@media (orientation: portrait) { .pm-list { grid-template-columns: 1fr 1fr; gap: 4px 8px; } .pm-row { padding: 4px 8px; font-size: 13px; } }
+@media (max-height: 560px) and (orientation: landscape) { .pm-panel { width: min(940px, 100%); padding: 12px 18px; gap: 7px; } .pm-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } .pm-row { white-space: nowrap; } .pm-row b { min-width: 34px; padding: 1px 6px; } .pm-panel .cta, .pm-panel .ghost { padding: 7px 18px; font-size: 13px; } .pm-panel .bf-title { font-size: 26px !important; } .pm-row { padding: 3px 9px; font-size: 13px; } .pm-list { gap: 4px 10px; } .pm-note { font-size: 12px; } }
+@media (max-width: 620px) and (orientation: landscape) { .pm-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px 8px; } .pm-row { padding: 2px 8px; } .pm-panel .bf-title { font-size: 22px !important; } .pm-panel { gap: 5px; } }
 </style>
 </head>
 <body>
@@ -317,7 +330,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
       <div><dt>Ruido y granadas</dt><dd>El ruido atrae guardias hacia donde estás. Una granada se oye en todo el edificio.</dd></div>
       <div><dt>Luz y sombra</dt><dd>Con la linterna apagada cuesta más verte. Dispara a las lámparas para crear sombras. En los setos no te ven; sobre mesas y coches sí.</dd></div>
       <div><dt>Teclado y ratón</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> correr · <kbd>C</kbd> sigilo (activa/desactiva) · ratón apunta · clic dispara · <kbd>Espacio</kbd> usar · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> moneda · <kbd>H</kbd> consumible · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>L</kbd> láser · <kbd>J</kbd> inhibidor · <kbd>O</kbd> objetivos · <kbd>Esc</kbd> pausa</dd></div>
-      <div><dt>Mando</dt><dd>Se detecta solo al conectarlo (USB o Bluetooth) y pulsar un botón. <kbd>Stick izq.</kbd> mover (poco recorrido = sigilo) · <kbd>LT</kbd> correr · <kbd>Stick der.</kbd> apuntar · <kbd>RT</kbd> disparar · <kbd>A</kbd> usar · <kbd>B</kbd> sigilo · <kbd>X</kbd> recargar · <kbd>Y</kbd> cambiar arma · <kbd>RB</kbd> cuchillo · <kbd>LB</kbd> granada · cruceta <kbd>↑</kbd> C4 · <kbd>←</kbd> moneda · <kbd>↓</kbd> consumible · <kbd>→</kbd> linterna · <kbd>L3</kbd> láser · <kbd>R3</kbd> inhibidor · <kbd>Select</kbd> objetivos · <kbd>Start</kbd> pausa. En los menús: cruceta o stick para moverte, <kbd>A</kbd> aceptar, <kbd>B</kbd> volver.</dd></div>
+      <div><dt>Mando</dt><dd>Se detecta solo al conectarlo (USB o Bluetooth) y pulsar un botón. <kbd>Stick izq.</kbd> mover (poco recorrido = sigilo) · <kbd>LT</kbd> correr · <kbd>Stick der.</kbd> apuntar · <kbd>RT</kbd> disparar · <kbd>A</kbd> usar · <kbd>B</kbd> sigilo · <kbd>X</kbd> recargar · <kbd>Y</kbd> cambiar arma · <kbd>RB</kbd> cuchillo · <kbd>LB</kbd> granada · cruceta <kbd>↑</kbd> C4 · <kbd>←</kbd> moneda · <kbd>↓</kbd> consumible · <kbd>→</kbd> linterna · <kbd>L3</kbd> láser · <kbd>R3</kbd> inhibidor · <kbd>Select</kbd> objetivos · <kbd>Start</kbd> pausa. Así vienen por defecto: se pueden reasignar en Ajustes → Botones del mando. En los menús: cruceta o stick para moverte, <kbd>A</kbd> aceptar, <kbd>B</kbd> volver.</dd></div>
       <div><dt>Enemigos</dt><dd>Los perros te huelen de cerca aunque vayas a oscuras. El francotirador te avisa en rojo antes de disparar: corre para esquivarlo. El escudo para las balas de frente: rodéalo o usa una granada. En las misiones 8 y 16 te espera el Alcaide.</dd></div>
       <div><dt>Munición y guardado</dt><dd>La munición es limitada: recoge cajas (los guardias sueltan algunas) o cómprala en la tienda, con tipos especiales para cada arma. La partida se guarda sola al empezar cada misión y en la tienda.</dd></div>
     </dl>
@@ -402,7 +415,16 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
     <label class="set">Sensibilidad de la mira <input id="sSens" type="range" min="50" max="200"></label>
     <label class="set chk"><input id="sVib" type="checkbox"> Vibración</label>
     <label class="set chk"><input id="sLaser" type="checkbox"> Mira láser (también con la tecla L)</label>
-    <button id="bSetBack" class="cta">Volver</button>
+    <div class="row"><button id="bSetBack" class="cta">Volver</button><button id="bPadMap" class="ghost">Botones del mando</button></div>
+  </div>
+</div>
+
+<div id="padmap" class="overlay" hidden>
+  <div class="panel pm-panel">
+    <h2 class="bf-title" style="font-size:34px">BOTONES DEL MANDO</h2>
+    <p id="pmNote" class="pm-note"></p>
+    <div id="pmList" class="pm-list"></div>
+    <div class="row"><button id="bPmBack" class="cta">Volver</button><button id="bPmReset" class="ghost">Restablecer</button></div>
   </div>
 </div>
 

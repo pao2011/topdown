@@ -127,8 +127,8 @@ function playerLook() { // con disfraz, uniforme de guardia; si no, tu ropa y tu
 const gunColor = () => (CAMOS[style().camo] || CAMOS.negro)[2];
 // Ajustes (se guardan aparte de la partida): volúmenes, vibración, sensibilidad de la mira y láser
 const SETTINGS_KEY = 'apagon-ajustes';
-const settings = { music: 0.7, sfx: 0.9, vib: true, sens: 1, laser: true };
-try { const q = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; for (const k in settings) if (typeof q[k] === typeof settings[k]) settings[k] = q[k]; } catch (e) { /* sin ajustes guardados */ }
+const settings = { music: 0.7, sfx: 0.9, vib: true, sens: 1, laser: true, padMap: {} };
+try { const q = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; for (const k in settings) if (q[k] !== null && typeof q[k] === typeof settings[k]) settings[k] = q[k]; } catch (e) { /* sin ajustes guardados */ }
 const lim = (v, a, b) => Math.min(b, Math.max(a, v)); settings.music = lim(settings.music, 0, 1); settings.sfx = lim(settings.sfx, 0, 1); settings.sens = lim(settings.sens, 0.5, 2);
 const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3], joyas: ['joyas', 1.5], efectivo: ['maletines de efectivo', 1.35], reliquia: ['máscara de oro', 1.8], cuadro: ['cuadro robado', 1.7], oro: ['oro del vagón blindado', 1.6] };
 const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco', joyeria: 'joyas', casino: 'efectivo', museo: 'reliquia', yate: 'cuadro', tren: 'oro' };
@@ -3851,7 +3851,7 @@ function drawHud() {
     if (room.banner) { ctx.globalAlpha = Math.min(1, room.banner.t * 2); ctx.font = '700 15px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a'; ctx.fillText(room.banner.text, uw / 2, y + 70); ctx.globalAlpha = 1; }
     if (C.t < 8) { // cómo se dispara desde el techo
       ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.75)';
-      ctx.fillText(padMode ? 'MIRA: STICK DERECHO · DISPARAR: RT · CONDUCTOR: STICK IZQUIERDO · GRANADA A LA MIRA: LB' : touchMode ? 'MIRA: STICK DERECHO (DISPARA SOLA SOBRE UN COCHE) · CONDUCTOR: IZQUIERDO' : 'RATÓN: APUNTA Y DISPARA · A/D: CARRIL · W/S: ACELERAR/FRENAR · G: GRANADA A LA MIRA', uw / 2, y + 90);
+      ctx.fillText(padMode ? `MIRA: STICK DERECHO · DISPARAR: ${btnName(padBtn('fire'))} · CONDUCTOR: STICK IZQUIERDO · GRANADA A LA MIRA: ${btnName(padBtn('nade'))}` : touchMode ? 'MIRA: STICK DERECHO (DISPARA SOLA SOBRE UN COCHE) · CONDUCTOR: IZQUIERDO' : 'RATÓN: APUNTA Y DISPARA · A/D: CARRIL · W/S: ACELERAR/FRENAR · G: GRANADA A LA MIRA', uw / 2, y + 90);
     }
     syncHud(); syncUse();
     return;
@@ -3905,7 +3905,7 @@ function drawHud() {
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-    if (padMode) ctx.fillText('Stick izq. mover (poco = sigilo) · LT correr · stick der. apuntar · RT disparar · A usar · B sigilo · X recargar · Y arma · RB cuchillo · LB granada · cruceta: C4, moneda, consumible, linterna', uw / 2, uh - 86); else ctx.fillText('WASD mover · Mayús correr · C sigilo (activa/desactiva) · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
+    if (padMode) { const n = k => btnName(padBtn(k)); ctx.fillText(`Stick izq. mover (poco = sigilo) · ${n('run')} correr · stick der. apuntar · ${n('fire')} disparar · ${n('use')} usar · ${n('sneak')} sigilo · ${n('reload')} recargar · ${n('weapon')} arma · ${n('knife')} cuchillo · ${n('nade')} granada · ${n('c4')} C4 · ${n('coin')} moneda · ${n('item')} consumible · ${n('light')} linterna`, uw / 2, uh - 86); } else ctx.fillText('WASD mover · Mayús correr · C sigilo (activa/desactiva) · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
   }
   syncHud();
   syncUse();
@@ -3958,7 +3958,7 @@ function syncHud() {
 }
 function syncUse() { // botón contextual: qué puedes hacer aquí
   const A = room.act, u = A ? null : nearUse(), b = $('bUse');
-  const label = A ? `${A.label}… ${Math.floor(100 * Math.min(1, A.t / A.time))} %` : u ? u.label + (padMode ? ' [A]' : touchMode ? '' : ' [Espacio]') : '';
+  const label = A ? `${A.label}… ${Math.floor(100 * Math.min(1, A.t / A.time))} %` : u ? u.label + (padMode ? ` [${btnName(padBtn('use'))}]` : touchMode ? '' : ' [Espacio]') : '';
   if (b.textContent !== label) b.textContent = label;
   b.hidden = !label;
 }
@@ -4248,7 +4248,7 @@ function sfx(k, x, y) {
 function show(id) {
   ambience(id === null);
   if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
-  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots', 'story']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots', 'story', 'padmap']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -4361,6 +4361,14 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 // Juego: stick izq. mover · LT correr · stick der. apuntar · RT disparar · A usar · B sigilo · X recargar · Y arma ·
 // RB cuchillo · LB granada · cruceta ↑ C4 · ← moneda · ↓ consumible · → linterna · L3 láser · R3 inhibidor · Select objetivos · Start pausa.
 // Menús: cruceta o stick izq. para moverte, A aceptar, B volver, ←/→ ajustan los deslizadores.
+// Acciones del mando y su botón por defecto (índices de la distribución estándar); se pueden reasignar en Ajustes
+const PAD_ACTIONS = [['fire', 'Disparar', 7], ['run', 'Correr', 6], ['use', 'Usar', 0], ['sneak', 'Sigilo', 1], ['reload', 'Recargar', 2], ['weapon', 'Cambiar arma', 3],
+  ['knife', 'Cuchillo', 5], ['nade', 'Granada', 4], ['c4', 'C4', 12], ['coin', 'Moneda', 14], ['item', 'Consumible', 13], ['light', 'Linterna', 15],
+  ['laser', 'Láser', 10], ['jammer', 'Inhibidor', 11], ['objs', 'Objetivos', 8], ['pause', 'Pausa', 9]];
+const BTN_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'L3', 'R3', '↑', '↓', '←', '→', 'Guía'];
+const padBtn = id => { const v = settings.padMap[id]; return Number.isInteger(v) ? v : PAD_ACTIONS.find(a => a[0] === id)[2]; };
+const btnName = i => BTN_NAMES[i] || `Botón ${i}`;
+let padCapture = null; // acción esperando a que pulses su botón nuevo
 const pad = { L: { x: 0, y: 0, m: 0 }, R: { x: 0, y: 0, m: 0 }, fire: false, run: false, prev: [], navT: 0, idx: null };
 let padMode = false;
 const PAD_DEAD = 0.18;
@@ -4376,20 +4384,25 @@ function pollPad() {
   const b = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5)), ax = i => g.axes[i] || 0;
   const now = g.buttons.map((_, i) => b(i)), prev = pad.prev, hit = i => now[i] && !prev[i];
   pad.L = padStick(ax(0), ax(1)); pad.R = padStick(ax(2), ax(3));
-  pad.fire = b(7); pad.run = b(6);
+  pad.fire = b(padBtn('fire')); pad.run = b(padBtn('run'));
   if (!padMode && (now.some(Boolean) || pad.L.m > 0 || pad.R.m > 0)) { // al tocar el mando, pasa a mandar él: fuera botones táctiles y ratón
     padMode = true; touchMode = false; mouse.active = false; sticks.L = sticks.R = null; resize();
   }
   pad.prev = now;
   if (!padMode) return;
+  if (padCapture) { // reasignando: el primer botón que pulses pasa a esa acción (y la que lo tenía se queda con el antiguo)
+    const i = now.findIndex((v, k) => v && !prev[k]);
+    if (i >= 0) assignPad(padCapture, i);
+    return;
+  }
   const boot = $('boot');
   if (boot && (hit(0) || hit(9))) { boot.dispatchEvent(new Event('pointerdown')); return; }
   if (state === 'play') {
-    if (hit(9)) { pause(); return; }
-    if (hit(8)) { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; }
-    const acts = { 0: use, 1: toggleSneak, 2: reload, 3: cycleWeapon, 5: melee, 4: throwNade, 12: breach, 14: makeNoise, 13: useItem, 15: toggleLight, 11: useJammer,
-      10: () => { settings.laser = !settings.laser; saveSettings(); banner(settings.laser ? 'Mira láser encendida' : 'Mira láser apagada'); } };
-    for (const k in acts) if (hit(+k)) acts[k]();
+    if (hit(padBtn('pause'))) { pause(); return; }
+    const acts = { use, sneak: toggleSneak, reload, weapon: cycleWeapon, knife: melee, nade: throwNade, c4: breach, coin: makeNoise, item: useItem, light: toggleLight, jammer: useJammer,
+      objs: () => { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; },
+      laser: () => { settings.laser = !settings.laser; saveSettings(); banner(settings.laser ? 'Mira láser encendida' : 'Mira láser apagada'); } };
+    for (const k in acts) if (hit(padBtn(k))) acts[k]();
     return;
   }
   padMenu(hit, now);
@@ -4424,7 +4437,7 @@ function padMenu(hit, now) { // menús: foco que salta al botón más cercano en
   }
   if (hit(0)) { if (cur) cur.click(); else focus(els.find(e => e.classList.contains('cta')) || els[0]); return; }
   if (hit(1) || (hit(9) && state === 'pause')) { // volver
-    const back = { pause: 'bResume', settings: 'bSetBack', slots: 'bSlotsBack' }[ov.id];
+    const back = { pause: 'bResume', settings: 'bSetBack', slots: 'bSlotsBack', padmap: 'bPmBack' }[ov.id];
     if (back) $(back).click();
   }
 }
@@ -4465,6 +4478,27 @@ $('sVib').addEventListener('change', e => { settings.vib = e.target.checked; sav
 $('sLaser').addEventListener('change', e => { settings.laser = e.target.checked; saveSettings(); });
 $('bSettings').addEventListener('click', () => { initAudio(); openSettings('menu'); });
 $('bPauseSet').addEventListener('click', () => openSettings('pause'));
+function renderPadMap() {
+  $('pmList').innerHTML = PAD_ACTIONS.map(([id, label]) => `<button class="pm-row${padCapture === id ? ' wait' : ''}" data-act="${id}"><span>${label}</span><b>${padCapture === id ? 'Pulsa…' : btnName(padBtn(id))}</b></button>`).join('');
+  $('pmNote').textContent = getPad() ? 'Elige una acción y pulsa en el mando el botón que quieras. Si ese botón ya tenía otra acción, se intercambian.' : 'Conecta un mando y pulsa un botón para poder reasignarlos.';
+}
+function assignPad(id, i) {
+  const old = padBtn(id), other = PAD_ACTIONS.find(a => a[0] !== id && padBtn(a[0]) === i);
+  if (other) settings.padMap[other[0]] = old; // intercambio: ninguna acción se queda sin botón
+  settings.padMap[id] = i; padCapture = null; clearTimeout(assignPad.t);
+  saveSettings(); renderPadMap(); sfx('click');
+  const el = document.querySelector(`.pm-row[data-act="${id}"]`); if (el && padMode) { el.focus({ preventScroll: true }); el.classList.add('padfocus'); }
+}
+$('pmList').addEventListener('click', e => {
+  const r = e.target.closest('.pm-row'); if (!r) return;
+  padCapture = padCapture === r.dataset.act ? null : r.dataset.act; // volver a elegirla cancela
+  clearTimeout(assignPad.t); if (padCapture) assignPad.t = setTimeout(() => { padCapture = null; renderPadMap(); }, 6000);
+  renderPadMap();
+  const el = document.querySelector(`.pm-row[data-act="${r.dataset.act}"]`); if (el) { el.focus({ preventScroll: true }); if (padMode) el.classList.add('padfocus'); }
+});
+$('bPadMap').addEventListener('click', () => { padCapture = null; renderPadMap(); show('padmap'); });
+$('bPmReset').addEventListener('click', () => { settings.padMap = {}; padCapture = null; saveSettings(); renderPadMap(); });
+$('bPmBack').addEventListener('click', () => { padCapture = null; show('settings'); });
 $('bSetBack').addEventListener('click', () => { if (settingsBack === 'pause') show('pause'); else { refreshMenu(); show('menu'); } });
 function renderSlots() {
   $('slotList').innerHTML = [1, 2, 3].map(n => {
@@ -4548,5 +4582,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Gancho para las pruebas automáticas (test/smoke.js)
-window.__apagon = { pad, get padMode() { return padMode; }, pollPad, pickAt, get music() { return music; }, get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, use, nearUse, shoot, zoneAt: c => zone[c], get view() { return { cam, S: zoom * dpr, cw, ch }; } };
+window.__apagon = { settings, padBtn, pad, get padMode() { return padMode; }, pollPad, pickAt, get music() { return music; }, get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, use, nearUse, shoot, zoneAt: c => zone[c], get view() { return { cam, S: zoom * dpr, cw, ch }; } };
 })();

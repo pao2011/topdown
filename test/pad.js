@@ -49,7 +49,22 @@ const assert = require('assert');
   await pg.evaluate(() => document.getElementById('sMusic').focus()); const v0 = await pg.evaluate(() => +document.getElementById('sMusic').value);
   await pg.evaluate(() => __press(15)); const v1 = await pg.evaluate(() => +document.getElementById('sMusic').value);
   assert(v1 > v0, `la cruceta sube el volumen ${v0}→${v1}`);
-    await pg.evaluate(() => __press(1)); assert(await pg.isHidden('#settings'), 'B vuelve de ajustes');
+    // reasignar: Disparar pasa a RB (5) y el cuchillo, que lo tenía, se queda con RT (7)
+  await pg.evaluate(() => document.getElementById('bPadMap').focus()); await pg.evaluate(() => __press(0));
+  await pg.waitForSelector('#padmap', { state: 'visible' });
+  assert.strictEqual(await pg.evaluate(() => { const p = document.querySelector('#padmap .panel'); return p.scrollHeight - p.clientHeight; }), 0, 'la lista de botones cabe en pantalla');
+  await pg.evaluate(() => document.querySelector('.pm-row[data-act="fire"]').focus()); await pg.evaluate(() => __press(0));
+  assert.match(await pg.textContent('.pm-row[data-act="fire"]'), /Pulsa/);
+  await pg.evaluate(() => __press(5));
+  assert.deepStrictEqual(await pg.evaluate(() => [__apagon.padBtn('fire'), __apagon.padBtn('knife'), JSON.parse(localStorage.getItem('apagon-ajustes')).padMap.fire]), [5, 7, 5], 'se intercambian y se guardan');
+  assert.match(await pg.textContent('.pm-row[data-act="fire"]'), /RB/);
+  await pg.evaluate(() => __press(1)); assert(await pg.isVisible('#settings'), 'B vuelve a ajustes');
+  await pg.evaluate(() => __press(1)); assert(await pg.isHidden('#settings'), 'B vuelve de ajustes');
+  await pg.evaluate(() => __press(9)); // reanudar
+  const am2 = await pg.evaluate(() => __apagon.run.weapons[__apagon.run.cur].ammo);
+  await pg.evaluate(() => { __pad.buttons[5] = { pressed: true, value: 1 }; }); await pg.waitForTimeout(400); await pg.evaluate(() => { __pad.buttons[5] = { pressed: false, value: 0 }; });
+  assert(await pg.evaluate(a => __apagon.run.weapons[__apagon.run.cur].ammo < a, am2), 'con la nueva asignación, RB dispara');
+  await pg.evaluate(() => { __apagon.settings.padMap = {}; });
   // persecución: el stick derecho mueve la mira y RT dispara
   await pg.evaluate(() => { const A = __apagon; A.run.level = 4; A.startRoom(); const r = A.room; r.enemies.length = 0; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await pg.waitForTimeout(200);
