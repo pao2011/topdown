@@ -350,6 +350,53 @@ const path = require('path');
   });
   if (civ) assert.deepStrictEqual(civ, { seen: 'panic', called: true, police: true, cops: true }); else console.warn('aviso: sin civiles en la misión 1');
 
+  // Sigilo (misión 2, almacén): puertas que tapan la vista, cámaras (te graban → aviso; de un tiro se rompen),
+  // cuerpos que se arrastran y se esconden, y una moneda que atrae a un guardia
+  const stealth = await ev(async () => {
+    const A = __apagon, wait = ms => new Promise(f => setTimeout(f, ms)), out = {};
+    A.run.level = 2; A.startRoom(); const r = A.room, guard = r.enemies.find(e => e.z === 0 && e.type === 'guard'), foe = r.enemies.find(e => e.z === 0 && !e.type.startsWith('civ'));
+    r.enemies.length = 0; A.run.hp = 999; A.run.light = true;
+    const d = r.idoors.find(d => d.z === 0);
+    if (d) {
+      const o = d.v ? [1, 0] : [0, 1], sx = d.x - o[0] * 60, sy = d.y - o[1] * 60;
+      const shut = A.castRay(sx, sy, o[0], o[1], 120);
+      Object.assign(r.p, { x: d.x - o[0] * 30, y: d.y - o[1] * 30, z: 0 }); await wait(300);
+      out.door = [shut < 70, A.castRay(sx, sy, o[0], o[1], 120) > 100];
+    }
+    const k = r.cams[0];
+    if (k) {
+      Object.assign(r.p, { x: k.x + Math.cos(k.a0) * 120, y: k.y + Math.sin(k.a0) * 120, z: 0 });
+      const hold = setInterval(() => { k.t = 0; }, 50); await wait(1800); clearInterval(hold); // que no barra hacia otro lado
+      const alarm = r.alarm, a = Math.atan2(k.y - r.p.y, k.x - r.p.x);
+      r.bullets.push({ x: r.p.x + Math.cos(a) * 20, y: r.p.y + Math.sin(a) * 20, z: 0, vx: Math.cos(a) * 900, vy: Math.sin(a) * 900, dmg: 26, mine: true, life: 1 });
+      await wait(300); out.cam = [alarm, !k.on];
+    }
+    if (foe) {
+      r.enemies.push(foe); A.hurtEnemy(foe, 999, 0); r.enemies.length = 0; await wait(800);
+      const b = r.bodies[0]; Object.assign(r.p, { x: b.x, y: b.y, z: 0 });
+      A.use(); await wait(1400); A.use(); await wait(100); const dragging = r.drag === b;
+      let spot = null;
+      for (let c = 0; c < r.map.length && !spot; c++) if (r.map[c] === 4 || r.map[c] === 2 || r.map[c] === 6) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!spot && r.map[c + dy * r.W + dx] === 0) spot = [(c % r.W + dx) * 40 + 20, (((c / r.W) | 0) + dy) * 40 + 20];
+      Object.assign(r.p, { x: spot[0], y: spot[1] }); await wait(200);
+      A.use(); await wait(1100); out.body = [dragging, !!b.hidden];
+    }
+    if (guard) {
+      r.enemies.push(guard); Object.assign(guard, { state: 'patrol', waitT: 9, lookT: 9, aware: 0 });
+      for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; if (A.castRay(guard.x, guard.y, Math.cos(t), Math.sin(t), 260) >= 250) { Object.assign(r.p, { x: guard.x + Math.cos(t) * 240, y: guard.y + Math.sin(t) * 240, z: 0, a: t + Math.PI, noiseT: 0 }); break; } }
+      document.getElementById('bNoise').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await wait(900); out.coin = guard.state !== 'patrol';
+    }
+    return out;
+  });
+  assert.deepStrictEqual(stealth, { ...(stealth.door && { door: [true, true] }), ...(stealth.cam && { cam: [true, true] }), ...(stealth.body && { body: [true, true] }), ...('coin' in stealth && { coin: true }) });
+  assert(stealth.door && stealth.cam && stealth.body, 'deben probarse puertas, cámaras y cuerpos: ' + JSON.stringify(stealth));
+
+  // Plan del golpe: alcantarilla + ganzúa + disfraz se pagan en el briefing y empiezas dentro del edificio
+  const planned = await ev(() => { const A = __apagon; A.run.level = 3; A.run.money = 1000; A.run.plan = { entry: 'sewer', tools: ['pick', 'disguise'], paid: [] }; return true; });
+  await ev(() => document.getElementById('bfPlan')); // el briefing se abre desde la tienda en el flujo normal; aquí se arranca directo
+  const plan = await ev(() => { const A = __apagon, c = A.run.plan, cost = [c.entry, ...c.tools].reduce((a, k) => a + ({ sewer: 120, pick: 120, disguise: 200 }[k] || 0), 0); A.run.money -= cost; c.paid = [c.entry, ...c.tools]; A.startRoom(); const r = A.room; return { money: A.run.money, inside: A.zoneAt(Math.floor(r.p.y / 40) * r.W + Math.floor(r.p.x / 40)) === 1, pick: r.pick, disguise: r.disguise }; });
+  assert.deepStrictEqual(plan, { money: 560, inside: true, pick: true, disguise: true });
+
   // Primera planta: al pisar la escalera subes; al volver a pisarla, bajas
   const upSeed = await ev(() => { const A = __apagon; for (let s = 1; s < 300; s++) if (A.buildRoom(3, s + 3 * 977).maps.length === 2) return s; return -1; });
   assert(upSeed > 0, 'debe haber salas con primera planta');
@@ -400,7 +447,10 @@ const path = require('path');
   // Cámara (misión 5): la puerta se hackea (cancelar guarda el progreso) o se abre con el código; registrar cuerpos llena la bolsa
   await page.click('#bNext');
   assert.strictEqual(await page.textContent('#bfName'), 'BÓVEDA NORTE');
+  const cash0 = await ev(() => __apagon.run.money);
+  await page.click('[data-plan="tool:jammer"]'); // el plan se compra en el briefing
   await page.click('#bGo');
+  assert.deepStrictEqual(await ev(() => [__apagon.run.money, __apagon.room.jams]), [cash0 - 150, 2], 'el inhibidor se paga y llega a la misión');
   const vault = await ev(async () => {
     const A = __apagon, r = A.room, d = r.doors[0], wait = ms => new Promise(f => setTimeout(f, ms)), out = {};
     if (!d) return null;

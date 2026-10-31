@@ -119,6 +119,11 @@ details.howto[open] summary { margin-bottom: 10px; }
 @keyframes titleIn { from { letter-spacing: .45em; opacity: 0; filter: blur(6px); } }
 @keyframes tagIn { from { transform: translateY(6px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .brief-card.anim, .brief-card.anim * { animation: none !important; } }
+.plan { display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--ink); font-size: 13px; display: grid; text-align: left; line-height: 1.2; }
+.chip small { color: var(--dim); font-size: 11px; } .chip.on { border-color: var(--beam); background: rgba(255, 217, 138, .12); } .chip.on small { color: var(--beam); } .chip:disabled { opacity: .4; }
+#top .btn b { top: -6px; right: -6px; }
 #objs { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 92px * var(--hud, 1)); transform: scale(var(--hud, 1)); transform-origin: top left; max-width: 260px; }
 #bObjs { padding: 4px 10px; border: 1px solid var(--line); border-radius: 3px; background: rgba(14, 19, 26, .62); color: var(--beam); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 #bObjs::after { content: ' ▾'; } #bObjs[aria-expanded="true"]::after { content: ' ▴'; }
@@ -151,6 +156,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
 
 <div id="hud" hidden>
   <div id="top">
+    <button id="bTool" class="btn" aria-label="Inhibidor de cámaras" hidden><svg viewBox="0 0 24 24"><rect x="6" y="8" width="12" height="12" rx="2"/><path d="M9 8V4M15 8V5M9 13h6M9 16h6"/></svg><b id="toolN">2</b></button>
     <button id="bLight" class="btn" aria-label="Linterna"><svg viewBox="0 0 24 24"><path d="M7 3h10l-2 7H9z"/><path d="M9 10h6v11H9z"/><path d="M12 14v2"/></svg></button>
     <button id="bPause" class="btn" aria-label="Pausa"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
   </div>
@@ -206,6 +212,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
     <div class="row" id="bfTags"></div>
     <p class="lead" id="bfBrief"></p>
     <ul id="bfObj"></ul>
+    <div id="bfPlan" class="plan"></div>
     <button id="bGo" class="cta">Empezar</button>
   </div>
 </div>

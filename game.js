@@ -151,10 +151,10 @@ function pickFoe(level, roll) {
 // vacío (fuera de la primera planta), contenedor y barrera de hormigón (cubre de las balas, no de la vista)
 // puerta de seguridad (se hackea o se abre con código), rack de servidores, cajas de seguridad, terminal y muro blindado de la cámara
 const FLOOR = 0, WALL = 1, CRATE = 2, LOW = 3, SHELF = 4, GLASS = 5, BUSH = 6, TREE = 7, STAIRS = 8, VOID = 9, METAL = 10, BARRIER = 11;
-const SECURE = 12, RACK = 13, DEPOSIT = 14, TERMINAL = 15, VWALL = 16;
-const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1];
-const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1];
-const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1];
+const SECURE = 12, RACK = 13, DEPOSIT = 14, TERMINAL = 15, VWALL = 16, DOOR = 17; // puerta normal: se abre al acercarse; cerrada tapa la vista
+const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0];
+const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1];
+const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1];
 const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIR8 = [...DIR4, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -414,6 +414,7 @@ function layoutHeist(level, rand, ri, M) {
   }
   const leaves = [], doors = [];
   splitRooms(bx0 + 1, by0 + 1, bx1 - 1, by1 - 1, leaves, doors, rand, ri);
+  const inner = doors.length; // las que siguen son las de la fachada
   doors.push([bx0, by0 + 2 + ri(bh - 5), 1], [bx1, by0 + 2 + ri(bh - 5), 1], [bx0 + 2 + ri(bw - 5), by0, 0], [bx0 + 2 + ri(bw - 5), by1, 0]);
   for (const [dx, dy, v] of doors) carveDoor(dx, dy, v);
   const nearDoor = nearDoors(doors);
@@ -531,9 +532,9 @@ function layoutHeist(level, rand, ri, M) {
     }
     useFloor(0);
   }
-  // Terminal de seguridad (da el código de la cámara) en otra sala de la planta baja
+  // Terminal de seguridad (apaga las cámaras y, si hay cámara acorazada, da su código) en otra sala de la planta baja
   let terminal = -1;
-  if (hasVault) {
+  {
     useFloor(0);
     place = placer(start, c => nearDoor(c) || nearStairs(c) || md(c, start) <= 3 || md(c, exit) <= 2);
     for (let tries = 0; tries < 60 && terminal < 0; tries++) {
@@ -564,8 +565,17 @@ function layoutHeist(level, rand, ri, M) {
     for (let x = vault.x0 - 1; x <= vault.x1 + 1; x++) { ring(x, vault.y0 - 1); ring(x, vault.y1 + 1); }
     for (let y = vault.y0; y <= vault.y1; y++) { ring(vault.x0 - 1, y); ring(vault.x1 + 1, y); }
   }
+  // puertas de las salas: en cada hueco interior que siga libre (las de la cámara ya son de seguridad)
+  const idoors = [];
+  for (const [list, z, n] of [[doors, 0, inner], [udoors, 1, udoors.length]]) {
+    if (!maps[z]) continue;
+    for (let i = 0; i < n; i++) {
+      const [dx, dy, v] = list[i], cells = v ? [dy * W + dx, (dy + 1) * W + dx] : [dy * W + dx, dy * W + dx + 1];
+      if (cells.every(c => maps[z][c] === FLOOR)) { cells.forEach(c => { maps[z][c] = DOOR; }); idoors.push({ cells, z, v }); }
+    }
+  }
   useFloor(0);
-  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, lamps, secure, terminal, vault: { ...vault, z: lootUp ? 1 : 0 },
+  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, lamps, secure, terminal, idoors, vault: { ...vault, z: lootUp ? 1 : 0 },
     spawnOk: i => !hasVault || lootUp || !(i % W >= vault.x0 && i % W <= vault.x1 && ((i / W) | 0) >= vault.y0 && ((i / W) | 0) <= vault.y1) };
 }
 
@@ -581,7 +591,8 @@ function buildRoom(level, seed) {
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0, zone, introT: 1.6,
     mission: M, op: M.op, cash: 0, shownCash: 0, searched: new Set(), act: null, reinfT: 20, code: null, hasCode: false, codeDrawer: -1,
     doors: (L.secure || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, hack: 0 })),
-    vault: L.vault || null, obj: missionObjectives(level), civKilled: 0, subdued: 0, policeT: 0, police: false, alarmBeforeLoot: false, vaultBy: null, escaped: false,
+    vault: L.vault || null, idoors: (L.idoors || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, t: 0, swing: 0 })), cams: [], camsOff: false, jams: 0, jamT: 0, drag: null,
+    obj: missionObjectives(level), civKilled: 0, subdued: 0, policeT: 0, police: false, alarmBeforeLoot: false, vaultBy: null, escaped: false,
   };
   if (r.loot) r.loot.type = SCENE_LOOT[M.scene] || 'lingotes';
   for (const s of L.lamps) {
@@ -633,8 +644,8 @@ function buildRoom(level, seed) {
     if (desks.length) r.codeDrawer = desks[ri(desks.length)];
     const sup = r.enemies.filter(e => e.z === 0 && !FOES[e.type].melee && !FOES[e.type].post && !FOES[e.type].boss);
     if (sup.length) sup[ri(sup.length)].keycard = true;
-    r.terminal = L.terminal;
   }
+  r.terminal = L.terminal;
   if (PUBLIC[M.scene] && !boss) { // civiles: empleados y clientes que pasean por las salas (nunca en la cámara)
     const V = r.vault, civ = cands.filter(c => zone[c] && dist0[c] >= 4 && !(V && V.z === 0 && c % W >= V.x0 && c % W <= V.x1 && ((c / W) | 0) >= V.y0 && ((c / W) | 0) <= V.y1));
     for (let k = PUBLIC[M.scene] + Math.floor(level / 5), tries = 0; k > 0 && civ.length && tries < 200; tries++) {
@@ -643,6 +654,17 @@ function buildRoom(level, seed) {
       const e = makeEnemy('civil', c, rand);
       e.look = CIV_LOOKS[ri(CIV_LOOKS.length)]; e.skin = ri(SKIN.length);
       r.enemies.push(e); k--;
+    }
+  }
+  if (!boss) { // cámaras de seguridad en las paredes de dentro, mirando hacia la sala; más en bancos, galerías y centros de datos
+    const want = Math.min(7, ({ banco: 4, datos: 4, galeria: 3, joyeria: 3, museo: 4, casino: 4, oficinas: 2, almacen: 1 }[M.scene] || 2) + (level >> 2));
+    for (let tries = 0; r.cams.length < want && tries < 800; tries++) {
+      const c = cands[ri(cands.length)]; if (!c || !zone[c] || dist0[c] < 6) continue;
+      const q = center(c), dirs = DIR4.filter(([dx, dy]) => maps[0][c + dy * W + dx] === WALL);
+      if (!dirs.length) continue;
+      const [dx, dy] = dirs[ri(dirs.length)], a0 = Math.atan2(-dy, -dx);
+      if (castRay(q.x, q.y, -dx, -dy, 200) < 140 || r.cams.some(k => Math.hypot(k.x - q.x, k.y - q.y) < T * 7)) continue;
+      r.cams.push({ x: q.x + dx * 17, y: q.y + dy * 17, z: 0, a0, a: a0, t: rand() * 6, on: true, spot: 0 });
     }
   }
   if (r.doors.length) r.obj.splice(0, 0, { id: 'vault', text: 'Abre la cámara acorazada', primary: true, state: 0 });
@@ -693,14 +715,54 @@ function wstats(w) {
   return s;
 }
 
+// ---- Plan del golpe: por dónde entras y qué herramientas llevas (se pagan una vez por misión, en el briefing)
+const ENTRIES = { door: ['Puerta principal', 0, 'Desde la calle'], sewer: ['Alcantarilla', 120, 'Sales por una arqueta dentro del edificio'], roof: ['Tejado', 90, 'Bajas a la primera planta (o por un tragaluz)'] };
+const TOOLS = { jammer: ['Inhibidor de cámaras', 150, 'Ciega las cámaras cercanas 20 s · 2 usos'], pick: ['Ganzúa electrónica', 120, 'Hackeas el doble de rápido y sin pitidos'], disguise: ['Disfraz de guardia', 200, 'Te detectan mucho más despacio si no haces nada raro'] };
+const freshPlan = () => ({ entry: 'door', tools: [], paid: [] });
+const okPlan = q => q && ENTRIES[q.entry] && Array.isArray(q.tools) && q.tools.every(t => TOOLS[t]) && Array.isArray(q.paid) ? q : freshPlan(); // partidas de antes o corruptas
+function planCost(plan) { return [plan.entry, ...plan.tools].filter(k => !plan.paid.includes(k)).reduce((a, k) => a + (ENTRIES[k] || TOOLS[k])[1], 0); }
+function renderPlan() {
+  const plan = run.plan, left = run.money - planCost(plan);
+  const chip = (k, [name, price, desc], on, kind) => { const paid = plan.paid.includes(k), can = on || paid || price <= left;
+    return `<button class="chip${on ? ' on' : ''}" data-plan="${kind}:${k}" ${can ? '' : 'disabled'} title="${desc}">${name}<small>${paid ? 'pagado' : price ? '$' + price : 'gratis'}</small></button>`; };
+  $('bfPlan').innerHTML = `<p class="bf-h">Plan del golpe · te quedan $${left}</p><div class="chips">${Object.entries(ENTRIES).map(([k, v]) => chip(k, v, plan.entry === k, 'entry')).join('')}</div>` +
+    `<div class="chips">${Object.entries(TOOLS).map(([k, v]) => chip(k, v, plan.tools.includes(k), 'tool')).join('')}</div>`;
+}
+function applyPlan(r) { // entrada elegida y herramientas: en un sitio de dentro lejos de los guardias (nunca encima del botín ni en la cámara)
+  const plan = okPlan(run.plan);
+  r.disguise = plan.tools.includes('disguise'); r.pick = plan.tools.includes('pick'); r.jams = plan.tools.includes('jammer') ? 2 : 0;
+  if (plan.entry === 'door' || r.boss) return;
+  const z = plan.entry === 'roof' && r.maps[1] ? 1 : 0, V = r.vault, M = r.maps[z], good = [];
+  let far = null, fd = 0;
+  for (let c = 0; c < W * H; c++) {
+    if (M[c] !== FLOOR || (z === 0 && !zone[c])) continue;
+    const q = center(c);
+    if ((r.loot && Math.hypot(q.x - r.loot.x, q.y - r.loot.y) < 3 * T) || (V && V.z === z && c % W >= V.x0 - 1 && c % W <= V.x1 + 1 && ((c / W) | 0) >= V.y0 - 1 && ((c / W) | 0) <= V.y1 + 1)) continue;
+    const d = r.enemies.reduce((m, e) => FOES[e.type].civil || e.z !== z ? m : Math.min(m, Math.hypot(e.x - q.x, e.y - q.y)), 1e9);
+    if (d > 6 * T) good.push(q); if (d > fd) { fd = d; far = q; }
+  }
+  const q = good.length ? good[Math.floor(Math.random() * good.length)] : far;
+  if (!q) return;
+  Object.assign(r.p, { x: q.x, y: q.y, z, onStairs: false });
+  const g = r.loot || r.exit; r.p.a = Math.atan2(g.y - q.y, g.x - q.x);
+  r.entryHatch = { x: q.x, y: q.y, z };
+}
+function useJammer() {
+  if (state !== 'play' || !room || room.chase || room.jams <= 0 || room.jamT > 0) return;
+  room.jams--; room.jamT = 20; room.jamX = room.p.x; room.jamY = room.p.y;
+  banner('Inhibidor activado: las cámaras cercanas quedan ciegas 20 s'); sfx('radio');
+}
 function startRoom() {
   document.body.classList.remove('chase');
+  run.plan = okPlan(run.plan);
   run.hp = run.maxHp; // cada sala (y cada reintento) empieza con la vida llena
   const { snap, ...rest } = run;
   run.snap = JSON.stringify(rest);
   room = buildRoom(run.level, run.seed + run.level * 977);
   if (room.op === 'asalto') { run.nades++; run.charges++; } // entrar con todo: una granada y una C4 de más
+  applyPlan(room);
   bakeAll();
+  if (room.entryHatch) { useFloor(room.entryHatch.z); decal({ ...room.entryHatch, r: 13, hatch: true }); useFloor(0); }
   cam.x = room.p.x; cam.y = room.p.y;
   if (room.boss) banner('Sala final: abate al Alcaide para abrir la salida');
   sticks.L = sticks.R = null; mouse.down = false;
@@ -1182,7 +1244,7 @@ function renderChase() {
 function completeRoom() {
   if (room.mission.chase && !room.chaseWon) { startChase(); return; } // primero hay que despistarlos
   const M = room.mission, bonus = 80 + 20 * run.level, wasBoss = run.level % BOSS_EVERY === 0, lv = run.level;
-  room.escaped = true; updateObjectives();
+  room.escaped = true; updateObjectives(); run.plan = freshPlan();
   const loot = room.loot ? Math.round((150 + 60 * lv) * (LOOTS[room.loot.type] || [0, 1])[1]) : 0;
   const ghost = room.detected ? 0 : M.op === 'sigilo' ? loot : 120; // en sigilo, sin ser visto, el botín vale el doble
   const sec = room.obj.filter(o => !o.primary), secDone = sec.filter(o => o.state > 0), objPay = secDone.reduce((a, o) => a + o.reward, 0);
@@ -1278,6 +1340,8 @@ function brief(after) {
   const text = M.brief || '', el = $('bfBrief'); let n = 0; el.textContent = '';
   clearInterval(typeT);
   typeT = setInterval(() => { n += 2; el.textContent = text.slice(0, n); if (n >= text.length) clearInterval(typeT); }, 18); // a máquina
+  run.plan = okPlan(run.plan);
+  $('bfPlan').hidden = !!M.boss; if (!M.boss) renderPlan();
   goAfter = after; state = 'brief'; show('brief');
 }
 function gameOver(title, msg) {
@@ -1296,14 +1360,18 @@ function nearUse() {
   if (!p || p.dead || room.chase) return null;
   let best = null, bd = 48;
   const consider = o => { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < bd) { bd = d; best = o; } };
-  for (const b of room.bodies) if (b.z === p.z && !b.looted) consider({ kind: 'body', ref: b, x: b.x, y: b.y, label: 'Registrar el cuerpo', time: 1.1 });
-  for (const d of room.doors) if (d.z === p.z && !d.open) consider({ kind: 'door', ref: d, x: d.x, y: d.y, label: room.hasCode ? `Teclear el código ${room.code}` : 'Hackear la puerta', time: room.hasCode ? 1.5 : 18 });
+  if (room.drag) { // arrastrando: soltarlo o, junto a un seto, un contenedor, una caja o una estantería, esconderlo
+    const spot = hideSpot(p.x, p.y, p.z);
+    return { kind: 'drop', x: p.x, y: p.y, spot, label: spot ? 'Esconder el cuerpo' : 'Soltar el cuerpo', time: spot ? 0.8 : 0 };
+  }
+  for (const b of room.bodies) if (b.z === p.z && !b.hidden) consider({ kind: b.looted ? 'drag' : 'body', ref: b, x: b.x, y: b.y, label: b.looted ? 'Arrastrar el cuerpo' : 'Registrar el cuerpo', time: b.looted ? 0 : 1.1 });
+  for (const d of room.doors) if (d.z === p.z && !d.open) consider({ kind: 'door', ref: d, x: d.x, y: d.y, label: room.hasCode ? `Teclear el código ${room.code}` : 'Hackear la puerta', time: room.hasCode ? 1.5 : room.pick ? 9 : 18 });
   const cx = Math.floor(p.x / T), cy = Math.floor(p.y / T), M = maps[p.z];
   for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
     const c = y * W + x, t = M[c], info = LOOTABLE[t];
-    if (!info || room.searched.has(p.z + ':' + c) || (t === TERMINAL && room.hasCode)) continue;
+    if (!info || room.searched.has(p.z + ':' + c) || (t === TERMINAL && (room.hasCode || !room.doors.length) && room.camsOff)) continue;
     if (t === LOW && ((p.z === 0 && !zone[c]) || (fks[p.z][c] === 8 && M[c - 1] !== LOW && M[c + 1] !== LOW))) continue; // coches y peanas no tienen cajones
-    consider({ kind: 'tile', ref: c, tt: t, x: x * T + T / 2, y: y * T + T / 2, label: info[0], time: info[1] });
+    consider({ kind: 'tile', ref: c, tt: t, x: x * T + T / 2, y: y * T + T / 2, label: t === TERMINAL ? (room.doors.length && !room.hasCode ? 'Hackear la terminal (código y cámaras)' : 'Apagar las cámaras') : info[0], time: t === TERMINAL && room.pick ? info[1] / 2 : info[1] });
   }
   return best;
 }
@@ -1318,7 +1386,7 @@ function updateUse(dt) {
   if (!A) return;
   if (p.dead || Math.hypot(A.x - p.x, A.y - p.y) > 62 || (A.kind === 'body' && A.ref.looted)) { if (A.kind === 'door') A.ref.hack = A.t; room.act = null; return; }
   A.t += dt;
-  const hacking = (A.kind === 'door' && !room.hasCode) || A.tt === TERMINAL;
+  const hacking = ((A.kind === 'door' && !room.hasCode) || A.tt === TERMINAL) && !room.pick; // con la ganzúa electrónica no pita
   if (hacking && (A.beep -= dt) <= 0) { A.beep = 2.5; useFloor(p.z); noise(A.x, A.y, 150, 'step'); sfx('beep', A.x, A.y); } // el aparato pita: algún guardia puede oírlo
   if (A.t >= A.time) { room.act = null; finishUse(A); }
 }
@@ -1330,7 +1398,9 @@ function finishUse(A) {
     gainCash(Math.round(rnd(12, 40) * k), A.x, A.y);
     if (Math.random() < 0.5) addAmmo(0.15);
     if (A.ref.keycard) gotCode('la tarjeta del supervisor');
-  } else if (A.kind === 'door') openDoor(A.ref);
+  } else if (A.kind === 'door') { room.vaultBy = room.vaultBy || (room.hasCode ? 'code' : 'hack'); openDoor(A.ref); }
+  else if (A.kind === 'drag') { room.drag = A.ref; popup(A.x, A.y - 16, 'ARRASTRANDO', '#d9e2ec'); }
+  else if (A.kind === 'drop') { const b = room.drag; room.drag = null; if (A.spot) { b.hidden = true; popup(b.x, b.y - 16, 'ESCONDIDO', '#62d6ad'); sfx('wood', b.x, b.y); } }
   else {
     room.searched.add(p.z + ':' + A.ref);
     const nothing = () => popup(A.x, A.y - 16, 'Nada', '#7d8ca0'), ammo = () => { addAmmo(0.14); popup(A.x, A.y - 16, '+MUNICIÓN', '#ffd98a'); sfx('reload'); };
@@ -1338,8 +1408,13 @@ function finishUse(A) {
     else if (A.tt === SHELF) { const r = Math.random(); r < 0.35 ? ammo() : r < 0.65 ? gainCash(Math.round(rnd(5, 20) * k), A.x, A.y) : nothing(); }
     else if (A.tt === DEPOSIT) { gainCash(Math.round(rnd(40, 110) * k), A.x, A.y); bakeDirty(A.x, A.y); }
     else if (A.tt === RACK) gainCash(Math.round(rnd(25, 70) * k), A.x, A.y);
-    else if (A.tt === TERMINAL) gotCode('la terminal de seguridad');
+    else if (A.tt === TERMINAL) { if (room.doors.length) gotCode('la terminal de seguridad'); room.camsOff = true; banner('Cámaras de seguridad apagadas'); }
   }
+}
+function hideSpot(x, y, z) { // escondites para cuerpos: setos y contenedores fuera, cajas y estanterías dentro
+  const cx = Math.floor(x / T), cy = Math.floor(y / T), M = maps[z];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const t = M[(cy + dy) * W + cx + dx]; if (t === BUSH || t === METAL || t === CRATE || t === SHELF) return true; }
+  return false;
 }
 function gainCash(n, x, y) { room.cash += n; popup(x, y - 18, `+$${n}`, '#7fe0a8'); sfx('cash', x, y); }
 function gotCode(src) { if (room.hasCode) return; room.hasCode = true; banner(`Código de la cámara: ${room.code} (${src})`); sfx('buy'); }
@@ -1537,7 +1612,7 @@ function updateEnemy(e, dt) {
   if (sees) {
     if (combat) enterCombat(e);
     else {
-      e.aware += dt * (smell ? Math.max(X, 1.2) : X) * (0.8 + 2.6 * Math.max(0, 1 - d / range)) * (1 + 0.5 * e.alertLvl);
+      e.aware += dt * (smell ? Math.max(X, 1.2) : X) * (0.8 + 2.6 * Math.max(0, 1 - d / range)) * (1 + 0.5 * e.alertLvl) * (disguised() && d > 45 && !smell ? 0.3 : 1);
       if (e.aware >= 1) enterCombat(e);
       else if (e.aware > 0.3 && e.state !== 'investigate') suspicious(e, p.x, p.y);
     }
@@ -1632,7 +1707,7 @@ function updateCivil(e, dt) {
   if (e.state === 'subdued') return;
   if (e.state === 'patrol' || e.state === 'suspicious') {
     const R = F.vision * (0.6 + 0.4 * Math.min(1, room.exposure));
-    if (same && d < R && Math.abs(angDiff(e.a, ang(e, p))) < 1.05 && los(e.x, e.y, p.x, p.y)) {
+    if (same && d < R && !disguised() && Math.abs(angDiff(e.a, ang(e, p))) < 1.05 && los(e.x, e.y, p.x, p.y)) {
       e.aware += dt * Math.max(0.6, room.exposure) * (1 + 1.5 * (1 - d / R));
       if (e.aware >= 1) panic(e, p.x, p.y); else if (e.aware > 0.35) suspicious(e, p.x, p.y);
     } else e.aware = Math.max(0, e.aware - dt * 0.25);
@@ -1657,6 +1732,39 @@ function updateCivil(e, dt) {
   const want = face ?? e.moveA ?? e.a;
   e.a += clamp(angDiff(e.a, want), -4 * dt, 4 * dt);
 }
+// Puertas de las salas: se abren cuando alguien se acerca y se cierran solas al rato; cerradas tapan la vista
+function updateDoors(dt) {
+  for (const d of room.idoors) {
+    const near = (room.p.z === d.z && !room.p.dead && Math.hypot(room.p.x - d.x, room.p.y - d.y) < 38) || room.enemies.some(e => e.z === d.z && e.state !== 'subdued' && Math.hypot(e.x - d.x, e.y - d.y) < 34);
+    d.swing += ((d.open ? 1 : 0) - d.swing) * Math.min(1, dt * 9);
+    if (near) d.t = 0; else d.t += dt;
+    if (near && !d.open) { d.open = true; for (const c of d.cells) maps[d.z][c] = FLOOR; sfx('door', d.x, d.y); }
+    else if (d.open && d.t > 2.5) { d.open = false; for (const c of d.cells) maps[d.z][c] = DOOR; sfx('door', d.x, d.y); }
+  }
+}
+// Cámaras de seguridad: barren a un lado y a otro; si te graban un rato (o graban un cuerpo), seguridad avisa a la policía.
+// Se rompen de un tiro, se apagan desde la terminal y el inhibidor las ciega un rato
+function camBlind(k) { return !k.on || room.camsOff || (room.jamT > 0 && Math.hypot(k.x - room.jamX, k.y - room.jamY) < 340); }
+function updateCams(dt) {
+  if (room.jamT > 0) room.jamT -= dt;
+  const p = room.p;
+  for (const k of room.cams) {
+    if (camBlind(k)) { k.spot = 0; continue; }
+    k.t += dt; k.a = k.a0 + Math.sin(k.t * 0.55) * 0.75;
+    const d = Math.hypot(p.x - k.x, p.y - k.y), R = 260;
+    const sees = !p.dead && p.z === k.z && d < R && Math.abs(angDiff(k.a, Math.atan2(p.y - k.y, p.x - k.x))) < 0.45 && los(k.x, k.y, p.x, p.y);
+    if (sees) k.spot += dt * Math.max(0.5, room.exposure) * (1.2 + (1 - d / R)) * (disguised() ? 0.3 : 1);
+    else k.spot = Math.max(0, k.spot - dt * 0.4);
+    const body = found().some(b => b.z === k.z && Math.hypot(b.x - k.x, b.y - k.y) < R && Math.abs(angDiff(k.a, Math.atan2(b.y - k.y, b.x - k.x))) < 0.45 && los(k.x, k.y, b.x, b.y));
+    if ((k.spot >= 1 || body) && !room.alarm) {
+      room.detected = room.detected || k.spot >= 1;
+      triggerAlarm(body ? 'Una cámara ha grabado un cuerpo: seguridad avisa a la policía' : 'Una cámara te ha grabado: seguridad avisa a la policía');
+      for (const e of room.enemies) if (!FOES[e.type].civil && e.z === k.z && e.state !== 'combat') investigate(e, p.x + rnd(-40, 40), p.y + rnd(-40, 40), true);
+    }
+  }
+}
+// Disfraz de guardia: te detectan mucho más despacio mientras no hagas nada raro (disparar, correr, arrastrar un cuerpo o llevar el botín)
+function disguised() { const p = room.p; return !!room.disguise && !(p.muzzleT > 0 || p.sprint || room.drag || (room.loot && room.loot.taken)); }
 function snipe(e) {
   const F = FOES[e.type], mx = e.x + Math.cos(e.a) * (e.r + 14), my = e.y + Math.sin(e.a) * (e.r + 14);
   bullet(mx, my, e.a, 1400, F.dmg, false);
@@ -1735,8 +1843,8 @@ function updatePlayer(dt) {
     sprint = !!(keys.ShiftLeft || keys.ShiftRight); mag = sneakOn && !sprint ? 0.45 : 1; // Mayús corre aunque el sigilo esté activado
     const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
   }
-  if (p.tired || !mag) sprint = false;
-  const speed = sprint ? 235 : mag <= SNEAK ? 78 * mag / SNEAK : 78 + 72 * (mag - SNEAK) / (1 - SNEAK);
+  if (p.tired || !mag || room.drag) sprint = false;
+  const speed = (room.drag ? 0.55 : 1) * (sprint ? 235 : mag <= SNEAK ? 78 * mag / SNEAK : 78 + 72 * (mag - SNEAK) / (1 - SNEAK));
   if (sprint && p.speed > 120) { p.stam -= 28 * dt; p.restT = 0.9; if (p.stam <= 0) { p.stam = 0; p.tired = true; } }
   else if ((p.restT -= dt) <= 0) { p.stam = Math.min(100, p.stam + 18 * dt); if (p.stam >= 30) p.tired = false; }
   p.sprint = sprint;
@@ -1899,13 +2007,22 @@ function breach() {
   sfx('plant');
   popup(p.x, p.y - 22, 'C4 PUESTA · pulsa otra vez para detonar', '#ff5444');
 }
-function makeNoise() {
+function makeNoise() { // lanza una moneda hacia donde apuntas: al caer, suena y los guardias cercanos van a mirar allí
   const p = room.p;
   if (p.noiseT > 0 || p.dead) return;
   useFloor(p.z);
-  p.noiseT = 1.5;
-  noise(p.x, p.y, 300, 'whistle');
-  sfx('whistle');
+  p.noiseT = 1.2;
+  const L = Math.min(230, castRay(p.x, p.y, Math.cos(p.a), Math.sin(p.a), 240) - 8);
+  room.coins = room.coins || [];
+  room.coins.push({ x: p.x, y: p.y, z: p.z, tx: p.x + Math.cos(p.a) * L, ty: p.y + Math.sin(p.a) * L, t: 0, T: 0.45 + L / 900 });
+  sfx('throw');
+}
+function updateCoins(dt) {
+  for (const c of room.coins || []) {
+    c.t += dt;
+    if (c.t >= c.T && !c.done) { c.done = true; useFloor(c.z); noise(c.tx, c.ty, 260, 'whistle'); sfx('tink', c.tx, c.ty); decal({ x: c.tx, y: c.ty, r: 1.6, shell: true }); }
+  }
+  if (room.coins) room.coins = room.coins.filter(c => !c.done);
 }
 function toggleLight() { run.light = !run.light; sfx('empty'); }
 
@@ -1970,6 +2087,7 @@ function updateBullets(dt) {
         break;
       }
       if (b.mine) {
+        for (const k of room.cams) if (k.on && k.z === b.z && Math.hypot(k.x - b.x, k.y - b.y) < 10) { k.on = false; b.dead = true; sparks(k.x, k.y, 10); sfx('glass', k.x, k.y); noise(k.x, k.y, 140, 'impact'); }
         for (const l of room.lamps) if (l.on && l.z === b.z && Math.hypot(l.hx - b.x, l.hy - b.y) < 11) {
           l.on = false; b.dead = true; sparks(l.hx, l.hy, 12); lampChanged(l);
           noise(l.x, l.y, 160, 'impact'); sfx('glass', l.x, l.y);
@@ -2025,7 +2143,7 @@ function destroyTiles(x, y, rad) {
       if (border(tx, ty) || !t || t === VOID || t === STAIRS || t === VWALL || Math.hypot(tx * T + T / 2 - x, ty * T + T / 2 - y) > rad) continue;
       if (t === SECURE) { // la C4 de asalto revienta la puerta de seguridad; en otras misiones no le hace nada
         const z = curZ, d = room.doors.find(d => d.z === z && d.cells.includes(ty * W + tx));
-        if (room.op === 'asalto' && d && !d.open) { openDoor(d); useFloor(z); }
+        if (room.op === 'asalto' && d && !d.open) { room.vaultBy = room.vaultBy || 'c4'; openDoor(d); useFloor(z); }
         continue;
       }
       map[ty * W + tx] = FLOOR; any = true;
@@ -2075,6 +2193,7 @@ function drawDecal(c, d) {
     c.fillStyle = 'rgba(55,4,6,0.55)'; c.beginPath(); c.ellipse(d.x - cs * d.r * 0.3, d.y - sn * d.r * 0.3, d.r * 0.8, d.r * 0.45, d.a, 0, 7); c.fill();
     return;
   }
+  if (d.hatch) { c.fillStyle = '#20252b'; c.beginPath(); c.arc(d.x, d.y, d.r, 0, 7); c.fill(); c.strokeStyle = '#4a525c'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#0b0d10'; for (let i = -1; i <= 1; i++) c.fillRect(d.x - d.r * 0.7, d.y + i * 4 - 1, d.r * 1.4, 2); return; } // arqueta o trampilla por la que entraste
   if (d.scorch) c.fillStyle = glow(c, d.x, d.y, d.r, '0,0,0', 0.75);
   else c.fillStyle = d.shell ? '#a88a3a' : d.hole ? '#0b0c0e' : d.rubble ? 'rgba(80,86,96,0.75)' : 'rgba(100,14,16,0.8)';
   if (d.shell) c.fillRect(d.x - 1.6, d.y - 0.8, 3.2, 1.6);
@@ -2154,6 +2273,14 @@ function update(dt) {
     if (!room.police) { if ((room.policeT -= dt) <= 0) { room.police = true; room.reinfT = 22; spawnPolice(3 + (run.level >> 2)); banner('¡Ha llegado la policía!'); sfx('siren'); } }
     else if (room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
   }
+  updateDoors(dt); updateCams(dt); updateCoins(dt);
+  if (room.drag) { // el cuerpo que arrastras va detrás de ti y deja un rastro de sangre
+    const b = room.drag, tx = p.x - Math.cos(p.a) * 22, ty = p.y - Math.sin(p.a) * 22;
+    useFloor(b.z);
+    if (!solidPx(tx, ty)) { if (Math.hypot(tx - b.x, ty - b.y) > 14 && Math.random() < 0.3) decal({ x: b.x, y: b.y, r: rnd(1.5, 3), drop: true }); b.x += (tx - b.x) * Math.min(1, dt * 10); b.y += (ty - b.y) * Math.min(1, dt * 10); }
+    b.a = p.a + Math.PI; b.vx = b.vy = 0;
+    useFloor(p.z);
+  }
   updateObjectives();
   if (room.loot && room.loot.taken && (room.exhaustT = (room.exhaustT || 0) - dt) <= 0) { // el coche de huida, en marcha
     room.exhaustT = 0.18; useFloor(0);
@@ -2183,7 +2310,7 @@ const LBS = 0.5; // escala de las capas de luz horneadas
 const grainCv = document.createElement('canvas');
 grainCv.width = grainCv.height = 128;
 { const g = grainCv.getContext('2d'); for (let i = 0; i < 2600; i++) { const v = Math.random() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${(0.03 + Math.random() * 0.05).toFixed(3)})`; g.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random(), 1 + Math.random()); } }
-const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]; // proyectan oclusión sobre el suelo vecino
+const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0]; // proyectan oclusión sobre el suelo vecino
 function bakeAll() {
   BS = Math.min(touchMode ? 1.25 : 1.5, Math.sqrt((touchMode ? 5e6 : 9e6) / (W * T * H * T)));
   for (let z = 0; z < maps.length; z++) {
@@ -2750,6 +2877,7 @@ function drawFxUnder(here) {
 // Lo que emite luz (en modo aditivo): trazadoras, fogonazos, fuego, onda expansiva y brasas
 function drawFxGlow(here) {
   ctx.lineCap = 'round';
+  for (const k of room.cams) if (here(k) && !camBlind(k) && Math.sin(room.time * 5 + k.t) > -0.2) { const x = k.x + Math.cos(k.a) * 2, y = k.y + Math.sin(k.a) * 2; ctx.fillStyle = glow(ctx, x, y, 7, '255,50,40', 0.9); ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill(); }
   for (const b of room.bullets) {
     if (!here(b)) continue;
     const sp = Math.hypot(b.vx, b.vy), tl = Math.min(Math.hypot(b.x - (b.sx ?? b.x), b.y - (b.sy ?? b.y)), sp * 0.035), ux = b.vx / sp, uy = b.vy / sp;
@@ -2822,6 +2950,26 @@ function render() {
   };
   if (up) { ctx.globalAlpha = 0.28; blit(ctx, bakes[0]); canopies(); ctx.globalAlpha = 1; } // desde arriba, la planta baja se ve apagada
   blit(ctx, bakes[p.z]);
+  for (const d of room.idoors) if (here(d) && onScreen(d.x, d.y, 60)) { // puerta de dos hojas: cerrada tapa el hueco; abierta, cada hoja gira sobre su bisagra
+    for (const sd of [-1, 1]) {
+      const hx = d.v ? d.x : d.x + sd * T, hy = d.v ? d.y + sd * T : d.y, base = d.v ? (sd < 0 ? Math.PI / 2 : -Math.PI / 2) : (sd < 0 ? 0 : Math.PI);
+      ctx.save(); ctx.translate(hx, hy); ctx.rotate(base + d.swing * Math.PI / 2 * (d.v ? -sd : sd)); // las dos hojas se abren hacia el mismo lado
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(2, 0, T - 3, 7);
+      ctx.fillStyle = '#5a3d26'; ctx.fillRect(0, -3, T - 1, 6);
+      ctx.fillStyle = '#76512f'; ctx.fillRect(2, -2, T - 5, 1.5);
+      ctx.fillStyle = '#c9a64a'; ctx.fillRect(T - 7, -4, 2.5, 8); // tirador
+      ctx.restore();
+    }
+  }
+  for (const k of room.cams) if (here(k) && onScreen(k.x, k.y, 280)) { // cámara: cono rojizo (solo se ve con luz), soporte y lente
+    if (!camBlind(k)) { ctx.fillStyle = `rgba(255,70,60,${(0.07 + 0.1 * Math.min(1, k.spot)).toFixed(3)})`; fillPoly(ctx, visPoly(k.x, k.y, k.a, 0.45, 260, 18)); }
+    ctx.save(); ctx.translate(k.x, k.y); ctx.rotate(k.a);
+    ctx.fillStyle = '#2d333b'; ctx.fillRect(-9, -2, 4, 4); ctx.fillStyle = '#1b1f24'; ctx.fillRect(-6, -4, 13, 8);
+    ctx.fillStyle = k.on ? '#06080a' : '#4a3a2a'; ctx.beginPath(); ctx.arc(7, 0, 3, 0, 7); ctx.fill();
+    if (!k.on) { ctx.strokeStyle = '#8a7a6a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(5, 3); ctx.stroke(); }
+    ctx.restore();
+  }
+  for (const c of room.coins || []) if (here(c)) { const k = c.t / c.T, x = c.x + (c.tx - c.x) * k, y = c.y + (c.ty - c.y) * k - Math.sin(k * Math.PI) * 30; ctx.fillStyle = '#e8c45a'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 7); ctx.fill(); }
   if (room.loot && here(room.loot)) drawLoot(room.loot);
   if (!up) drawCar(ctx, room.mission.car, room.exit.x, room.exit.y);
   for (const e of room.enemies) {
@@ -2873,7 +3021,7 @@ function render() {
   // jugador
   if (!p.dead) {
     p.walk = (p.walk || 0) + p.speed * 0.016 * 0.22; // aproximado: la zancada no necesita el dt exacto
-    drawHuman(ctx, p.x, p.y, p.a, p.r, LOOK.player, { gun: GUN_SHAPE[curW().id] || [16, 6], walk: p.walk, mv: Math.min(1, p.speed / 120), skin: SKIN[0], hurt: p.hurtT > 0, silenced: wstats(curW()).silenced });
+    drawHuman(ctx, p.x, p.y, p.a, p.r, room.disguise ? LOOK.guard : LOOK.player, { gun: GUN_SHAPE[curW().id] || [16, 6], walk: p.walk, mv: Math.min(1, p.speed / 120), skin: SKIN[0], hurt: p.hurtT > 0, silenced: wstats(curW()).silenced });
     if (curW().id === 'crossbow') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = '#20262e'; ctx.fillRect(16, -8, 2.5, 16); ctx.restore(); }
     if (p.swingT > 0) {
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
@@ -3169,6 +3317,7 @@ function syncObjs() { // lista desplegable de objetivos (se abre sola unos segun
 }
 function syncHud() {
   if (room.obj) syncObjs();
+  const tb = $('bTool'), jn = room.chase ? 0 : room.jams; if (tb.hidden !== !(jn > 0 || room.jamT > 0)) tb.hidden = !(jn > 0 || room.jamT > 0); if ($('toolN').textContent !== String(jn)) $('toolN').textContent = jn;
   const p = room.p, w = curW(), s = wstats(w);
   const key = `${s.name}|${w.ammo}|${w.reserve}|${run.nades}|${run.charges}|${room.charges.length}|${run.light}|${p.reloadT > 0}|${touchMode}|${run.weapons.length}`;
   if (p.reloadT > 0) $('bWeapon').style.setProperty('--p', `${100 * (1 - p.reloadT / s.reload)}%`);
@@ -3413,6 +3562,8 @@ function sfx(k, x, y) {
     case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
     case 'plant': burst(0.03, 0.2, 2500, 'bandpass', 3); tone(1800, 1800, 0.05, 0.08, 'square', 0.12); break;
     case 'click': tone(1600, 1600, 0.03, 0.12); tone(800, 800, 0.05, 0.1, 'square', 0.05); break;
+    case 'door': burst(0.08, 0.12 * v, 900, 'bandpass', 2); tone(180, 120, 0.12, 0.05 * v, 'triangle'); break;
+    case 'tink': tone(3200, 2800, 0.06, 0.08 * v, 'triangle'); tone(4100, 3600, 0.05, 0.05 * v, 'triangle', 0.07); break;
     case 'scream': tone(700, 1150, 0.35, 0.11 * v, 'sawtooth'); tone(1000, 640, 0.32, 0.08 * v, 'sawtooth', 0.28); break;
     case 'radio': burst(0.22, 0.12, 1700, 'bandpass', 3); tone(1250, 1250, 0.05, 0.05, 'square', 0.24); break;
     case 'phone': tone(1400, 1400, 0.07, 0.05 * v, 'sine'); tone(1400, 1400, 0.07, 0.05 * v, 'sine', 0.14); break;
@@ -3517,6 +3668,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') { state = 'play'; show(null); } }
   if (state !== 'play' || e.repeat) return;
   if (e.code === 'KeyC') { toggleSneak(); return; }
+  if (e.code === 'KeyJ') { useJammer(); return; }
   if (e.code === 'KeyO') { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; return; }
   const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
@@ -3541,7 +3693,18 @@ $('bPlay').addEventListener('click', () => {
   if (loadSave() && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = '¿Borrar la partida guardada?'; return; }
   begin(); newRun(); brief(startRoom);
 });
-$('bGo').addEventListener('click', () => { initAudio(); const f = goAfter; goAfter = null; clearInterval(typeT); if (f) f(); });
+$('bGo').addEventListener('click', () => {
+  initAudio(); const f = goAfter; goAfter = null; clearInterval(typeT);
+  if (run && run.plan) { const c = planCost(run.plan); if (c <= run.money) { run.money -= c; run.plan.paid.push(...[run.plan.entry, ...run.plan.tools].filter(k => !run.plan.paid.includes(k))); } else run.plan = freshPlan(); }
+  if (f) f();
+});
+$('bfPlan').addEventListener('click', e => {
+  const b = e.target.closest('button[data-plan]'); if (!b || b.disabled) return;
+  const [kind, k] = b.dataset.plan.split(':'), plan = run.plan;
+  if (kind === 'entry') plan.entry = k; else plan.tools = plan.tools.includes(k) ? plan.tools.filter(t => t !== k) : [...plan.tools, k];
+  renderPlan(); sfx('click');
+});
+$('bTool').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); useJammer(); });
 function loadRun() {
   const d = loadSave();
   if (!d) { refreshMenu(); return null; }
