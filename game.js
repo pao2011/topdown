@@ -643,80 +643,136 @@ function retryRoom() {
 }
 let winStats = '';
 // ================= Persecución =================
-// Tras subir al coche, en algunas misiones te persiguen: el stick izquierdo mueve el coche de un carril a otro,
-// el derecho apunta y dispara; las granadas caen a la carretera y se quedan atrás, hacia los perseguidores
+// Tras subir al coche, en algunas misiones te persiguen. Conduces de verdad (stick izquierdo o WASD: a los lados,
+// acelerar y frenar) entre el tráfico; el stick derecho apunta y dispara. A los perseguidores se les derriba a tiros,
+// con granadas (estallan al tocar un coche), embistiéndolos contra el quitamiedos o haciendo que choquen con el tráfico
+const CAR_TOUGH = { van: 1, sedan: 1.15, suv: 0.85, armored: 0.6 }; // daño que recibe tu vehículo (y al revés, lo fuerte que embiste)
+const LANES = [-127, 0, 127], LANE_V = [300, 350, 400]; // carriles y velocidad del tráfico de cada uno
 function startChase() {
   const lv = run.level;
-  room.chase = { t: 0, len: Math.min(95, 55 + lv * 2.5), speed: 520, roadW: 380, scroll: 0, car: { x: 0, vx: 0 }, foes: [], spawnT: 1.5, killed: 0, done: false, doneT: 0 };
+  room.chase = { t: 0, len: Math.min(95, 55 + lv * 2.5), speed: 520, roadW: 380, scroll: 0, car: { x: 0, y: 0, vx: 0, vy: 0 }, foes: [], traffic: [], spawnT: 1.5, trafT: 0.5, killed: 0, crashT: 0, done: false, doneT: 0 };
   Object.assign(room, { bullets: [], nades: [], fx: [], parts: [], flashes: [], texts: [], rings: [], warns: [], enemies: [], act: null, introT: 0 });
   document.body.classList.add('chase'); // en la carretera sobran C4, ruido y cuchillo
   Object.assign(room.p, { x: 0, y: 0, z: 0, vx: 0, vy: 0, a: Math.PI / 2, dead: false });
   useFloor(0);
   cam.x = 0; cam.y = 60;
-  banner('¡Te persiguen! Derriba sus coches o aguanta hasta perderlos');
+  banner('¡Te persiguen! Dispárales, embístelos o haz que choquen con el tráfico');
   sfx('vault');
 }
 function chaseBoom(x, y) {
-  const C = room.chase, R = 115;
+  const C = room.chase, R = 125;
   fx({ k: 'fire', x, y, life: 0.42, r: R * 0.85 }); fx({ k: 'ring', x, y, life: 0.3, r: R * 1.3 });
   for (let i = 0; i < 6; i++) { const a = rnd(0, 6.3), v = rnd(10, 50); fx({ k: 'smoke', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v + 200, life: rnd(1, 1.8), r0: rnd(12, 20), r1: rnd(40, 60), g: Math.floor(rnd(60, 90)) }); }
   for (let i = 0; i < 16; i++) { const a = rnd(0, 6.3), v = rnd(80, 300); room.parts.push({ x, y, z: 0, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: rnd(0.4, 0.9), c: '#ffb04a', s: 2, glow: true }); }
-  for (const f of C.foes) { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && d < R) hitCar(f, 220 * (1 - d / R) + 30); }
+  for (const f of C.foes) { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && d < R) { hitCar(f, 260 * (1 - d / R) + 60); f.vx += Math.sign(f.x - x || 1) * 160; } }
+  for (const t of C.traffic) if (!t.wreck && Math.hypot(t.x - x, t.y - y) < R * 0.6) wreck(t);
   const p = room.p, dp = Math.hypot(p.x - x, p.y - y);
-  if (dp < R) hurtPlayer((150 * (1 - dp / R) + 15) * 0.5, Math.atan2(p.y - y, p.x - x));
+  if (dp < R) hurtPlayer((150 * (1 - dp / R) + 15) * 0.5 * CAR_TOUGH[room.mission.car], Math.atan2(p.y - y, p.x - x));
   cam.shake = 14; buzz(80); sfx('boom', x, y);
 }
-function hitCar(f, dmg) {
+function hitCar(f, dmg, why) {
   const C = room.chase;
   f.hp -= dmg; f.hitT = 0.1;
   if (f.hp > 0 || f.dead) return;
   f.dead = true; f.spin = rnd(-4, 4); f.vx = rnd(-120, 120); C.killed++;
-  const reward = Math.round(70 + run.level * 6);
-  room.cash += reward; popup(f.x, f.y - 30, `+$${reward}`, '#7fe0a8');
+  const reward = Math.round((70 + run.level * 6) * (why ? 1.5 : 1)); // derribarlos con el coche paga más
+  room.cash += reward; popup(f.x, f.y - 30, `${why ? why + ' ' : ''}+$${reward}`, '#7fe0a8');
   chaseBoom(f.x, f.y);
 }
+function wreck(t) { // un coche del tráfico queda siniestrado y se queda atrás
+  t.wreck = true; t.spin = rnd(-3, 3); t.vx = rnd(-60, 60);
+}
+const overlap = (a, b, pad = 0) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + pad && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + pad;
 function updateChase(dt) {
-  const C = room.chase, p = room.p, lv = run.level;
-  room.time += dt; C.t += dt; C.scroll += C.speed * dt;
+  const C = room.chase, p = room.p, lv = run.level, rw = C.roadW, car = C.car, kind = room.mission.car, tough = CAR_TOUGH[kind];
+  [car.w, car.h] = CAR_DIM[kind];
+  room.time += dt; C.t += dt; C.scroll += C.speed * dt; C.crashT -= dt;
   if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ATRAPADO', `Te alcanzaron en la persecución de ${room.mission.name}.`); }
   else {
     for (const k of ['fireT', 'meleeT', 'nadeT', 'noiseT', 'breachT', 'swingT', 'hurtT', 'muzzleT']) p[k] -= dt;
     p.bloom = Math.max(0, p.bloom - dt * 1.6);
-    const L = stickVec(sticks.L), kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0), steer = kx || L.x;
-    C.car.vx += (steer * 240 - C.car.vx) * Math.min(1, dt * 6);
-    C.car.x = clamp(C.car.x + C.car.vx * dt, -C.roadW / 2 + 28, C.roadW / 2 - 28);
-    p.x = C.car.x; p.y = -6; p.speed = 0; p.sneak = false;
+    const L = stickVec(sticks.L), kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0), ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    car.vx += ((kx || L.x) * 260 - car.vx) * Math.min(1, dt * 6);
+    car.vy += ((ky || L.y) * 210 - car.vy) * Math.min(1, dt * 4); // acelerar (arriba) o frenar (abajo)
+    car.x += car.vx * dt; car.y = clamp(car.y + car.vy * dt, -110, 140);
+    const edge = rw / 2 - car.w / 2 - 4;
+    if (Math.abs(car.x) > edge) { if (Math.abs(car.vx) > 90) { sparks(Math.sign(car.x) * (rw / 2 - 2), car.y, 4); sfx('clank', car.x, car.y); } car.x = Math.sign(car.x) * edge; car.vx *= -0.3; }
+    p.x = car.x; p.y = car.y - 6; p.speed = 0; p.sneak = false;
     aimAndFire(dt, 0, 0, 0, a => { // ayuda de apuntado hacia el coche más cercano a la línea de tiro
       let best = null, bd = 0.25;
       for (const f of C.foes) { const da = Math.abs(angDiff(a, Math.atan2(f.y - p.y, f.x - p.x))); if (!f.dead && da < bd) { best = f; bd = da; } }
       return best ? Math.atan2(best.y - p.y, best.x - p.x) : a;
     });
   }
+  // Tráfico: más lento que tú, cada carril a su velocidad; aparece por delante y lo vas adelantando
+  if ((C.trafT -= dt) <= 0) {
+    C.trafT = rnd(0.9, 1.9);
+    const i = Math.floor(Math.random() * 3), y = car.y - 560;
+    if (!C.traffic.some(t => t.lane === i && Math.abs(t.y - y) < 220)) {
+      const k = Math.random() < 0.3 ? 'van' : 'sedan', [w, h] = CAR_DIM[k];
+      C.traffic.push({ kind: k, lane: i, x: LANES[i] + rnd(-12, 12), y, w, h, v: LANE_V[i], vx: 0, rot: 0, col: ['#7a2f2a', '#c8c2b0', '#2f5d7a', '#6b6f75', '#3d6b3f'][Math.floor(Math.random() * 5)] });
+    }
+  }
+  for (const t of C.traffic) {
+    if (t.wreck) { t.y += C.speed * dt; t.x += t.vx * dt; t.vx *= Math.exp(-2 * dt); t.rot += t.spin * dt; t.spin *= Math.exp(-1.5 * dt); if (Math.random() < dt * 8) fx({ k: 'smoke', x: t.x, y: t.y, vx: 0, vy: 200, life: 1, r0: 6, r1: 20, g: 50 }); }
+    else { t.y += (C.speed - t.v) * dt; t.x += (LANES[t.lane] - t.x) * Math.min(1, dt * 0.8) + t.vx * dt; t.vx *= Math.exp(-3 * dt); t.rot = t.vx * 0.002; }
+    if (!p.dead && overlap(car, t) && C.crashT <= 0) { // te comes un coche: daño, frenazo y volantazo
+      C.crashT = 0.6; car.vy = 260; car.vx = Math.sign(car.x - t.x || 1) * 200; t.vx -= Math.sign(car.x - t.x || 1) * 120;
+      hurtPlayer(12 * tough, -Math.PI / 2); sfx('clank', t.x, t.y); cam.shake = 9; buzz(40); sparks((car.x + t.x) / 2, (car.y + t.y) / 2, 8);
+      if (!t.wreck && tough < 0.7) wreck(t); // el blindado se los lleva por delante
+    }
+  }
+  C.traffic = C.traffic.filter(t => t.y < car.y + 700);
+  // Perseguidores: llegan por detrás, se ponen a tu lado y disparan; de vez en cuando intentan embestirte
   const alive = C.foes.filter(f => !f.dead);
   if (C.t < C.len && alive.length < 2 + (lv >> 2) && (C.spawnT -= dt) <= 0) {
     C.spawnT = rnd(2.2, 4.2);
-    const kind = lv > 8 && Math.random() < 0.3 ? 'armored' : Math.random() < 0.5 ? 'suv' : 'sedan', [w, h] = CAR_DIM[kind];
-    C.foes.push({ kind, w, h, x: rnd(-C.roadW / 2 + 40, C.roadW / 2 - 40), y: 560, vx: 0, rot: 0, hp: (kind === 'armored' ? 260 : 140) + lv * 8, side: Math.random() < 0.5 ? -1 : 1, off: rnd(55, 130), ty: rnd(80, 210), shootT: rnd(1, 2), gunT: 0, burst: 0, police: kind === 'sedan' });
+    const fk = lv > 8 && Math.random() < 0.3 ? 'armored' : Math.random() < 0.5 ? 'suv' : 'sedan', [w, h] = CAR_DIM[fk];
+    const hp = (fk === 'armored' ? 260 : 140) + lv * 8;
+    C.foes.push({ kind: fk, w, h, x: rnd(-rw / 2 + 40, rw / 2 - 40), y: car.y + 480, vx: 0, rot: 0, hp, maxHp: hp, side: Math.random() < 0.5 ? -1 : 1, off: rnd(60, 130), dy: rnd(50, 200), mode: 'follow', modeT: rnd(3, 6), skill: rnd(0.45, 0.95), shootT: rnd(1, 2), gunT: 0, burst: 0, police: fk === 'sedan' });
   }
   for (const f of C.foes) {
     if (f.dead) { f.y += 340 * dt; f.x += f.vx * dt; f.rot += f.spin * dt; if (Math.random() < dt * 20) fx({ k: 'smoke', x: f.x, y: f.y, vx: 0, vy: 260, life: 1, r0: 8, r1: 26, g: 40 }); continue; }
     f.hitT = Math.max(0, (f.hitT || 0) - dt);
-    const tx = clamp(C.car.x + f.side * f.off, -C.roadW / 2 + 30, C.roadW / 2 - 30);
-    f.vx += (clamp((tx - f.x) / 40, -1, 1) * 170 - f.vx) * Math.min(1, dt * 2.5);
-    f.x = clamp(f.x + f.vx * dt, -C.roadW / 2 + 22, C.roadW / 2 - 22);
-    f.y += clamp(f.ty - f.y, -200 * dt, 200 * dt);
+    if ((f.modeT -= dt) <= 0) { // cambia de táctica: seguirte de lado o lanzarse contra ti
+      if (f.mode === 'follow' && lv >= 4 && Math.random() < 0.6) { f.mode = 'ram'; f.modeT = 1.8; }
+      else { f.mode = 'follow'; f.modeT = rnd(3, 6); f.side = Math.random() < 0.5 ? -1 : 1; f.off = rnd(60, 130); f.dy = rnd(30, 200); }
+    }
+    let tx = f.mode === 'ram' ? car.x : car.x + f.side * f.off, ty = car.y + (f.mode === 'ram' ? 0 : f.dy);
+    for (const t of C.traffic) { // esquivan el tráfico que tienen delante, unos mejor que otros
+      if (t.y < f.y && f.y - t.y < 170 && Math.abs(t.x - f.x) < (t.w + f.w) / 2 + 14) tx = f.x + Math.sign(f.x - t.x || f.side) * 120 * f.skill;
+    }
+    tx = clamp(tx, -rw / 2 + 30, rw / 2 - 30);
+    const vmax = f.mode === 'ram' ? 260 : 170;
+    f.vx += (clamp((tx - f.x) / 40, -1, 1) * vmax - f.vx) * Math.min(1, dt * 2.5);
+    f.x += f.vx * dt;
+    f.y += clamp(ty - f.y, -220 * dt, 220 * dt);
+    const fe = rw / 2 - f.w / 2 - 3;
+    if (Math.abs(f.x) > fe) { // contra el quitamiedos
+      if (Math.abs(f.vx) > 140) { hitCar(f, Math.abs(f.vx) * 0.25, '¡Al quitamiedos!'); sparks(Math.sign(f.x) * (rw / 2 - 2), f.y, 8); sfx('clank', f.x, f.y); }
+      f.x = Math.sign(f.x) * fe; f.vx *= -0.3;
+    }
     for (const g of C.foes) { // no se montan unos encima de otros
       if (g === f || g.dead) continue;
       const ox = (f.w + g.w) / 2 + 4 - Math.abs(f.x - g.x), oy = (f.h + g.h) / 2 + 4 - Math.abs(f.y - g.y);
       if (ox <= 0 || oy <= 0) continue;
       if (ox < oy) f.x += Math.sign(f.x - g.x || 1) * ox / 2;
-      else { f.y += Math.sign(f.y - g.y || 1) * oy / 2; f.ty = clamp(f.y, 80, 290); }
+      else { f.y += Math.sign(f.y - g.y || 1) * oy / 2; f.dy = clamp(f.y - car.y, 30, 260); }
     }
+    for (const t of C.traffic) if (!t.wreck && overlap(f, t)) { wreck(t); hitCar(f, 9999, '¡Estrellado!'); break; }
+    if (f.dead) continue;
     f.rot = f.vx * 0.0016;
-    if (Math.abs(f.x - C.car.x) < (f.w + 30) / 2 && Math.abs(f.y) < (f.h + 60) / 2) { // embestida: los dos se apartan y te hace daño
-      const push = Math.sign(f.x - C.car.x) || 1; f.vx += push * 220; C.car.vx -= push * 220; hurtPlayer(6); hitCar(f, 15); sfx('clank', f.x, f.y);
+    if (!p.dead && overlap(f, car, 2)) { // embestida: el golpe lateral daña a los dos; el que va más rápido gana
+      const push = Math.sign(f.x - car.x) || 1, rel = Math.abs(car.vx - f.vx);
+      const mine = (car.vx - f.vx) * push > 0; // eres tú quien empuja
+      f.vx = push * (mine ? 260 / tough : 160); car.vx = -push * (mine ? 80 : 200 * tough);
+      if (Math.abs(f.y - car.y) > (f.h + car.h) / 2 - 10) { car.vy += Math.sign(car.y - f.y) * 120; f.y += Math.sign(f.y - car.y) * 12; } // por detrás
+      hitCar(f, (12 + rel * 0.12) / tough, mine ? '¡Embestido!' : null);
+      if (!mine || f.mode === 'ram') hurtPlayer((f.mode === 'ram' ? 10 : 5) * tough, 0);
+      sfx('clank', f.x, f.y); sparks((f.x + car.x) / 2, (f.y + car.y) / 2, 6); cam.shake = 6;
+      if (f.mode === 'ram') { f.mode = 'follow'; f.modeT = rnd(2, 4); }
     }
-    if (!p.dead && f.y < 300 && (f.shootT -= dt) <= 0) { f.shootT = rnd(1.4, 2.4); f.burst = 3 + Math.floor(Math.random() * 3); }
+    if (!p.dead && Math.abs(f.y - car.y) < 320 && (f.shootT -= dt) <= 0) { f.shootT = rnd(1.4, 2.4); f.burst = 3 + Math.floor(Math.random() * 3); }
     if (f.burst > 0 && (f.gunT -= dt) <= 0) {
       f.gunT = 0.13; f.burst--;
       const a = Math.atan2(p.y - f.y, p.x - f.x), mx = f.x + Math.cos(a) * 18, my = f.y - f.h / 2 + 10;
@@ -724,22 +780,27 @@ function updateChase(dt) {
       fx({ k: 'muzzle', x: mx, y: my, a, life: 0.05, s: 1 });
       sfx('eshot', f.x, f.y);
     }
+    if (f.hp < f.maxHp * 0.5 && Math.random() < dt * (f.hp < f.maxHp * 0.25 ? 18 : 7)) fx({ k: 'smoke', x: f.x, y: f.y - f.h / 3, vx: 0, vy: 220, life: 0.9, r0: 5, r1: 18, g: f.hp < f.maxHp * 0.25 ? 30 : 70 }); // tocado: echa humo
   }
-  C.foes = C.foes.filter(f => !(f.dead && f.y > 800));
-  for (const b of room.bullets) { // balas: contra los coches (tuyas) o contra ti (suyas)
+  C.foes = C.foes.filter(f => !(f.dead && f.y > car.y + 800));
+  for (const b of room.bullets) { // balas: contra los coches (tuyas), contra ti (suyas); el tráfico hace de parapeto
     const n = Math.ceil(Math.hypot(b.vx, b.vy) * dt / 10);
     for (let i = 0; i < n && !b.dead; i++) {
       b.x += b.vx * dt / n; b.y += b.vy * dt / n;
+      for (const t of C.traffic) if (Math.abs(b.x - t.x) < t.w / 2 && Math.abs(b.y - t.y) < t.h / 2) { b.dead = true; sparks(b.x, b.y, 2); break; }
+      if (b.dead) break;
       if (b.mine) { for (const f of C.foes) if (!f.dead && Math.abs(b.x - f.x) < f.w / 2 && Math.abs(b.y - f.y) < f.h / 2) { b.dead = true; sparks(b.x, b.y, 3); hitCar(f, b.dmg); break; } }
-      else if (!p.dead && Math.hypot(b.x - p.x, b.y - p.y) < 13) { b.dead = true; hurtPlayer(b.dmg, Math.atan2(b.vy, b.vx)); }
+      else if (!p.dead && Math.abs(b.x - car.x) < car.w / 2 && Math.abs(b.y - car.y) < car.h / 2) { b.dead = true; sparks(b.x, b.y, 2); hurtPlayer(b.dmg * tough, Math.atan2(b.vy, b.vx)); }
     }
-    if ((b.life -= dt) <= 0 || Math.abs(b.x) > 900 || Math.abs(b.y) > 900) b.dead = true;
+    if ((b.life -= dt) <= 0 || Math.abs(b.x) > 900 || Math.abs(b.y - car.y) > 900) b.dead = true;
   }
   room.bullets = room.bullets.filter(b => !b.dead);
-  for (const n of room.nades) { // la granada vuela y, al tocar el asfalto, se queda atrás con la carretera
+  for (const n of room.nades) { // la granada vuela, rueda hacia atrás con la carretera y estalla al tocar un coche
     n.vh -= 520 * dt; n.h += n.vh * dt;
     if (n.h <= 0) { n.h = 0; n.vh = n.vh < -40 ? n.vh * -0.42 : 0; n.vy += (C.speed - n.vy) * Math.min(1, dt * 6); n.vx *= Math.exp(-4 * dt); }
     n.x += n.vx * dt; n.y += n.vy * dt;
+    const box = { x: n.x, y: n.y, w: 8, h: 8 };
+    if (n.t < 1.55 && n.h < 30 && [...C.foes.filter(f => !f.dead), ...C.traffic].some(c => overlap(box, c))) n.t = 0;
     if ((n.t -= dt) <= 0) chaseBoom(n.x, n.y);
   }
   room.nades = room.nades.filter(n => n.t > 0);
@@ -753,7 +814,7 @@ function updateChase(dt) {
 }
 function renderChase() {
   const C = room.chase, p = room.p, S = zoom * dpr, here = () => true;
-  const cx = C.car.x * 0.5 + rnd(-cam.shake, cam.shake), cy = 70 + rnd(-cam.shake, cam.shake);
+  const cx = C.car.x * 0.5 + rnd(-cam.shake, cam.shake), cy = 70 + C.car.y * 0.75 + rnd(-cam.shake, cam.shake);
   const ox = cw / 2 - cx * S, oy = ch / 2 - cy * S, hw = cw / 2 / S, hh = ch / 2 / S, rw = C.roadW;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#070a08'; ctx.fillRect(0, 0, cw, ch);
   ctx.setTransform(S, 0, 0, S, ox, oy);
@@ -771,8 +832,12 @@ function renderChase() {
   for (let y = (sc % 420) - 420 + Math.floor(top / 420) * 420; y < bot; y += 420) for (const sx of [-1, 1]) posts.push([sx * (rw / 2 + 13), y + (sx > 0 ? 210 : 0)]);
   for (const [x, y] of posts) { ctx.fillStyle = '#3a3e45'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); ctx.strokeStyle = '#2b2f35'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 26); ctx.lineTo(x - Math.sign(x) * 10, y - 28); ctx.stroke(); }
   for (const n of room.nades) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(n.x + 2, n.y + 2, 5, 3.5, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(n.x, n.y - n.h * 0.6, 5, 0, 7); ctx.fill(); }
-  for (const f of C.foes) { drawCar(ctx, f.kind, f.x, f.y, f.rot); if (f.hitT > 0) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(f.x - f.w / 2, f.y - f.h / 2, f.w, f.h); } }
-  drawCar(ctx, room.mission.car, C.car.x, 0, C.car.vx * 0.0012);
+  for (const t of C.traffic) { drawCar(ctx, t.kind, t.x, t.y, t.rot, t.col); if (t.wreck) { ctx.fillStyle = 'rgba(10,8,6,0.55)'; ctx.fillRect(t.x - t.w / 2, t.y - t.h / 2, t.w, t.h); } }
+  for (const f of C.foes) {
+    drawCar(ctx, f.kind, f.x, f.y, f.rot); if (f.hitT > 0) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(f.x - f.w / 2, f.y - f.h / 2, f.w, f.h); }
+    if (!f.dead && f.mode === 'ram') { ctx.strokeStyle = `rgba(255,70,60,${0.5 + 0.4 * Math.sin(room.time * 20)})`; ctx.lineWidth = 2; ctx.strokeRect(f.x - f.w / 2 - 4, f.y - f.h / 2 - 4, f.w + 8, f.h + 8); } // va a embestirte
+  }
+  drawCar(ctx, room.mission.car, C.car.x, C.car.y, C.car.vx * 0.0012);
   ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); // tú, asomado por el techo
   const gw = GUN_SHAPE[curW().id] || [16, 6];
   ctx.fillStyle = '#20262e'; ctx.fillRect(8, -gw[1] / 2, gw[0], gw[1]);
@@ -783,7 +848,8 @@ function renderChase() {
   ctx.setTransform(S, 0, 0, S, ox, oy);
   ctx.globalCompositeOperation = 'lighter';
   for (const [x, y] of posts) { ctx.fillStyle = glow(ctx, x - Math.sign(x) * 10, y + 10, 120, '255,160,80', 0.22); ctx.beginPath(); ctx.arc(x - Math.sign(x) * 10, y + 10, 120, 0, 7); ctx.fill(); }
-  carLights(ctx, room.mission.car, C.car.x, 0, true, C.car.vx * 0.0012);
+  carLights(ctx, room.mission.car, C.car.x, C.car.y, true, C.car.vx * 0.0012);
+  for (const t of C.traffic) if (!t.wreck) carLights(ctx, t.kind, t.x, t.y, true, t.rot);
   for (const f of C.foes) if (!f.dead) {
     carLights(ctx, f.kind, f.x, f.y, true, f.rot);
     if (f.police) { const on = Math.sin(room.time * 14) > 0; ctx.fillStyle = on ? 'rgba(255,40,40,0.9)' : 'rgba(40,90,255,0.9)'; ctx.fillRect(f.x - 9, f.y - 4, 8, 4); ctx.fillStyle = on ? 'rgba(40,90,255,0.9)' : 'rgba(255,40,40,0.9)'; ctx.fillRect(f.x + 1, f.y - 4, 8, 4);
@@ -791,6 +857,7 @@ function renderChase() {
   }
   drawFxGlow(here);
   ctx.globalCompositeOperation = 'source-over';
+  for (const f of C.foes) if (!f.dead && f.hp < f.maxHp) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(f.x - 18, f.y + f.h / 2 + 6, 36, 4); ctx.fillStyle = f.hp < f.maxHp * 0.3 ? '#ff5a4a' : '#ffb547'; ctx.fillRect(f.x - 18, f.y + f.h / 2 + 6, 36 * f.hp / f.maxHp, 4); } // vida, por encima de la noche
   ctx.font = '700 13px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const t of room.texts) { ctx.globalAlpha = Math.min(1, t.t * 2); ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); }
   ctx.globalAlpha = 1;
@@ -1829,8 +1896,8 @@ function drawFixture(g, l) {
 const CAR_DIM = { van: [34, 64], sedan: [28, 54], suv: [32, 58], armored: [38, 68] };
 function carPath(c, w, h, r) { c.beginPath(); c.moveTo(-w / 2 + r, -h / 2); c.lineTo(w / 2 - r, -h / 2); c.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); c.lineTo(w / 2, h / 2 - r); c.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); c.lineTo(-w / 2 + r, h / 2); c.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); c.lineTo(-w / 2, -h / 2 + r); c.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); c.closePath(); }
 // Vehículo de huida visto desde arriba, morro hacia arriba: furgoneta, berlina, todoterreno o furgón blindado
-function drawCar(c, kind, x, y, a = 0) {
-  const [w, h] = CAR_DIM[kind], col = { van: '#bdb8aa', sedan: '#2a3a52', suv: '#1f2b23', armored: '#3a3f36' }[kind];
+function drawCar(c, kind, x, y, a = 0, paint) {
+  const [w, h] = CAR_DIM[kind], col = paint || { van: '#bdb8aa', sedan: '#2a3a52', suv: '#1f2b23', armored: '#3a3f36' }[kind];
   c.save(); c.translate(x, y); c.rotate(a);
   c.fillStyle = 'rgba(0,0,0,0.45)'; carPath(c, w, h, 7); c.save(); c.translate(5, 7); c.fill(); c.restore();
   c.fillStyle = '#111'; for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) c.fillRect(sx * w / 2 - (sx > 0 ? 2 : 3), sy * h * 0.3 - 6, 5, 12); // ruedas

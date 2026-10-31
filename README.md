@@ -45,7 +45,13 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 - **Saqueo y bolsa:** cajones, estanterías, cuerpos, cajas de seguridad y racks dan dinero o munición. Todo va a la bolsa (el contador «$» del HUD), junto con lo que pagan las bajas, y se cobra al escapar: botín, saqueo, bonus de sala y bonus fantasma si nadie te vio.
 - **El golpe y el tiempo:** la cuenta atrás corre desde que entras (entre 5 y 8 minutos según el tamaño, y uno más si hay cámara). Una flecha te guía al botín (o a la escalera si está en otra planta). Al cogerlo saltan las sirenas y empieza otra cuenta atrás para escapar. Si cualquiera de las dos llega a cero, te atrapa la policía.
 - **Huida:** el vehículo te espera al otro lado del mapa, con faros y humo de escape. Según la misión es una furgoneta, una berlina, un todoterreno o un furgón blindado. Súbete con el botín.
-- **Persecución:** en algunas misiones, al huir te persiguen coches (patrullas con sirena, todoterrenos y, más adelante, blindados) que intentan recuperar el botín: se ponen a tu lado, disparan y embisten. Mueves el coche de lado a lado con el stick izquierdo (o `A`/`D`), disparas con el derecho (con ayuda de apuntado) y las granadas caen a la carretera y se quedan atrás, hacia ellos. Aguanta hasta perderlos o derríbalos: cada coche paga.
+- **Persecución:** en algunas misiones, al huir te persiguen coches (patrullas con sirena, todoterrenos y, más adelante, blindados) que intentan recuperar el botín. Conduces de verdad entre el tráfico: el stick izquierdo (o `WASD`) mueve el coche a los lados, acelera y frena. Chocar con un coche civil te frena y te daña, y el tráfico para las balas.
+  Los perseguidores se ponen a tu lado, disparan y, cuando los ves marcados en rojo, se lanzan a embestirte. Para derribarlos:
+  - a tiros, con ayuda de apuntado (cada uno muestra su vida y echa humo al estar tocado);
+  - con granadas, que estallan al tocar un coche y, si caen al asfalto, ruedan hacia atrás contra ellos;
+  - embistiéndolos de lado, sobre todo contra el quitamiedos;
+  - haciendo que choquen con el tráfico.
+  Embestirlos o hacer que se estrellen paga más. El vehículo cuenta: el furgón blindado aguanta más y embiste más fuerte, y la berlina es la más frágil. Aguanta hasta perderlos.
 - **Armas:** 10 armas: pistola, revólver, subfusil, escopeta, ballesta (casi muda), subfusil silenciado, fusil, escopeta automática, rifle de tirador y ametralladora ligera. Cada una tiene su retroceso: la dispersión crece al disparar seguido y al correr, y baja quieto y en sigilo.
 - **Mejoras:** 8 por arma: silenciador, cargador ampliado, mira láser, cañón pesado, gatillo ligero, compensador, tambor y mira térmica (ves la silueta de los guardias hacia los que apuntas aunque estén a oscuras).
 - **Munición:** 4 tipos por arma, que se compran una vez y se eligen en la tienda:
@@ -92,7 +98,7 @@ La prueba de humo comprueba:
   - Al cogerlo salta la alarma, y si se acaba cualquiera de las dos cuentas te atrapan.
   - Lo saqueado se cobra al escapar.
 - **Cámara del banco:** hackear la puerta y cancelar guarda el progreso. El código sale de la tarjeta del supervisor (registrando su cuerpo) o de la terminal, y con él se abre la puerta.
-- **Persecución:** en la misión 4 te persiguen al huir. Las balas dañan sus coches y, al perderlos, pasas a la tienda.
+- **Persecución:** en la misión 4 te persiguen al huir. Las balas dañan sus coches, una granada estalla al tocar uno y, al perderlos, pasas a la tienda.
 - **Mundo y enemigos:**
   - Escalera, C4 (no estalla sola y abre la pared) y ventanas que se rompen.
   - Los 6 tipos de enemigo y el jefe.

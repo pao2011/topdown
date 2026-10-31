@@ -331,12 +331,15 @@ const path = require('path');
   await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(300);
   assert(await ev(() => !!__apagon.room.chase && __apagon.state === 'play'), 'en la misión 4 te persiguen al huir');
-  await ev(() => { window.__near = f => !f.dead && Math.abs(f.y - f.ty) < 4 && Math.abs(f.vx) < 25; }); // ya se ha colocado a tu lado
+  await ev(() => { const C = __apagon.room.chase; C.trafT = 1e9; C.traffic.length = 0; window.__near = f => !f.dead && f.mode === 'follow' && Math.abs(f.vx) < 25 && Math.abs(f.y - C.car.y - f.dy) < 4; }); // sin tráfico que tape; ya colocado a tu lado
   await page.waitForFunction(() => __apagon.room.chase.foes.some(__near), null, { timeout: 8000 });
   const aim = await ev(() => { const C = __apagon.room.chase, p = __apagon.room.p, f = C.foes.find(__near); __apagon.run.hp = 5000; __apagon.run.weapons[__apagon.run.cur].ammo = 12; p.reloadT = 0; window.__f = C.foes.slice(); window.__h = __f.map(f => f.hp); return Math.atan2(f.y - p.y, f.x - p.x); });
   await touch(2, 560, 300, 560 + Math.cos(aim) * 60, 300 + Math.sin(aim) * 60, 1500); // apunta al perseguidor y dispara
   assert(await page.waitForFunction(() => __f.some((f, i) => f.dead || f.hp < __h[i]), null, { timeout: 1500 }).then(() => true, () => false), 'las balas deben dañar a los coches perseguidores');
   await shot('chase');
+  // Una granada que toca un coche perseguidor estalla al momento
+  const nade = await ev(async () => { const A = __apagon, C = A.room.chase, f = C.foes.find(f => !f.dead), hp = f.hp; A.room.nades.push({ z: 0, x: f.x, y: f.y, vx: 0, vy: 0, t: 1.5, h: 5, vh: 0 }); await new Promise(r => setTimeout(r, 120)); return [A.room.nades.length, f.dead || f.hp < hp]; });
+  assert.deepStrictEqual(nade, [0, true], 'la granada estalla al tocar un coche');
   await ev(() => { const C = __apagon.room.chase; C.t = C.len; for (const f of C.foes) Object.assign(f, { dead: true, spin: 0, vx: 0 }); });
   await page.waitForTimeout(2000);
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['shop', 5], 'al perderlos, a la tienda');
