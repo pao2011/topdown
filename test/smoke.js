@@ -257,6 +257,22 @@ const path = require('path');
   });
   if (glass >= 0) assert.strictEqual(glass, 0, 'la bala debe romper la ventana'); else console.warn('aviso: sin ventana accesible');
 
+  // Armas nuevas: la carabina dispara ráfagas de 3 y el lanzagranadas abre una pared
+  const guns = await ev(async () => {
+    const A = __apagon, r = A.room, p = r.p, wait = ms => new Promise(f => setTimeout(f, ms)), keep = [A.run.weapons, A.run.cur, p.x, p.y, p.z], out = {};
+    A.run.hp = 1000;
+    A.run.weapons = [{ id: 'burst', mods: [], ammo: 30, reserve: 0, at: 'normal', ats: ['normal'] }]; A.run.cur = 0; p.fireT = 0; p.reloadT = 0; p.burstLeft = 0;
+    A.shoot(); await wait(400); out.burst = 30 - A.run.weapons[0].ammo;
+    const W = r.W; let wall = -1;
+    for (let c = 0; c < r.map.length && wall < 0; c++) { const x = c % W, y = (c / W) | 0; if (r.map[c] === 1 && x > 4 && y > 2 && x < W - 3 && y < r.H - 3 && [1, 2, 3].every(k => r.map[c - k] === 0)) wall = c; }
+    A.run.weapons = [{ id: 'gl', mods: [], ammo: 4, reserve: 0, at: 'normal', ats: ['normal'] }]; p.fireT = 0;
+    Object.assign(p, { x: (wall % W - 3) * 40 + 20, y: ((wall / W) | 0) * 40 + 20, z: 0, a: 0 });
+    A.shoot(); await wait(500); out.wall = r.map[wall];
+    [A.run.weapons, A.run.cur, p.x, p.y, p.z] = keep; A.run.hp = 100;
+    return out;
+  });
+  assert.deepStrictEqual(guns, { burst: 3, wall: 0 });
+
   await page.tap('#bNade');
   await page.tap('#bNoise');
   await page.waitForTimeout(2200); // deja explotar la granada
@@ -344,8 +360,14 @@ const path = require('path');
   assert.deepStrictEqual(await ev(() => [__apagon.state, !!__apagon.room.chase, __apagon.room.chase.t < 1, __apagon.room.cash, __apagon.run.level, __apagon.run.hp]), ['play', true, true, 0, 4, 100]);
   await ev(() => { const C = __apagon.room.chase; C.trafT = 1e9; C.traffic.length = 0; window.__near = f => !f.dead && f.mode === 'follow' && Math.abs(f.vx) < 25 && Math.abs(f.y - C.car.y - f.dy) < 4; }); // sin tráfico que tape; ya colocado a tu lado
   await page.waitForFunction(() => __apagon.room.chase.foes.some(__near), null, { timeout: 8000 });
-  const aim = await ev(() => { const C = __apagon.room.chase, p = __apagon.room.p, f = C.foes.find(__near); __apagon.run.hp = 5000; __apagon.run.weapons[__apagon.run.cur].ammo = 12; p.reloadT = 0; window.__f = C.foes.slice(); window.__h = __f.map(f => f.hp); return Math.atan2(f.y - p.y, f.x - p.x); });
-  await touch(2, 560, 300, 560 + Math.cos(aim) * 60, 300 + Math.sin(aim) * 60, 1500); // apunta al perseguidor y dispara
+  const onFoe = await ev(() => { // la mira sobre el perseguidor (lo ves de frente, desde tu techo)
+    const A = __apagon, C = A.room.chase, f = C.foes.find(__near), c = document.getElementById('c');
+    A.run.hp = 5000; A.run.weapons[A.run.cur].ammo = 12; A.room.p.reloadT = 0; window.__f = C.foes.slice(); window.__h = __f.map(f => f.hp);
+    for (let y = 0; y < c.height; y += 6) for (let x = 0; x < c.width; x += 6) { const t = A.pickAt(x, y); if (t && t.o === f) { C.aim.x = x; C.aim.y = y; return true; } }
+    return false;
+  });
+  assert(onFoe, 'el perseguidor debe verse en pantalla');
+  await touch(2, 560, 300, 560, 300, 1500); // con el stick derecho pulsado y la mira encima, dispara sola
   assert(await page.waitForFunction(() => __f.some((f, i) => f.dead || f.hp < __h[i]), null, { timeout: 1500 }).then(() => true, () => false), 'las balas deben dañar a los coches perseguidores');
   await shot('chase');
   // Una granada que toca un coche perseguidor estalla al momento
