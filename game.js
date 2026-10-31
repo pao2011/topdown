@@ -49,15 +49,25 @@ const FOES = {
   sniper: { hp: 70,  walk: 45, run: 100, dmg: 45, rate: 0.35, spread: 0,   pellets: 1, vision: 430, reward: 55, r: 13, color: '#6f7f4a', post: true, half: 0.3 },
   // escudo: para las balas de frente y gira despacio: hay que rodearlo
   shield: { hp: 120, walk: 42, run: 90,  dmg: 8,  rate: 1.4, spread: 0.12, pellets: 1, vision: 230, reward: 60, r: 15, color: '#5a6f8f', shield: true },
-  boss:   { hp: 1400, walk: 50, run: 110, dmg: 7, rate: 1,   spread: 0.2,  pellets: 1, vision: 380, reward: 1000, r: 24, color: '#7a2e2e', boss: true },
+  boss:   { hp: 1400, walk: 50, run: 110, dmg: 7, rate: 1,   spread: 0.2,  pellets: 1, vision: 380, reward: 1000, r: 24, color: '#7a2e2e', boss: true, title: 'El Alcaide' },
+  // el Coronel: armadura (la mitad de daño de frente), proyectiles explosivos y, a media vida, drones y refuerzos
+  coronel: { hp: 1800, walk: 55, run: 115, dmg: 9, rate: 1,  spread: 0.15, pellets: 1, vision: 400, reward: 1500, r: 25, color: '#3a4a2e', boss: true, title: 'El Coronel', armor: true },
+  // la Viuda: francotiradora; apunta con láser, dispara fuerte y cambia de posición tras cada tiro
+  viuda:  { hp: 1100, walk: 75, run: 150, dmg: 38, rate: 0.6, spread: 0,   pellets: 1, vision: 560, reward: 1500, r: 20, color: '#3a1a2a', boss: true, title: 'La Viuda' },
+  // guardia con táser: corre hacia ti y, de cerca, te deja aturdido un momento
+  taser:  { hp: 70,  walk: 60, run: 140, dmg: 5,  rate: 0.8, spread: 0,    pellets: 0, vision: 250, reward: 40, r: 13, color: '#c9a64a', taser: true },
+  // dron de vigilancia: vuela, ve con infrarrojos (también a oscuras) y da la alarma; no dispara
+  drone:  { hp: 35,  walk: 80, run: 130, dmg: 0,  rate: 0,   spread: 0,    pellets: 0, vision: 320, reward: 50, r: 11, color: '#5a6a7a', drone: true, half: 0.85 },
+  // agente de paisano: parece un civil hasta que te ve; entonces saca la pistola
+  agent:  { hp: 80,  walk: 40, run: 150, dmg: 10, rate: 2.4, spread: 0.1,  pellets: 1, vision: 260, reward: 60, r: 12, color: '#6b4a3a', agent: true },
   // civiles: desarmados; si te ven armado, ven un cuerpo u oyen disparos, huyen y llaman a la policía
   civil:  { hp: 30,  walk: 40, run: 150, dmg: 0,  rate: 0,   spread: 0,    pellets: 0, vision: 230, reward: 0,  r: 12, color: '#8a8f99', civil: true },
   // policía: llega un rato después del aviso, con uniforme azul y placa dorada; los GEO, en las misiones avanzadas
   police: { hp: 75,  walk: 62, run: 140, dmg: 8,  rate: 2.2, spread: 0.12, pellets: 1, vision: 290, reward: 40, r: 13, color: '#2a4f9e', cop: true },
   swatp:  { hp: 150, walk: 55, run: 120, dmg: 9,  rate: 4,   spread: 0.1,  pellets: 1, vision: 300, reward: 70, r: 14, color: '#1b2a4a', cop: true },
 };
-const PUBLIC = { banco: 5, galeria: 4, oficinas: 2, casino: 7, joyeria: 4, museo: 5 }; // civiles por escenario (lugares públicos)
-const LOOT_ALARM = { banco: true, galeria: true, datos: true, joyeria: true, museo: true }; // ahí el botín tiene sensor: cogerlo hace saltar la alarma
+const PUBLIC = { banco: 5, galeria: 4, oficinas: 2, casino: 8, joyeria: 3, museo: 4, yate: 5 }; // civiles por escenario (lugares públicos)
+const LOOT_ALARM = { banco: true, galeria: true, datos: true, joyeria: true, museo: true, casino: true }; // ahí el botín tiene sensor: cogerlo hace saltar la alarma
 const POLICE_DELAY = { sigilo: 30, mixta: 42, asalto: 22 }; // segundos que tarda la policía desde el aviso
 const BOSS_EVERY = 8; // misión del jefe; tras la campaña sigue el modo infinito con un jefe más duro cada 8 misiones
 // Campaña: cada misión tiene nombre, escenario, tipo de operación, vehículo de huida y, a veces, persecución
@@ -67,19 +77,27 @@ const MISSIONS = [
   { name: 'Cristal',         scene: 'galeria',  op: 'sigilo', car: 'sedan',   brief: 'La galería expone un diamante legendario. Sin ruido: la alarma de la sala salta al primer disparo.' },
   { name: 'Hierro Fundido',  scene: 'almacen',  op: 'asalto', car: 'suv',     chase: true, brief: 'Asalto a un depósito armado hasta los dientes. Entra con todo, coge la carga y aguanta la persecución.' },
   { name: 'Bóveda Norte',    scene: 'banco',    op: 'sigilo', car: 'sedan',   brief: 'La cámara del banco tiene puerta de seguridad. Consigue el código (cajones, el supervisor o la terminal) o hackéala.' },
-  { name: 'Silicio',         scene: 'datos',    op: 'mixta',  car: 'suv',     brief: 'Un centro de datos guarda un disco cifrado en su sala blindada. Los racks también llevan discos que se venden bien.' },
+  { name: 'Destello',        scene: 'joyeria',  op: 'sigilo', car: 'sedan',   brief: 'La joyería más cara de la ciudad cierra a medianoche. Las vitrinas tienen sensor, pero la caja fuerte guarda lo mejor.' },
   { name: 'Lluvia de Plomo', scene: 'banco',    op: 'asalto', car: 'armored', chase: true, brief: 'A plena alarma: revienta la cámara con C4, llévate el oro y quítate de encima a los que te persigan.' },
-  { name: 'El Alcaide',      boss: true,        car: 'armored', brief: 'El hombre que controla la ciudad te espera en su fortaleza. Ábrete paso y sal con vida.' },
+  { name: 'El Alcaide',      boss: 'boss',      car: 'armored', brief: 'El hombre que controla la ciudad te espera en su fortaleza. Ábrete paso y sal con vida.' },
+  { name: 'Silicio',         scene: 'datos',    op: 'mixta',  car: 'suv',     brief: 'Un centro de datos guarda un disco cifrado en su sala blindada. Los racks también llevan discos que se venden bien.' },
   { name: 'Terciopelo',      scene: 'galeria',  op: 'sigilo', car: 'sedan',   brief: 'Subasta privada: la galería está llena de seguridad privada. Que nadie sepa que has estado allí.' },
-  { name: 'Apagón Total',    scene: 'datos',    op: 'asalto', car: 'suv',     chase: true, brief: 'Tumba el centro de datos a lo grande y escapa con el disco. Te van a seguir.' },
+  { name: 'Doble o Nada',    scene: 'casino',   op: 'mixta',  car: 'suv',     chase: true, brief: 'La sala de recuento del casino. Mesas llenas, cámaras por todas partes y agentes de paisano entre los jugadores.' },
+  { name: 'Faraón',          scene: 'museo',    op: 'sigilo', car: 'sedan',   brief: 'Una máscara funeraria de oro de paso por la ciudad. El museo está vigilado por drones de noche.' },
+  { name: 'Vía Muerta',      scene: 'tren',     op: 'asalto', car: 'armored', chase: true, brief: 'Un tren de mercancías parado en la playa de vías lleva un vagón blindado con oro. Ábrelo y sal antes de que llegue la caballería.' },
   { name: 'Caja Negra',      scene: 'oficinas', op: 'sigilo', car: 'van',     brief: 'Las oficinas de una aseguradora. Los cajones están llenos de secretos y de dinero.' },
+  { name: 'Marea Alta',      scene: 'yate',     op: 'mixta',  car: 'suv',     brief: 'Fiesta en el yate del rival del Alcaide: un cuadro robado cuelga en su camarote. Entra por la pasarela y sal sin hacer olas.' },
+  { name: 'Ajuste de Cuentas', boss: 'coronel', car: 'armored', brief: 'El Coronel, el mercenario que heredó el imperio del Alcaide, te espera con su armadura y sus drones.' },
+  { name: 'Apagón Total',    scene: 'datos',    op: 'asalto', car: 'suv',     chase: true, brief: 'Tumba el centro de datos a lo grande y escapa con el disco. Te van a seguir.' },
   { name: 'Lingote',         scene: 'banco',    op: 'mixta',  car: 'armored', chase: true, brief: 'La reserva de oro del banco central. Más guardias, más cámaras, más oro.' },
   { name: 'Nube Negra',      scene: 'datos',    op: 'sigilo', car: 'sedan',   brief: 'Los servidores de un cártel. Hackea la sala blindada sin dejar rastro.' },
+  { name: 'Gran Premio',     scene: 'casino',   op: 'sigilo', car: 'sedan',   brief: 'Noche de gala en el casino. Mézclate, encuentra la sala de recuento y que nadie lo note hasta mañana.' },
   { name: 'Puerto Franco',   scene: 'almacen',  op: 'asalto', car: 'armored', chase: true, brief: 'El cártel mueve su dinero esta noche. Asalta el almacén y huye con los sacos.' },
+  { name: 'Corona',          scene: 'museo',    op: 'mixta',  car: 'armored', chase: true, brief: 'Las joyas de la corona, una sola noche en el museo. Está todo el mundo esperándote.' },
   { name: 'Última Cifra',    scene: 'banco',    op: 'asalto', car: 'armored', chase: true, brief: 'El golpe final antes de retirarte: la cámara más grande de la ciudad.' },
-  { name: 'Ajuste de Cuentas', boss: true,      car: 'armored', brief: 'El Alcaide ha vuelto, más fuerte y con todos sus hombres. Termina lo que empezaste.' },
+  { name: 'La Viuda',        boss: 'viuda',     car: 'armored', brief: 'La Viuda, la tiradora que nunca falla, quiere cobrarse lo que le debes. Su azotea está llena de puestos de tiro.' },
 ];
-const SCENES = { oficinas: 'Oficinas', almacen: 'Almacén del puerto', galeria: 'Galería de arte', banco: 'Banco', datos: 'Centro de datos', fortaleza: 'Fortaleza' };
+const SCENES = { oficinas: 'Oficinas', almacen: 'Almacén del puerto', galeria: 'Galería de arte', banco: 'Banco', datos: 'Centro de datos', joyeria: 'Joyería', casino: 'Casino', museo: 'Museo', tren: 'Tren de mercancías', yate: 'Yate', fortaleza: 'Fortaleza' };
 const OPS = {
   sigilo: { name: 'Sigilo', desc: 'Si alguien da el aviso, la policía llega enseguida. Sin que nadie te vea, el botín vale el doble.' },
   asalto: { name: 'Asalto', desc: 'La alarma suena desde el principio, la policía llega pronto y hay más guardias, pero llevas granadas y C4 de más, y la C4 revienta las puertas de seguridad.' },
@@ -112,19 +130,20 @@ const SETTINGS_KEY = 'apagon-ajustes';
 const settings = { music: 0.7, sfx: 0.9, vib: true, sens: 1, laser: true };
 try { const q = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; for (const k in settings) if (typeof q[k] === typeof settings[k]) settings[k] = q[k]; } catch (e) { /* sin ajustes guardados */ }
 const lim = (v, a, b) => Math.min(b, Math.max(a, v)); settings.music = lim(settings.music, 0, 1); settings.sfx = lim(settings.sfx, 0, 1); settings.sens = lim(settings.sens, 0.5, 2);
-const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3] };
-const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco' };
+const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3], joyas: ['joyas', 1.5], efectivo: ['maletines de efectivo', 1.35], reliquia: ['máscara de oro', 1.8], cuadro: ['cuadro robado', 1.7], oro: ['oro del vagón blindado', 1.6] };
+const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco', joyeria: 'joyas', casino: 'efectivo', museo: 'reliquia', yate: 'cuadro', tren: 'oro' };
 const CARS = { van: 'Furgoneta', sedan: 'Berlina', suv: 'Todoterreno', armored: 'Furgón blindado' };
 function mission(level) {
   if (level <= MISSIONS.length) return { scene: 'fortaleza', op: 'mixta', ...MISSIONS[level - 1], n: level };
   const r = mulberry32(level * 7919), pick = a => a[Math.floor(r() * a.length)], boss = level % BOSS_EVERY === 0;
-  return { n: level, name: boss ? `El Alcaide · ${level / BOSS_EVERY}` : `Contrato ${level}`, boss, scene: boss ? 'fortaleza' : pick(['oficinas', 'almacen', 'galeria', 'banco', 'datos']),
+  const bt = ['boss', 'coronel', 'viuda'][(level / BOSS_EVERY - 1) % 3];
+  return { n: level, name: boss ? `${FOES[bt].title} · ${level / BOSS_EVERY}` : `Contrato ${level}`, boss: boss && bt, scene: boss ? 'fortaleza' : pick(['oficinas', 'almacen', 'galeria', 'banco', 'datos', 'joyeria', 'casino', 'museo', 'tren', 'yate']),
     op: pick(['sigilo', 'asalto', 'mixta']), car: pick(['van', 'sedan', 'suv', 'armored']), chase: !boss && r() < 0.45, brief: 'Un contrato más en la ciudad. Cada vez pagan más y vigilan mejor.' };
 }
 // Objetivos: primarios (obligatorios) y secundarios (dan dinero y estrellas). Salen de la misión, así el briefing ya los conoce
 function missionObjectives(level) {
   const M = mission(level), r = mulberry32(level * 7349 + 11), L = LOOTS[SCENE_LOOT[M.scene]] || ['el botín'];
-  const prim = M.boss ? [{ id: 'boss', text: 'Abate al Alcaide' }, { id: 'escape', text: 'Sal de la fortaleza' }]
+  const prim = M.boss ? [{ id: 'boss', text: `Abate a ${(FOES[M.boss] || FOES.boss).title}` }, { id: 'escape', text: 'Sal de la fortaleza' }]
     : [{ id: 'loot', text: `Roba ${L[0]}` }, { id: 'escape', text: 'Escapa en el vehículo de extracción' }];
   const stealth = M.op !== 'asalto' && !M.boss, pool = [];
   if (stealth && !LOOT_ALARM[M.scene]) pool.push({ id: 'noalarm', text: 'Que no salte la alarma' });
@@ -171,17 +190,17 @@ function policeDelay() {
   return Math.max(12, (room.boss ? 25 : POLICE_DELAY[room.op] || 40) - run.level * 0.7 - room.civKilled * 6) * (1 + 0.15 * sk('contacts'));
 }
 function pickFoe(level, roll) {
-  const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite'] : [])];
+  const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite', 'taser'] : []), ...(level >= 6 ? ['drone'] : [])];
   return pool[Math.floor(roll * pool.length)];
 }
 // Casillas: suelo, muro, caja, mesa/coche (bajo), estantería, ventana, seto, árbol/planta, escalera,
 // vacío (fuera de la primera planta), contenedor y barrera de hormigón (cubre de las balas, no de la vista)
 // puerta de seguridad (se hackea o se abre con código), rack de servidores, cajas de seguridad, terminal y muro blindado de la cámara
 const FLOOR = 0, WALL = 1, CRATE = 2, LOW = 3, SHELF = 4, GLASS = 5, BUSH = 6, TREE = 7, STAIRS = 8, VOID = 9, METAL = 10, BARRIER = 11;
-const SECURE = 12, RACK = 13, DEPOSIT = 14, TERMINAL = 15, VWALL = 16, DOOR = 17; // puerta normal: se abre al acercarse; cerrada tapa la vista
-const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0];
-const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1];
-const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1];
+const SECURE = 12, RACK = 13, DEPOSIT = 14, TERMINAL = 15, VWALL = 16, DOOR = 17, WATER = 18; // puerta normal: se abre al acercarse; cerrada tapa la vista
+const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1];
+const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0];
+const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0];
 const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIR8 = [...DIR4, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -359,6 +378,11 @@ const KINDS = {
   galeria:  [['gallery', 0.6], ['lounge', 0.2], ['office', 0.1], ['corridor', 0.1]],
   banco:    [['lobby', 0.35], ['office', 0.35], ['lounge', 0.1], ['storage', 0.1], ['corridor', 0.1]],
   datos:    [['servers', 0.55], ['office', 0.25], ['storage', 0.1], ['corridor', 0.1]],
+  joyeria:  [['jewelry', 0.5], ['office', 0.25], ['storage', 0.15], ['corridor', 0.1]],
+  casino:   [['casino', 0.6], ['lounge', 0.15], ['office', 0.15], ['corridor', 0.1]],
+  museo:    [['museum', 0.45], ['gallery', 0.3], ['corridor', 0.15], ['office', 0.1]],
+  tren:     [['wagon', 1]],
+  yate:     [['cabin', 0.5], ['lounge', 0.35], ['corridor', 0.15]],
 };
 function furnish(L, place, rand, ri, fk, scene) {
   const w = L.x1 - L.x0 + 1, h = L.y1 - L.y0 + 1, cell = () => (L.y0 + ri(h)) * W + L.x0 + ri(w);
@@ -372,6 +396,25 @@ function furnish(L, place, rand, ri, fk, scene) {
   } else if (kind === 'gallery') { // galería: mármol, peanas con obras en cuadrícula (y cuadros en las paredes)
     floor = 8; rgb = '255,225,190';
     for (let y = L.y0 + 1; y < L.y1; y += 3) for (let x = L.x0 + 1; x < L.x1; x += 3) if (rand() < 0.75) place([y * W + x], LOW);
+  } else if (kind === 'jewelry') { // joyería: madera oscura, vitrinas iluminadas a lo largo de las paredes y una isla
+    floor = 16; rgb = '255,235,200';
+    for (let x = L.x0 + 1; x < L.x1; x += 2) { place([L.y0 * W + x], LOW); if (h > 4) place([L.y1 * W + x], LOW); }
+    if (w >= 6 && h >= 5) { const c = lcell(L); place([c - 1, c, c + 1], LOW); }
+  } else if (kind === 'casino') { // casino: moqueta roja, filas de tragaperras y mesas de juego
+    floor = 12; rgb = '255,200,150';
+    for (let x = L.x0 + 1; x < L.x1; x++) if (x % 3) place([L.y0 * W + x], RACK);
+    for (let y = L.y0 + 2; y < L.y1; y += 3) for (let x = L.x0 + 1; x + 1 < L.x1; x += 4) if (rand() < 0.8) place([y * W + x, y * W + x + 1], LOW);
+  } else if (kind === 'museum') { // museo: mármol, vitrinas grandes en el centro y peanas
+    floor = 8; rgb = '255,228,195';
+    const c = lcell(L); if (w >= 6 && h >= 5) place([c, c + 1, c + W, c + W + 1], LOW);
+    for (const k of [(L.y0 + 1) * W + L.x0 + 1, (L.y0 + 1) * W + L.x1 - 1, (L.y1 - 1) * W + L.x0 + 1, (L.y1 - 1) * W + L.x1 - 1]) if (rand() < 0.8) place([k], LOW);
+  } else if (kind === 'wagon') { // vagón de mercancías: cajas y palés
+    floor = 6; rgb = '210,200,170';
+    for (let i = 2 + ri(3); i > 0; i--) { const c = cell(); place(rand() < 0.5 ? [c] : [c, c + 1], CRATE); }
+  } else if (kind === 'cabin') { // camarote: parqué, cama y mesilla
+    floor = 4; rgb = '255,210,160';
+    const c = L.y0 * W + L.x0 + 1; place([c, c + 1, c + W, c + W + 1], LOW);
+    if (rand() < 0.6) place([(L.y1) * W + L.x1], TREE);
   } else if (kind === 'lobby') { // vestíbulo del banco: mármol, mostrador con hueco y columnas
     floor = 8; rgb = '255,230,200';
     const cy = L.y0 + Math.max(1, Math.floor(h * 0.35)), gap = L.x0 + 1 + ri(Math.max(1, w - 2)), cells = [];
@@ -440,10 +483,39 @@ function layoutHeist(level, rand, ri, M) {
     else if (inB(x, y, 2)) FK[c] = 2; // acera alrededor del edificio
     else FK[c] = vnoise(x, y, 5) > 0.58 ? 1 : 0;
   }
-  const leaves = [], doors = [];
-  splitRooms(bx0 + 1, by0 + 1, bx1 - 1, by1 - 1, leaves, doors, rand, ri);
-  const inner = doors.length; // las que siguen son las de la fachada
-  doors.push([bx0, by0 + 2 + ri(bh - 5), 1], [bx1, by0 + 2 + ri(bh - 5), 1], [bx0 + 2 + ri(bw - 5), by0, 0], [bx0 + 2 + ri(bw - 5), by1, 0]);
+  const leaves = [], doors = [], scene0 = M.scene;
+  let inner;
+  if (scene0 === 'tren') { // tren de mercancías: vagones en fila sobre la vía, cada uno una sala con puertas a los lados
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) { const c = y * W + x; G[c] = FLOOR; zone[c] = 0; FK[c] = 17; }
+    const wy0 = ((by0 + by1) >> 1) - 2, wy1 = wy0 + 4;
+    for (let y = wy0 - 1; y <= wy1 + 1; y++) for (let x = 1; x < W - 1; x++) FK[y * W + x] = 13; // la vía cruza todo el patio
+    for (let x = bx0, n = 0; x + 7 <= bx1; n++) {
+      const x1 = Math.min(bx1, x + 8 + ri(3));
+      for (let y = wy0; y <= wy1; y++) for (let xx = x; xx <= x1; xx++) { const c = y * W + xx; if (xx === x || xx === x1 || y === wy0 || y === wy1) G[c] = METAL; else { zone[c] = 1; FK[c] = 6; } }
+      leaves.push({ x0: x + 1, y0: wy0 + 1, x1: x1 - 1, y1: wy1 - 1 });
+      const dx = x + 2 + ri(Math.max(1, x1 - x - 4)); doors.push([dx, wy0, 0], [dx, wy1, 0]);
+      x = x1 + 3;
+    }
+    inner = doors.length;
+    doors.push([bx0, by0 + 2, 1], [bx1, by0 + 2, 1], [bx0 + 2, by0, 0], [bx0 + 2 + ri(bw - 5), by1, 0]); // en el tren no hay fachada: huecos sin efecto
+  } else if (scene0 === 'yate') { // yate amarrado: casco blanco, cubierta de teca alrededor y camarotes dentro; agua alrededor
+    for (let y = 1; y < H - 9; y++) for (let x = 1; x < W - 1; x++) { const c = y * W + x; if (!inB(x, y, 0)) { G[c] = WATER; FK[c] = 14; } }
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+      const c = y * W + x, edge = x === bx0 || x === bx1 || y === by0 || y === by1, ring = x === bx0 + 3 || x === bx1 - 3 || y === by0 + 3 || y === by1 - 3, cab = x > bx0 + 3 && x < bx1 - 3 && y > by0 + 3 && y < by1 - 3;
+      FK[c] = 15; zone[c] = cab ? 1 : 0;
+      G[c] = edge || (ring && x >= bx0 + 3 && x <= bx1 - 3 && y >= by0 + 3 && y <= by1 - 3) ? WALL : FLOOR;
+      if (x > bx1 - 3 && (y === by0 || y === by1)) G[c] = WATER; // proa afilada
+    }
+    splitRooms(bx0 + 4, by0 + 4, bx1 - 4, by1 - 4, leaves, doors, rand, ri);
+    inner = doors.length;
+    const gx = bx0 + 3 + ri(bw - 8); // pasarela desde el muelle
+    for (let y = by1 + 1; y < H - 8; y++) for (let x = gx - 1; x <= gx + 2; x++) { const c = y * W + x; G[c] = FLOOR; FK[c] = 15; }
+    doors.push([bx0 + 3, by0 + 5, 1], [bx1 - 3, by0 + 5, 1], [bx0 + 5 + ri(bw - 12), by0 + 3, 0], [gx, by1, 0], [bx0 + 5 + ri(bw - 12), by1 - 3, 0]);
+  } else {
+    splitRooms(bx0 + 1, by0 + 1, bx1 - 1, by1 - 1, leaves, doors, rand, ri);
+    inner = doors.length; // las que siguen son las de la fachada
+    doors.push([bx0, by0 + 2 + ri(bh - 5), 1], [bx1, by0 + 2 + ri(bh - 5), 1], [bx0 + 2 + ri(bw - 5), by0, 0], [bx0 + 2 + ri(bw - 5), by1, 0]);
+  }
   for (const [dx, dy, v] of doors) carveDoor(dx, dy, v);
   const nearDoor = nearDoors(doors);
   const windows = (x0, y0, x1, y1, near, n) => { // ventanas en la fachada: dejan ver (y que te vean) y se rompen
@@ -453,13 +525,13 @@ function layoutHeist(level, rand, ri, M) {
       if (cells.every(c => map[c] === WALL && !near(c))) cells.forEach(c => { map[c] = GLASS; });
     }
   };
-  windows(bx0, by0, bx1, by1, nearDoor, 6 + ri(5));
+  if (scene0 !== 'tren') windows(bx0, by0, bx1, by1, nearDoor, scene0 === 'yate' ? 8 : 6 + ri(5));
   const front = doors[inner + 3][0], start = (H - 7) * W + front, exit = (H - 7) * W + (front < W / 2 ? W - 5 : 4); // te dejan en la acera frente a la puerta; te recogen al otro extremo de la calle
 
   // Primera planta sobre parte del edificio, con escaleras desde la planta baja
   const stairs = [];
   let uleaves = [], udoors = [], nearUDoor = () => false;
-  if (rand() < 0.65) {
+  if (scene0 !== 'tren' && scene0 !== 'yate' && rand() < 0.65) {
     const left = rand() < 0.5, ux0 = left ? bx0 : bx0 + Math.floor(bw * 0.4), ux1 = left ? bx0 + Math.ceil(bw * 0.6) : bx1;
     maps.push(new Uint8Array(W * H).fill(VOID)); fks.push(new Uint8Array(W * H).fill(3));
     useFloor(1);
@@ -504,7 +576,7 @@ function layoutHeist(level, rand, ri, M) {
     }
   };
   let place = placer(start, c => nearDoor(c) || nearStairs(c) || md(c, start) <= 3 || md(c, exit) <= 2);
-  const scene = M.scene, hasVault = scene === 'banco' || scene === 'datos' || (scene === 'galeria' && rand() < 0.5);
+  const scene = M.scene, hasVault = ['banco', 'datos', 'joyeria', 'casino', 'tren'].includes(scene) || ((scene === 'galeria' || scene === 'museo') && rand() < 0.5);
   const vaultProps = place => { // la cámara del botín, a oscuras: cajas de seguridad en el banco, racks en los datos
     const L = vault, row = [];
     if (hasVault) for (let y = L.y0; y <= L.y1; y++) for (let x = L.x0; x <= L.x1; x++) fks[lootUp ? 1 : 0][y * W + x] = 10;
@@ -519,11 +591,11 @@ function layoutHeist(level, rand, ri, M) {
 
   // Patio: aparcamiento con plazas pintadas junto a la furgoneta
   const px0 = bx1 + 3, px1 = W - 5, py1 = (H >> 1) - 3;
-  for (let y = 2; y <= py1; y++) for (let x = px0; x <= px1; x++) FK[y * W + x] = 7;
+  if (scene0 !== 'yate') for (let y = 2; y <= py1; y++) for (let x = px0; x <= px1; x++) if (G[y * W + x] === FLOOR && FK[y * W + x] !== 13) FK[y * W + x] = 7;
   for (const row of [2, 6]) if (row + 1 <= py1) for (let x = px0 + 1; x <= px1; x += 2) if (rand() < 0.65) place([row * W + x, (row + 1) * W + x], LOW);
   const yard = (m = 1) => { // casilla libre del patio, lejos de la fachada y del aparcamiento
     const x = 1 + ri(W - 2), y = 1 + ri(H - 2);
-    return inB(x, y, m + 2) || (x >= px0 - 1 && y <= py1 + 1) || y >= H - 9 ? -1 : y * W + x;
+    return inB(x, y, m + 2) || (x >= px0 - 1 && y <= py1 + 1) || y >= H - 9 || FK[y * W + x] === 13 ? -1 : y * W + x; // ni en la calle ni sobre la vía
   };
   // Garita: caseta de 4x4 con puerta y una bombilla dentro
   for (let tries = 0; tries < 30; tries++) {
@@ -551,6 +623,10 @@ function layoutHeist(level, rand, ri, M) {
   for (let y = by0 + 4; y < by1; y += 9 + ri(4)) { lamps.push(street(y * W + bx1 + 2)); if (rand() < 0.4) lamps.push(street(y * W + bx0 - 2)); }
   lamps.push({ ...street(4 * W + ((px0 + px1) >> 1)), r: 190 });
   for (let x = 3 + ri(3); x < W - 3; x += 8 + ri(3)) lamps.push({ ...street((H - 8) * W + x), r: 230 }); // farolas de la calle: alumbran la calzada
+  if (scene0 === 'yate') { // farolillos en cubierta y tumbonas
+    for (const c of [(by0 + 1) * W + bx0 + 1, (by0 + 1) * W + bx1 - 4, (by1 - 1) * W + bx0 + 1, (by1 - 1) * W + bx1 - 4]) lamps.push(lampAt(c, 140, 0, '255,215,160', 'floor', -12));
+    for (let k = 0; k < 8; k++) { const x = bx0 + 1 + ri(bw - 2), y = rand() < 0.5 ? by0 + 1 + ri(2) : by1 - 1 - ri(2); place([y * W + x], LOW); }
+  }
 
   if (maps[1]) { // amueblar la primera planta
     useFloor(1);
@@ -630,7 +706,7 @@ function buildRoom(level, seed) {
     if (!maps[s.z]) continue;
     useFloor(s.z);
     const c = cellOf(s.x, s.y);
-    if (BLOCK_SIGHT[map[c]] || map[c] === VOID) continue;
+    if (BLOCK_SIGHT[map[c]] || map[c] === VOID || map[c] === WATER) continue;
     // hx/hy: dónde está la luminaria dibujada (en perspectiva, por encima de la base); ahí se le dispara
     const [hx, hy] = s.kind === 'street' ? [6, -30] : s.kind === 'floor' ? [0, -20] : s.kind === 'wallN' ? [0, -2] : [0, 2];
     r.lamps.push({ ...s, hx: s.x + hx, hy: s.y + hy, on: true, poly: visPoly(s.x, s.y, 0, Math.PI, s.r, 96) });
@@ -638,8 +714,8 @@ function buildRoom(level, seed) {
   if (r.loot) { useFloor(r.loot.z); r.loot.poly = visPoly(r.loot.x, r.loot.y, 0, Math.PI, 80, 40); } // su propio brillo dorado
   useFloor(0);
   if (boss) {
-    const b = makeEnemy('boss', 10 * W + 24, rand);
-    b.hp = b.maxHp = Math.round(FOES.boss.hp * (1 + 0.5 * (level / BOSS_EVERY - 1)));
+    const bt = FOES[M.boss] ? M.boss : 'boss', b = makeEnemy(bt, 10 * W + 24, rand);
+    b.hp = b.maxHp = Math.round(FOES[bt].hp * (1 + 0.35 * (level / BOSS_EVERY - 1)));
     b.a = Math.PI; b.lookA = b.a; // mira hacia la entrada
     r.enemies.push(b); r.boss = b;
   }
@@ -682,7 +758,7 @@ function buildRoom(level, seed) {
     for (let k = PUBLIC[M.scene] + Math.floor(level / 5), tries = 0; k > 0 && civ.length && tries < 200; tries++) {
       const c = civ[ri(civ.length)], q = center(c);
       if (r.enemies.some(e => Math.hypot(e.x - q.x, e.y - q.y) < T * 2)) continue;
-      const e = makeEnemy('civil', c, rand);
+      const e = makeEnemy(level >= 5 && k <= 1 + (level > 12) && rand() < 0.6 ? 'agent' : 'civil', c, rand); // algún agente de paisano entre ellos
       e.look = CIV_LOOKS[ri(CIV_LOOKS.length)]; e.skin = ri(SKIN.length);
       r.enemies.push(e); k--;
     }
@@ -819,7 +895,7 @@ function startRoom() {
   bakeAll();
   if (room.entryHatch) { useFloor(room.entryHatch.z); decal({ ...room.entryHatch, r: 13, hatch: true }); useFloor(0); }
   cam.x = room.p.x; cam.y = room.p.y;
-  if (room.boss) banner('Sala final: abate al Alcaide para abrir la salida');
+  if (room.boss) banner(`Sala final: abate a ${FOES[room.boss.type].title.replace(/^El /, 'el ').replace(/^La /, 'la ')} para abrir la salida`);
   sticks.L = sticks.R = null; mouse.down = false;
   state = 'play';
   show(null);
@@ -1332,7 +1408,7 @@ let resultsNext = null;
 function winScreen(stats) {
   winStats = stats;
   state = 'win';
-  $('winInfo').textContent = run.level - 1 >= MISSIONS.length ? `Campaña completada: has acabado con el Alcaide para siempre. Puedes seguir en modo infinito: cada ${BOSS_EVERY} misiones vuelve un jefe más duro.` : `Has abatido al Alcaide en «${mission(run.level - 1).name}». La campaña sigue: quedan ${MISSIONS.length - run.level + 1} misiones.`;
+  $('winInfo').textContent = run.level - 1 >= MISSIONS.length ? `Campaña completada: has acabado con la Viuda, el último cabo suelto. Puedes seguir en modo infinito: cada ${BOSS_EVERY} misiones vuelve un jefe más duro.` : `Has abatido a ${FOES[mission(run.level - 1).boss || 'boss'].title} en «${mission(run.level - 1).name}». La campaña sigue: quedan ${MISSIONS.length - run.level + 1} misiones.`;
   show('win');
   save();
 }
@@ -1395,7 +1471,7 @@ function brief(after) {
   $('bfNum').textContent = `MISIÓN ${String(M.n).padStart(2, '0')} / ${MISSIONS.length}${M.n > MISSIONS.length ? ' · MODO INFINITO' : ''} · ${(SCENES[M.scene] || '').toUpperCase()}`;
   $('bfName').textContent = M.name.toUpperCase();
   $('bfTags').innerHTML = [`<span class="tag op-${M.op}">${M.boss ? 'Jefe' : OPS[M.op].name}</span>`, `<span class="tag">${car}</span>`, M.chase ? '<span class="tag">Persecución</span>' : '', vault ? '<span class="tag">Cámara blindada</span>' : ''].join('');
-  const objs = missionObjectives(run.level), info = M.boss ? ['La salida está bloqueada mientras el Alcaide siga en pie; a media vida pide refuerzos.']
+  const objs = missionObjectives(run.level), info = M.boss ? [`La salida está bloqueada mientras ${(FOES[M.boss] || FOES.boss).title} siga en pie; a media vida pide refuerzos.`, M.boss === 'coronel' ? 'Su armadura aguanta de frente: rodéalo. Lanza proyectiles explosivos y suelta drones.' : M.boss === 'viuda' ? 'Apunta un segundo con el láser antes de disparar y cambia de puesto tras cada tiro: muévete en perpendicular.' : 'Lanza ráfagas de ametralladora y granadas.']
     : [vault ? 'La cámara tiene puerta de seguridad: busca el código en los cajones, en el supervisor o en la terminal, o hackéala.' : M.scene === 'galeria' ? 'Puede que la pieza esté en una cámara cerrada.' : 'Registra cajones, estanterías y cuerpos: lo que saquees va a la bolsa.',
       OPS[M.op].desc, LOOT_ALARM[M.scene] ? 'El botín tiene sensor: al cogerlo saltará la alarma.' : 'El botín no tiene alarma: si nadie te ve, nadie sabrá que te lo has llevado.',
       PUBLIC[M.scene] ? 'Hay civiles: si te ven armado o ven un cuerpo, huirán a llamar a la policía. Con el cuchillo se les reduce sin hacerles daño.' : '',
@@ -1558,7 +1634,7 @@ function noise(x, y, r, kind, src, tx = x, ty = y) {
   }
 }
 function hear(e, x, y, kind, d) {
-  if (FOES[e.type].civil) { // los civiles no investigan: si suenan tiros o gritos, huyen; si no, miran
+  if (hidden(e)) { // los civiles no investigan: si suenan tiros o gritos, huyen; si no, miran (el agente de paisano se descubre)
     if (e.state === 'subdued' || e.state === 'panic') return;
     if (kind === 'shot' || kind === 'boom' || kind === 'eshot' || kind === 'alert') panic(e, x, y); else if (e.state === 'patrol') suspicious(e, x, y);
     return;
@@ -1672,7 +1748,7 @@ function updateEnemy(e, dt) {
     if (e.hp <= 0) { hurtEnemy(e, 0, e.a); return; }
   }
   if (e.radioT > 0 && (e.radioT -= dt) <= 0 && !room.alarm) triggerAlarm(e.radioMsg || 'Han dado el aviso');
-  if (F.civil) { updateCivil(e, dt); return; }
+  if (F.civil || (F.agent && !e.revealed)) { updateCivil(e, dt); return; }
   e.fireT -= dt; e.moveA = null;
   if (F.boss && !e.called && e.hp < e.maxHp / 2) { e.called = true; reinforcements(); } // aunque no te vea en ese momento
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
@@ -1686,7 +1762,7 @@ function updateEnemy(e, dt) {
   if (sees) {
     if (combat) enterCombat(e);
     else {
-      e.aware += dt * (smell ? Math.max(X, 1.2) : X) * (0.8 + 2.6 * Math.max(0, 1 - d / range)) * (1 + 0.5 * e.alertLvl) * (disguised() && d > 45 && !smell ? 0.3 : 1);
+      e.aware += dt * (smell ? Math.max(X, 1.2) : F.drone ? Math.max(X, 0.9) : X) * (0.8 + 2.6 * Math.max(0, 1 - d / range)) * (1 + 0.5 * e.alertLvl) * (disguised() && d > 45 && !smell ? 0.3 : 1);
       if (e.aware >= 1) enterCombat(e);
       else if (e.aware > 0.3 && e.state !== 'investigate') suspicious(e, p.x, p.y);
     }
@@ -1706,7 +1782,7 @@ function updateEnemy(e, dt) {
       if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '?!', '#ffb547');
       investigate(e, b.x, b.y, true);
       noise(e.x, e.y, 260, 'alert', e, b.x, b.y);
-      if (!room.alarm && !F.melee && !(e.radioT > 0)) { e.radioT = 3.5; e.radioMsg = b.state === 'subdued' ? 'Han encontrado a un civil maniatado y avisan a la policía' : 'Han encontrado un cuerpo y avisan a la policía'; }
+      if (!room.alarm && !F.melee && !(e.radioT > 0)) { e.radioT = F.drone ? 0.2 : 3.5; e.radioMsg = b.state === 'subdued' ? 'Han encontrado a un civil maniatado y avisan a la policía' : 'Han encontrado un cuerpo y avisan a la policía'; }
       for (const g of room.enemies) if (!FOES[g.type].civil && g !== e) g.alertLvl = Math.max(g.alertLvl, 1); // todos más atentos
     }
   }
@@ -1742,11 +1818,20 @@ function updateEnemy(e, dt) {
           moveTo(e, p.x, p.y, F.run, dt);
           if (d < e.r + p.r + 10 && e.fireT <= 0 && e.reactT <= 0) { e.fireT = 1 / F.rate; hurtPlayer(F.dmg, toP); sfx('bite', e.x, e.y); }
         } else if (F.boss) {
-          if (d > 240 && e.burstT <= 0) moveTo(e, p.x, p.y, F.walk, dt);
-          bossAttack(e, dt, d);
+          if (e.type === 'viuda') viudaAttack(e, dt, d);
+          else { if (d > 240 && e.burstT <= 0) moveTo(e, p.x, p.y, F.walk, dt); bossAttack(e, dt, d); }
         } else if (F.post) { // francotirador: aviso rojo, un segundo apuntando y un tiro pesado
           if (e.aimT > 0) { if ((e.aimT -= dt) <= 0) snipe(e); }
           else if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.15) { e.aimT = 1.1; warn(e, '#ff5444'); sfx('charge', e.x, e.y); }
+        } else if (F.taser) { // se acerca corriendo y, a menos de 110, dispara los dardos: te deja aturdido
+          if (d > 95) moveTo(e, p.x, p.y, F.run, dt);
+          if (d < 110 && e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.35) {
+            e.fireT = 1 / F.rate; p.stunT = 1.2; hurtPlayer(F.dmg, toP); sfx('zap', e.x, e.y);
+            fx({ k: 'zap', x: e.x, y: e.y, tx: p.x, ty: p.y, life: 0.25 }); popup(p.x, p.y - 24, 'ATURDIDO', '#ffd98a');
+          }
+        } else if (F.drone) { // te sigue a distancia y avisa a los guardias de dónde estás
+          if (d > 140) moveTo(e, p.x, p.y, F.run, dt);
+          if ((e.fireT -= dt) <= 0) { e.fireT = 1.2; noise(e.x, e.y, 360, 'alert', e, p.x, p.y); if (!room.alarm) triggerAlarm('Un dron de vigilancia te ha localizado'); }
         } else {
           if (d > 170) moveTo(e, p.x, p.y, F.walk * 1.5, dt);
           if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, toP)) < 0.3) enemyShoot(e);
@@ -1766,9 +1851,17 @@ function updateEnemy(e, dt) {
   const want = face ?? e.moveA ?? e.a, turn = (e.aimT > 0 ? 0.4 : F.boss ? 2.5 : F.shield && combat ? 2 : combat ? 6 : 3.2) * dt;
   e.a += clamp(angDiff(e.a, want), -turn, turn);
 }
+function reveal(e) {
+  if (e.revealed) return;
+  e.revealed = true; e.look = { ...e.look, gun: [12, 4.5] }; e.state = 'patrol';
+  if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 26, '¡AGENTE DE PAISANO!', '#ff5444');
+  enterCombat(e);
+}
+const hidden = e => FOES[e.type].civil || (FOES[e.type].agent && !e.revealed); // los que no cuentan (aún) como enemigos
 const found = () => room.bodies.filter(b => !b.hidden).concat(room.enemies.filter(c => c.state === 'subdued'));
 // Civiles: pasean; si te ven armado (poco a poco, según lo expuesto que vayas) o ven un cuerpo, gritan, huyen hacia la calle y llaman
 function panic(e, x, y) {
+  if (FOES[e.type].agent) { reveal(e); return; } // el agente de paisano no huye: saca la pistola
   if (e.state === 'panic' || e.state === 'subdued') return;
   e.state = 'panic'; e.callT = 4.5; e.path = null; e.aware = 1;
   if (!e.ped) { const p = room.p; e.fleeTo = dist(room.start, p) > dist(room.exit, p) ? room.start : room.exit; } // huye por la salida que le pille lejos de ti
@@ -1921,7 +2014,7 @@ function bossAttack(e, dt, d) {
     }
   } else if (e.fireT <= 0 && e.reactT <= 0) {
     noise(e.x, e.y, 500, 'eshot', e);
-    if (d > 140 && Math.random() < 0.35) { bossNade(e); e.fireT = rage ? 1 : 1.7; }
+    if (d > 140 && Math.random() < (e.type === 'coronel' ? 0.55 : 0.35)) { bossNade(e); if (e.type === 'coronel' && rage) bossNade(e); e.fireT = rage ? 1 : 1.7; }
     else { e.burstT = rage ? 2.2 : 1.5; e.gunT = 0; e.fireT = e.burstT + (rage ? 0.9 : 1.6); }
   }
 }
@@ -1931,14 +2024,27 @@ function bossNade(e) {
   sfx('throw', e.x, e.y);
 }
 function reinforcements() {
-  const d = bfs(cellOf(room.p.x, room.p.y)), far = [];
+  const d = bfs(cellOf(room.p.x, room.p.y)), far = [], B = room.boss;
   for (let i = 0; i < d.length; i++) if (d[i] >= 8) far.push(i);
-  for (let k = 0; k < 3 && far.length; k++) {
-    const e = makeEnemy(k ? 'guard' : 'elite', far[(Math.random() * far.length) | 0], Math.random);
+  const kinds = B && B.type === 'coronel' ? ['drone', 'drone', 'elite', 'heavy'] : B && B.type === 'viuda' ? ['elite', 'taser', 'guard'] : ['elite', 'guard', 'guard'];
+  for (const k of kinds) {
+    if (!far.length) break;
+    const e = makeEnemy(k, far[(Math.random() * far.length) | 0], Math.random);
     room.enemies.push(e);
     enterCombat(e);
   }
-  banner('¡El Alcaide pide refuerzos!');
+  banner(`¡${B ? FOES[B.type].title : 'El jefe'} pide refuerzos!`);
+}
+// La Viuda: apunta un segundo con el láser, dispara fuerte y se va a otro puesto; si la hieren, también se mueve
+function viudaAttack(e, dt, d) {
+  if (e.relocT > 0) { e.relocT -= dt; if (e.spot && moveTo(e, e.spot.x, e.spot.y, FOES.viuda.run, dt)) e.relocT = 0; return; }
+  if (e.aimT > 0) { if ((e.aimT -= dt) <= 0) { snipe(e); relocate(e); } return; }
+  if (e.reactT <= 0 && e.fireT <= 0 && Math.abs(angDiff(e.a, ang(e, room.p))) < 0.12) { e.aimT = 1; warn(e, '#ff5444'); sfx('charge', e.x, e.y); }
+}
+function relocate(e) {
+  const d = bfs(cellOf(e.x, e.y)), far = [];
+  for (let i = 0; i < d.length; i++) if (d[i] >= 5 && d[i] <= 14) far.push(i);
+  if (far.length) { e.spot = center(far[(Math.random() * far.length) | 0]); e.relocT = 3; e.path = null; }
 }
 function banner(text) { room.banner = { text, t: 3.5 }; }
 function enemyShoot(e) {
@@ -1975,6 +2081,7 @@ function updatePlayer(dt) {
     sprint = !!(keys.ShiftLeft || keys.ShiftRight); mag = sneakOn && !sprint ? 0.45 : 1; // Mayús corre aunque el sigilo esté activado
     const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
   }
+  if (p.stunT > 0) { p.stunT -= dt; mag = 0; mx = my = 0; } // aturdido por el táser
   if (p.tired || !mag || room.drag) sprint = false;
   const speed = (room.drag ? 0.55 : 1) * (sprint ? 235 : mag <= SNEAK ? 78 * mag / SNEAK : 78 + 72 * (mag - SNEAK) / (1 - SNEAK));
   if (room.energyT > 0) { p.stam = 100; p.tired = false; } // bebida energética
@@ -2011,14 +2118,14 @@ function aimAndFire(dt, mx, my, mag, help) {
   } else if (mag > 0.1) aim = Math.atan2(my, mx);
   if (aim !== null) p.a += angDiff(p.a, aim) * Math.min(1, dt * 18 * settings.sens);
   tickReload(dt);
-  if (firing) shoot();
+  if (firing && !(p.stunT > 0)) shoot();
 }
 function assist(a) { // ayuda de apuntado suave para pantallas táctiles
   const p = room.p;
   let best = null, bd = 0.22;
   for (const e of room.enemies) {
     const d = dist(p, e), da = Math.abs(angDiff(a, ang(p, e)));
-    if (e.z === p.z && !FOES[e.type].civil && d < 420 && da < bd && lit(e.x, e.y, e.z)) { best = e; bd = da; }
+    if (e.z === p.z && !hidden(e) && d < 420 && da < bd && lit(e.x, e.y, e.z)) { best = e; bd = da; }
   }
   return best ? ang(p, best) : a;
 }
@@ -2164,11 +2271,12 @@ function bullet(x, y, a, speed, dmg, mine, bolt = false, extra) {
   room.bullets.push({ x, y, sx: x, sy: y, z: curZ, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, mine, bolt, life: 1.2, ...extra });
 }
 function hurtEnemy(e, dmg, a) {
+  if (FOES[e.type].armor && Math.abs(angDiff(e.a, a + Math.PI)) < 1.2) { dmg *= 0.5; sparks(e.x, e.y, 3); } // la armadura del Coronel aguanta de frente
   e.hp -= dmg;
   e.x += Math.cos(a) * Math.min(10, 2 + dmg * 0.08); e.y += Math.sin(a) * Math.min(10, 2 + dmg * 0.08);
   blood(e.x, e.y, a, 8);
   const civ = FOES[e.type].civil;
-  if (e.hp > 0) { if (civ) panic(e, room.p.x, room.p.y); else enterCombat(e); return; }
+  if (e.hp > 0) { if (civ) panic(e, room.p.x, room.p.y); else { if (FOES[e.type].agent) e.revealed = true; enterCombat(e); if (e.type === 'viuda' && !(e.relocT > 0) && Math.random() < 0.3) relocate(e); } return; }
   if (civ) { // matar civiles: penaliza, acelera a la policía y aterroriza a los que lo ven
     room.civKilled++;
     if (room.alarm && !room.police) room.policeT = Math.max(3, room.policeT - 8);
@@ -2186,7 +2294,7 @@ function hurtEnemy(e, dmg, a) {
   for (let i = 0; i < 3; i++) decal({ x: e.x + Math.cos(a) * (6 + i * 14), y: e.y + Math.sin(a) * (6 + i * 14), z: e.z, r: 6 - i, a, seed: Math.random(), splat: true }); // rastro hacia donde sale despedido
   room.enemies.splice(room.enemies.indexOf(e), 1);
   if (!FOES[e.type].melee && !civ && Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10), z: e.z });
-  if (e === room.boss) { room.boss = null; banner('¡Alcaide abatido! La salida está abierta'); cam.shake = 14; }
+  if (e === room.boss) { room.boss = null; banner(`¡${FOES[e.type].title} abatido! La salida está abierta`); cam.shake = 14; }
   if (e.keycard) popup(e.x, e.y - 34, 'Lleva una tarjeta', '#8fb8ff');
   sfx('gore', e.x, e.y);
 }
@@ -2434,7 +2542,7 @@ function update(dt) {
     }
   }
   const locked = room.boss || (room.loot && !room.loot.taken) || (room.road && room.exitCar.state !== 'wait');
-  if (!p.dead && p.z === 0 && dist(p, room.exit) < 40) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? 'Salida bloqueada: abate al Alcaide' : room.loot && !room.loot.taken ? 'Primero roba el botín' : 'Espera: el vehículo de extracción está llegando'); }
+  if (!p.dead && p.z === 0 && dist(p, room.exit) < 40) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? `Salida bloqueada: abate a ${FOES[room.boss.type].title}` : room.loot && !room.loot.taken ? 'Primero roba el botín' : 'Espera: el vehículo de extracción está llegando'); }
 }
 
 // ================= Horneado del mapa =================
@@ -2447,7 +2555,7 @@ const LBS = 0.5; // escala de las capas de luz horneadas
 const grainCv = document.createElement('canvas');
 grainCv.width = grainCv.height = 128;
 { const g = grainCv.getContext('2d'); for (let i = 0; i < 2600; i++) { const v = Math.random() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${(0.03 + Math.random() * 0.05).toFixed(3)})`; g.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random(), 1 + Math.random()); } }
-const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0]; // proyectan oclusión sobre el suelo vecino
+const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0]; // proyectan oclusión sobre el suelo vecino
 function bakeAll() {
   BS = Math.min(touchMode ? 1.25 : 1.5, Math.sqrt((touchMode ? 5e6 : 9e6) / (W * T * H * T)));
   for (let z = 0; z < maps.length; z++) {
@@ -2542,6 +2650,35 @@ function bakeRegion(z, x0, y0, x1, y1) {
 }
 function drawFloor(g, x, y, k, z) {
   const X = x * T, Y = y * T, h = hash(x, y, 7);
+  if (k === 12) { // moqueta de casino: roja con rombos dorados
+    g.fillStyle = '#3a0f16'; g.fillRect(X, Y, T, T);
+    g.fillStyle = 'rgba(201,166,74,0.35)'; for (const [dx, dy] of [[10, 10], [30, 30], [30, 10], [10, 30]]) { g.beginPath(); g.moveTo(X + dx, Y + dy - 4); g.lineTo(X + dx + 4, Y + dy); g.lineTo(X + dx, Y + dy + 4); g.lineTo(X + dx - 4, Y + dy); g.fill(); }
+    return;
+  }
+  if (k === 13 || k === 17) { // grava de la playa de vías; en la vía, traviesas y raíles
+    g.fillStyle = '#23211e'; g.fillRect(X, Y, T, T);
+    for (let i = 0; i < 12; i++) { g.fillStyle = hash(x, y, i) < 0.5 ? '#2e2b27' : '#181614'; g.fillRect(X + hash(x, y, i + 31) * T, Y + hash(x, y, i + 57) * T, 2, 2); }
+    if (k === 13) { g.fillStyle = '#3a2a1c'; for (let i = 0; i < 4; i++) g.fillRect(X + i * 10 + 2, Y + 4, 5, T - 8); g.fillStyle = '#7a7f86'; g.fillRect(X, Y + 9, T, 3); g.fillRect(X, Y + T - 12, T, 3); g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(X, Y + 9, T, 1); g.fillRect(X, Y + T - 12, T, 1); }
+    return;
+  }
+  if (k === 14) { // agua del puerto: oscura, con reflejos que cambian por casilla
+    g.fillStyle = '#081420'; g.fillRect(X, Y, T, T);
+    g.strokeStyle = 'rgba(120,170,210,0.18)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) { const yy = Y + 6 + hash(x, y, i) * 28, xx = X + hash(x, y, i + 9) * 24; g.beginPath(); g.moveTo(xx, yy); g.quadraticCurveTo(xx + 6, yy - 2, xx + 12, yy); g.stroke(); }
+    return;
+  }
+  if (k === 15) { // cubierta de teca: tablas con juntas
+    g.fillStyle = '#6a4a2e'; g.fillRect(X, Y, T, T);
+    g.fillStyle = 'rgba(0,0,0,0.35)'; for (let i = 0; i < 5; i++) g.fillRect(X, Y + i * 8 + 7, T, 1);
+    g.fillStyle = 'rgba(255,220,170,0.06)'; g.fillRect(X + (hash(x, y, 2) * 30 | 0), Y, 10, T);
+    return;
+  }
+  if (k === 16) { // madera oscura y pulida de la joyería
+    g.fillStyle = '#24170f'; g.fillRect(X, Y, T, T);
+    g.fillStyle = 'rgba(255,200,140,0.05)'; g.fillRect(X, Y, T, T / 2);
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(X + (y % 2 ? 20 : 0), Y, 1, T); g.fillRect(X, Y + T - 1, T, 1);
+    return;
+  }
   if (k === 11) { // calzada
     g.fillStyle = '#121519'; g.fillRect(X, Y, T, T);
     for (let i = 0; i < 8; i++) { g.fillStyle = hash(x, y, i) < 0.5 ? '#1a1e24' : '#0c0f12'; g.fillRect(X + hash(x, y, i + 31) * T, Y + hash(x, y, i + 57) * T, 1.5, 1.5); }
@@ -2624,6 +2761,9 @@ const LOOK = {
   boss:   { body: '#5e2020', trim: '#2a0f0f', legs: '#1c1414', head: 'helmet', hat: '#2c2c2e', gun: [27, 9], pads: true },
   player: { body: '#24473f', trim: '#173029', legs: '#18211f', head: 'beanie', hat: '#14191b' },
   police: { body: '#2b55a8', trim: '#183066', legs: '#141c33', head: 'police', hat: '#15214a', gun: [12, 4.5], star: true },
+  taser:  { body: '#34466a', trim: '#c9a64a', legs: '#1d222d', head: 'cap', hat: '#1b2335', gun: [9, 5] },
+  coronel: { body: '#3f4a30', trim: '#232b1a', legs: '#1c2016', head: 'helmet', hat: '#2a3320', gun: [24, 8], pads: true },
+  viuda:  { body: '#1c1218', trim: '#7a1a2a', legs: '#120c10', head: 'hood', hat: '#1a1016', gun: [32, 4] },
   swatp:  { body: '#1e2a45', trim: '#0f1629', legs: '#0e1322', head: 'helmet', hat: '#162038', gun: [20, 5], star: true, pads: true },
 };
 // civiles: ropa de calle o de oficina, sin arma; pelo en vez de gorra
@@ -2712,7 +2852,19 @@ function drawDog(c, x, y, a, r, walk, mv) {
   c.restore();
 }
 // Cadáver tendido: brazos y piernas abiertos (según su semilla), el arma caída al lado y un charco que se extiende
+function drawDrone(c, x, y, a, broken) { // dron: cuatro rotores, cuerpo con cámara y luces (de lado, roto en el suelo)
+  c.save(); c.translate(x, y); c.rotate(a);
+  c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(6, 10, 14, 10, 0, 0, 7); c.fill(); // sombra: vuela
+  c.strokeStyle = '#2a2f36'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-9, -9); c.lineTo(9, 9); c.moveTo(-9, 9); c.lineTo(9, -9); c.stroke();
+  for (const [dx, dy] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) {
+    c.fillStyle = broken ? 'rgba(60,64,70,0.9)' : `rgba(170,180,190,${(0.25 + 0.15 * Math.sin(room.time * 50 + dx)).toFixed(3)})`; c.beginPath(); c.arc(dx, dy, broken ? 3 : 7, 0, 7); c.fill();
+  }
+  c.fillStyle = '#3a414a'; c.fillRect(-6, -5, 12, 10); c.fillStyle = '#0a0c0e'; c.beginPath(); c.arc(6, 0, 2.5, 0, 7); c.fill();
+  if (!broken) { c.fillStyle = Math.sin(room.time * 8) > 0 ? '#ff3a3a' : '#3a0d0d'; c.fillRect(-7, -1, 2, 2); }
+  c.restore();
+}
 function drawCorpse(c, b) {
+  if (b.type === 'drone') { drawDrone(c, b.x, b.y, b.a, true); return; }
   const L = b.look || LOOK[b.type], r = FOES[b.type].r, k = Math.min(1, (b.t || 0) / 6), h = i => hash(Math.floor(b.seed * 1e6), i, 7);
   c.save(); c.translate(b.x, b.y); c.rotate(b.a);
   const pr = (b.type === 'dog' ? 12 : 19) * (0.35 + 0.65 * k); // charco
@@ -2783,10 +2935,10 @@ function drawTile(g, M, x, y, z) {
   } else if (t === WALL || t === GLASS || t === VWALL) {
     const fence = border(x, y);
     const facade = z === 0 && !fence && [c - 1, c + 1, c - W, c + W].some(n => !BLOCK_WALK[M[n]] && !zone[n]);
-    const steel = t === VWALL;
-    const top = fence ? '#1c2128' : steel ? '#3a434e' : facade ? '#3b3431' : '#2d3745', face = fence ? '#121519' : steel ? '#232930' : facade ? '#271f1d' : '#1b222c';
+    const steel = t === VWALL, hull = t === WALL && fks[z][c] === 15; // casco blanco del yate
+    const top = hull ? '#cfd4da' : fence ? '#1c2128' : steel ? '#3a434e' : facade ? '#3b3431' : '#2d3745', face = hull ? '#8f97a0' : fence ? '#121519' : steel ? '#232930' : facade ? '#271f1d' : '#1b222c';
     g.fillStyle = top; g.fillRect(X, Y, T, T);
-    if (facade && t === WALL) { // ladrillo visto
+    if (facade && t === WALL && !hull) { // ladrillo visto
       g.fillStyle = 'rgba(0,0,0,0.2)';
       for (let r = 0; r < T; r += 8) { g.fillRect(X, Y + r, T, 1); for (let j = (r / 8) % 2 ? 8 : 0; j < T; j += 16) g.fillRect(X + j, Y + r, 1, 8); }
     } else if (steel) { // muro blindado: placas remachadas
@@ -2819,6 +2971,23 @@ function drawTile(g, M, x, y, z) {
     g.strokeStyle = '#6f553a'; g.lineWidth = 3; g.strokeRect(X + 3.5, Y + 3.5, T - 7, T - 7);
     g.strokeStyle = '#3d2e1d'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X + 6, Y + 6); g.lineTo(X + T - 6, Y + T - 6); g.stroke();
     g.fillStyle = '#a89a80'; for (const [dx, dy] of [[5, 5], [T - 6, 5], [5, T - 6], [T - 6, T - 6]]) g.fillRect(X + dx, Y + dy, 1.5, 1.5);
+  } else if (t === LOW && fks[z][c] === 16) { // vitrina de joyería: base de terciopelo, cristal y piezas que brillan
+    g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(X + 4, Y + 6, T - 4, T - 6);
+    g.fillStyle = '#3a1418'; g.fillRect(X + 3, Y + 4, T - 6, T - 8);
+    g.fillStyle = '#e8c45a'; for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(X + 9 + (i % 2) * 20 + hash(x, y, i) * 4, Y + 13 + (i >> 1) * 14, 2.6, 0, 7); g.fill(); }
+    g.fillStyle = '#bfe6ff'; g.beginPath(); g.arc(X + 20, Y + 20, 2.4, 0, 7); g.fill();
+    g.fillStyle = 'rgba(180,220,255,0.22)'; g.fillRect(X + 3, Y + 4, T - 6, T - 8); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(X + 5, Y + 6, T - 10, 1.5);
+  } else if (t === LOW && fks[z][c] === 12) { // mesa de juego: tapete verde con fichas
+    g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(X + 3, Y + 7, T, T - 8);
+    g.fillStyle = '#4a2e18'; g.fillRect(X, Y + 3, T, T - 6); g.fillStyle = '#1f5a34'; g.fillRect(X + 2, Y + 5, T - 4, T - 10);
+    for (let i = 0; i < 3; i++) { g.fillStyle = ['#c9302c', '#e8e4da', '#2a5ac9'][i]; g.beginPath(); g.arc(X + 8 + hash(x, y, i) * 24, Y + 12 + hash(x, y, i + 5) * 14, 2.5, 0, 7); g.fill(); }
+  } else if (t === RACK && fks[z][c] === 12) { // tragaperras: mueble con pantalla encendida
+    g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(X + 6, Y + 6, T - 6, T - 4);
+    g.fillStyle = '#2a1a3a'; g.fillRect(X + 4, Y + 2, T - 8, T - 4); g.fillStyle = '#c9a64a'; g.fillRect(X + 4, Y + 2, T - 8, 3);
+    g.fillStyle = '#ffd98a'; g.fillRect(X + 9, Y + 9, T - 18, 10); g.fillStyle = '#c9302c'; for (let i = 0; i < 3; i++) g.fillRect(X + 11 + i * 6, Y + 11, 4, 6);
+  } else if (t === LOW && fks[z][c] === 15) { // tumbona de cubierta
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(X + 9, Y + 6, 26, 32);
+    g.fillStyle = '#d9d4c8'; g.fillRect(X + 7, Y + 4, 24, 30); g.fillStyle = '#e9e5da'; g.fillRect(X + 7, Y + 4, 24, 9);
   } else if (t === LOW && fks[z][c] === 8 && M[c - 1] !== LOW && M[c + 1] !== LOW) { // peana con una obra: busto, jarrón o escultura
     g.fillStyle = '#d8d3c8'; g.fillRect(X + 9, Y + 9, 22, 22); g.fillStyle = '#b3ada0'; g.fillRect(X + 9, Y + 27, 22, 4);
     const art = Math.floor(hash(x, y, 31) * 3);
@@ -2995,6 +3164,20 @@ function drawLoot(L) {
     const dg = c.createLinearGradient(x - 7, y - 7, x + 7, y + 7); dg.addColorStop(0, '#ffffff'); dg.addColorStop(0.5, '#a8d8ff'); dg.addColorStop(1, '#5a9ad0');
     c.fillStyle = dg; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x - 4, y - 7); c.lineTo(x + 4, y - 7); c.lineTo(x + 7, y - 3); c.lineTo(x, y + 7); c.closePath(); c.fill();
     c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x + 7, y - 3); c.moveTo(x - 4, y - 7); c.lineTo(x, y + 7); c.lineTo(x + 4, y - 7); c.stroke();
+  } else if (L.type === 'joyas') { // bandeja de terciopelo con collares y anillos
+    c.fillStyle = '#2a0f18'; c.fillRect(x - 11, y - 8, 22, 16);
+    c.strokeStyle = '#e8c45a'; c.lineWidth = 1.4; c.beginPath(); c.arc(x - 3, y - 1, 6, 0.2, Math.PI - 0.2); c.stroke(); c.beginPath(); c.arc(x + 4, y + 1, 4, 0.3, Math.PI - 0.3); c.stroke();
+    c.fillStyle = '#9fe0ff'; c.beginPath(); c.arc(x - 3, y + 5, 2, 0, 7); c.fill(); c.fillStyle = '#ff6a8a'; c.beginPath(); c.arc(x + 6, y - 5, 2, 0, 7); c.fill(); c.fillStyle = '#7fe0a8'; c.beginPath(); c.arc(x - 8, y - 5, 1.8, 0, 7); c.fill();
+  } else if (L.type === 'efectivo') { // dos maletines abiertos llenos de billetes
+    for (const dx of [-6, 6]) { c.fillStyle = '#1a1a1a'; c.fillRect(x + dx - 6, y - 7, 12, 14); c.fillStyle = '#7fa86a'; c.fillRect(x + dx - 5, y - 6, 10, 12); c.fillStyle = '#a8c890'; for (let i = 0; i < 3; i++) c.fillRect(x + dx - 5, y - 5 + i * 4, 10, 1.5); }
+  } else if (L.type === 'reliquia') { // máscara funeraria de oro
+    const mg = c.createLinearGradient(x - 8, y - 9, x + 8, y + 9); mg.addColorStop(0, '#ffe39a'); mg.addColorStop(1, '#a8761e');
+    c.fillStyle = '#1e3a6a'; c.beginPath(); c.ellipse(x, y, 11, 10, 0, 0, 7); c.fill(); // tocado azul
+    c.fillStyle = mg; c.beginPath(); c.ellipse(x, y + 1, 7, 9, 0, 0, 7); c.fill();
+    c.fillStyle = '#1a1208'; c.fillRect(x - 5, y - 2, 3, 1.5); c.fillRect(x + 2, y - 2, 3, 1.5); c.fillRect(x - 1, y + 5, 2, 3);
+  } else if (L.type === 'cuadro') { // cuadro con marco dorado
+    c.fillStyle = '#b8902a'; c.fillRect(x - 12, y - 9, 24, 18); c.fillStyle = '#2a4a6a'; c.fillRect(x - 9, y - 6, 18, 12);
+    c.fillStyle = '#e8b04a'; c.beginPath(); c.arc(x + 3, y - 2, 3, 0, 7); c.fill(); c.fillStyle = '#3a5a2a'; c.fillRect(x - 9, y + 2, 18, 4);
   } else if (L.type === 'disco') { // disco cifrado con su tira de LED
     c.fillStyle = '#121418'; c.fillRect(x - 9, y - 6, 18, 12); c.fillStyle = '#2a2f37'; c.fillRect(x - 9, y - 6, 18, 2);
     c.fillStyle = `rgba(90,200,255,${(0.6 + 0.4 * Math.sin(t * 6)).toFixed(3)})`; c.fillRect(x - 6, y + 2, 12, 1.5);
@@ -3060,7 +3243,10 @@ function drawFxGlow(here) {
       ctx.fillStyle = glow(ctx, f.x, f.y, r, '255,140,50', 0.3 * (1 - f.t / 0.5)); ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
     } else if (f.k === 'ring') {
       ctx.strokeStyle = `rgba(255,240,220,${(0.6 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 1 + 4 * (1 - k);
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, 7); ctx.stroke();    } else if (f.k === 'zap') { // dardos del táser: arco eléctrico quebrado
+      ctx.strokeStyle = `rgba(170,210,255,${(0.9 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(f.x, f.y);
+      for (let i = 1; i <= 6; i++) { const t = i / 6; ctx.lineTo(f.x + (f.tx - f.x) * t + (i < 6 ? rnd(-6, 6) : 0), f.y + (f.ty - f.y) * t + (i < 6 ? rnd(-6, 6) : 0)); }
+      ctx.stroke();
     }
   }
   for (const q of room.parts) if (here(q) && q.glow) { ctx.fillStyle = `rgba(255,${Math.floor(120 + 100 * Math.min(1, q.t * 2))},60,${Math.min(1, q.t * 2).toFixed(3)})`; ctx.fillRect(q.x - 1, q.y - 1, 2, 2); }
@@ -3156,6 +3342,7 @@ function render() {
     const d = Math.hypot(e.x - (e.px ?? e.x), e.y - (e.py ?? e.y)); // zancada según lo que se ha movido desde el último fotograma
     e.px = e.x; e.py = e.y; e.walk = (e.walk || 0) + d * 0.22; e.mv = (e.mv || 0) * 0.85 + Math.min(1, d / 1.5) * 0.15;
     if (e.type === 'dog') { drawDog(ctx, e.x, e.y, e.a, e.r, e.walk * 1.4, e.mv); continue; }
+    if (e.type === 'drone') { drawDrone(ctx, e.x, e.y, e.a, false); continue; }
     const L = e.look || LOOK[e.type], sub = e.state === 'subdued';
     drawHuman(ctx, e.x, e.y, e.a, sub ? e.r * 0.9 : e.r, L, { gun: L.gun, walk: e.walk, mv: sub ? 0 : e.mv, skin: SKIN[(e.skin ??= Math.floor(Math.random() * SKIN.length))], shield: FOES[e.type].shield, phone: e.state === 'panic' && e.callT > 0, tied: sub });
     if ((e.radioT > 0 || (e.state === 'panic' && e.callT > 0)) && lit(e.x, e.y, e.z)) { // dando el aviso: si lo paras a tiempo, no llega
@@ -3407,14 +3594,14 @@ function drawHud() {
   const col = ['#62d6ad', '#ffb547', '#ff8a5c', '#ff5444'][heat];
   ctx.textAlign = 'center';
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
-  ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.filter(e => !FOES[e.type].civil).length} HOSTILES`, uw / 2, y);
+  ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.filter(e => !hidden(e)).length} HOSTILES`, uw / 2, y);
   ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = heat >= 2 && Math.sin(room.time * 8) > 0 ? '#ffd98a' : col;
   ctx.fillText(label, uw / 2, y + 14);
   if (!room.boss) for (let i = 0; i < 4; i++) { ctx.fillStyle = i <= heat ? col : 'rgba(125,140,160,0.3)'; ctx.fillRect(uw / 2 - 31 + i * 16, y + 24, 14, 3); } // pips de alerta
   if (room.boss) {
     const b = room.boss, bw2 = Math.min(300, uw - 320);
     ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ff5444';
-    ctx.fillText('EL ALCAIDE', uw / 2, y + 38);
+    ctx.fillText(FOES[b.type].title.toUpperCase(), uw / 2, y + 38);
     ctx.fillStyle = 'rgba(14,19,26,0.7)'; ctx.fillRect(uw / 2 - bw2 / 2, y + 54, bw2, 7);
     ctx.fillStyle = '#ff5444'; ctx.fillRect(uw / 2 - bw2 / 2, y + 54, bw2 * Math.max(0, b.hp) / b.maxHp, 7);
   }
@@ -3736,6 +3923,7 @@ function sfx(k, x, y) {
     case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
     case 'plant': burst(0.03, 0.2, 2500, 'bandpass', 3); tone(1800, 1800, 0.05, 0.08, 'square', 0.12); break;
     case 'click': tone(1600, 1600, 0.03, 0.12); tone(800, 800, 0.05, 0.1, 'square', 0.05); break;
+    case 'zap': burst(0.25, 0.25 * v, 3500, 'bandpass', 4); tone(90, 70, 0.25, 0.08 * v, 'sawtooth'); break;
     case 'heal': tone(520, 780, 0.18, 0.09, 'sine'); tone(780, 1040, 0.2, 0.07, 'sine', 0.12); break;
     case 'horn': tone(410, 400, 0.35, 0.06 * v, 'square'); tone(520, 510, 0.35, 0.05 * v, 'square'); break;
     case 'door': burst(0.08, 0.12 * v, 900, 'bandpass', 2); tone(180, 120, 0.12, 0.05 * v, 'triangle'); break;

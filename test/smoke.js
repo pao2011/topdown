@@ -47,7 +47,8 @@ const path = require('path');
     const b = A.buildRoom(8, 5);
     return { seen: [...seen].sort(), bosses: b.enemies.filter(e => e.type === 'boss').length, boss: b.boss && b.boss.type };
   });
-  assert.deepStrictEqual(kinds, { seen: ['dog', 'elite', 'guard', 'heavy', 'shield', 'sniper'], bosses: 1, boss: 'boss' });
+  for (const t of ['dog', 'elite', 'guard', 'heavy', 'shield', 'sniper', 'taser', 'drone', 'agent']) assert(kinds.seen.includes(t), `debe aparecer el enemigo ${t}: ${kinds.seen}`);
+  assert.deepStrictEqual([kinds.bosses, kinds.boss], [1, 'boss']);
 
   // Menú → briefing de la misión 1 → a jugar
   await page.tap('#bPlay');
@@ -537,7 +538,7 @@ const path = require('path');
   // Consumibles: con vendas y herido, H cura poco a poco
   await dp.evaluate(() => { const A = __apagon; A.room.enemies.length = 0; A.run.items = { vendas: 1 }; A.run.hp = 50; });
   await dp.keyboard.press('KeyH');
-  await dp.waitForFunction(() => __apagon.run.hp >= 74, null, { timeout: 6000 }).catch(() => {});
+  await dp.waitForFunction(() => !__apagon.room.heal && __apagon.run.hp > 50, null, { timeout: 6000 }).catch(() => {});
   assert.deepStrictEqual(await dp.evaluate(() => [Math.round(__apagon.run.hp), __apagon.run.items.vendas]), [75, 0], 'las vendas curan 25');
   // Ajustes desde la pausa (se guardan) y una partida nueva en la ranura 2 que no pisa la 1
   await dp.keyboard.press('Escape'); await dp.click('#bPauseSet');
