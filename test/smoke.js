@@ -336,6 +336,12 @@ const path = require('path');
   await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(300);
   assert(await ev(() => !!__apagon.room.chase && __apagon.state === 'play'), 'en la misión 4 te persiguen al huir');
+  // Caer en la persecución solo la repite a ella, con el botín y la bolsa
+  await ev(() => { __apagon.room.cash = 77; __apagon.hurtPlayer(9999); });
+  await page.waitForFunction(() => __apagon.state === 'over', null, { timeout: 5000 });
+  assert.strictEqual(await page.textContent('#bRetry'), 'Repetir persecución');
+  await page.click('#bRetry');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, !!__apagon.room.chase, __apagon.room.chase.t < 1, __apagon.room.cash, __apagon.run.level, __apagon.run.hp]), ['play', true, true, 0, 4, 100]);
   await ev(() => { const C = __apagon.room.chase; C.trafT = 1e9; C.traffic.length = 0; window.__near = f => !f.dead && f.mode === 'follow' && Math.abs(f.vx) < 25 && Math.abs(f.y - C.car.y - f.dy) < 4; }); // sin tráfico que tape; ya colocado a tu lado
   await page.waitForFunction(() => __apagon.room.chase.foes.some(__near), null, { timeout: 8000 });
   const aim = await ev(() => { const C = __apagon.room.chase, p = __apagon.room.p, f = C.foes.find(__near); __apagon.run.hp = 5000; __apagon.run.weapons[__apagon.run.cur].ammo = 12; p.reloadT = 0; window.__f = C.foes.slice(); window.__h = __f.map(f => f.hp); return Math.atan2(f.y - p.y, f.x - p.x); });

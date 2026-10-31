@@ -637,6 +637,13 @@ function startRoom() {
   save();
 }
 function retryRoom() {
+  if (room.chase) { // caer en la persecución solo repite la persecución, con lo que llevabas al subir al coche
+    const { cash, run: r } = room.chaseSnap;
+    run = { ...JSON.parse(r), snap: run.snap, hp: run.maxHp };
+    room.cash = cash;
+    startChase(); state = 'play'; show(null);
+    return;
+  }
   const snap = run.snap;
   run = { ...JSON.parse(snap), snap };
   startRoom();
@@ -650,6 +657,7 @@ const CAR_TOUGH = { van: 1, sedan: 1.15, suv: 0.85, armored: 0.6 }; // daño que
 const LANES = [-127, 0, 127], LANE_V = [300, 350, 400]; // carriles y velocidad del tráfico de cada uno
 function startChase() {
   const lv = run.level;
+  if (!room.chaseSnap) { const { snap, ...rest } = run; room.chaseSnap = { cash: room.cash, run: JSON.stringify(rest) }; }
   room.chase = { t: 0, len: Math.min(95, 55 + lv * 2.5), speed: 520, roadW: 380, scroll: 0, car: { x: 0, y: 0, vx: 0, vy: 0 }, foes: [], traffic: [], spawnT: 1.5, trafT: 0.5, killed: 0, crashT: 0, done: false, doneT: 0 };
   Object.assign(room, { bullets: [], nades: [], fx: [], parts: [], flashes: [], texts: [], rings: [], warns: [], enemies: [], act: null, introT: 0 });
   document.body.classList.add('chase'); // en la carretera sobran C4, ruido y cuchillo
@@ -943,7 +951,10 @@ function brief(after) {
 function gameOver(title, msg) {
   state = 'over';
   $('overTitle').textContent = title;
-  $('overInfo').textContent = `${msg} Puedes reintentarla con el equipo con el que entraste.`;
+  const chase = !!(room && room.chase);
+  $('overInfo').textContent = chase ? `${msg} Puedes repetir la persecución con el botín y lo que llevabas al subir al coche.` : `${msg} Puedes reintentarla con el equipo con el que entraste.`;
+  $('bRetry').textContent = chase ? 'Repetir persecución' : 'Reintentar';
+  $('bOverShop').hidden = chase; // la tienda reinicia la misión entera
   show('over');
 }
 // ---- Usar: registrar cajones, estanterías, cuerpos, cajas de seguridad y racks; hackear la terminal o la puerta de la cámara
