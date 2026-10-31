@@ -100,7 +100,7 @@ const path = require('path');
 
   // Oído: un ruido leve da sospecha; un disparo, investigación urgente
   const heard = await ev(() => {
-    const A = __apagon, e = A.room.enemies[0]; e.state = 'patrol';
+    const A = __apagon, e = A.room.enemies.find(e => e.type !== 'civil'); e.state = 'patrol';
     A.room.warns.length = 0;
     A.noise(e.x + 20, e.y, 100, 'whistle'); const s1 = e.state, warned = A.room.warns.some(w => w.e === e);
     A.noise(e.x + 20, e.y, 500, 'shot');
@@ -111,7 +111,7 @@ const path = require('path');
   // Todo oscuro: un guardia a tu espalda, fuera de la linterna, es un píxel negro
   const dark = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+    for (const e of r.enemies.filter(e => e.type !== 'civil')) for (let k = 0; k < 8; k++) {
       const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
       A.useFloor(e.z);
       if (r.loot && Math.hypot(e.x - r.loot.x, e.y - r.loot.y) < 90) continue; // el botín brilla por encima de la oscuridad a propósito
@@ -143,7 +143,7 @@ const path = require('path');
   // Vista: plantado delante de un guardia, acaba detectándote
   const placed = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+    for (const e of r.enemies.filter(e => e.type !== 'civil')) for (let k = 0; k < 8; k++) {
       const t = k * Math.PI / 4, c = Math.cos(t), s = Math.sin(t);
       A.useFloor(e.z);
       if (A.castRay(e.x, e.y, c, s, 90) >= 90) {
@@ -157,7 +157,7 @@ const path = require('path');
     return -1;
   });
   if (placed >= 0) {
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => window.__target.state === 'combat', null, { timeout: 5000 }).catch(() => {});
     assert.strictEqual(await ev(() => window.__target.state), 'combat', 'el guardia debe detectar al jugador');
     await shot('combat');
   } else console.warn('aviso: ningún guardia con hueco delante; se omite la prueba de vista');
@@ -172,7 +172,7 @@ const path = require('path');
   // Cuchillo por la espalda: eliminación silenciosa
   const behind = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies) {
+    for (const e of r.enemies.filter(e => e.type !== 'civil')) {
       const c = Math.cos(e.a), s = Math.sin(e.a);
       A.useFloor(e.z);
       if (A.castRay(e.x, e.y, -c, -s, 50) >= 50) { r.p.x = e.x - c * 30; r.p.y = e.y - s * 30; r.p.z = e.z; r.p.a = e.a; e.waitT = 5; e.lookT = 5; e.lookA = e.a; return r.enemies.length; }
@@ -188,16 +188,18 @@ const path = require('path');
   const shield = await ev(async () => {
     const A = __apagon, r = A.room, wait = ms => new Promise(f => setTimeout(f, ms));
     A.run.hp = 1000; // el escudo dispara al jugador; aquí solo importan las balas que recibe él
-    for (const e of r.enemies) for (let k = 0; k < 8; k++) {
+    for (const e of r.enemies.filter(e => e.type !== 'civil')) for (let k = 0; k < 8; k++) {
       const t = k * Math.PI / 4;
       A.useFloor(e.z);
       if (A.castRay(e.x, e.y, Math.cos(t), Math.sin(t), 45) < 45 || A.castRay(e.x, e.y, -Math.cos(t), -Math.sin(t), 45) < 45) continue;
       r.enemies.splice(0, r.enemies.length, e);
       Object.assign(e, { type: 'shield', r: 15, hp: 120, state: 'patrol', a: t, lookA: t, waitT: 9, lookT: 9 });
       const shoot = back => { const a = e.a + (back ? Math.PI : 0); r.bullets.push({ z: e.z, x: e.x + Math.cos(a) * 32, y: e.y + Math.sin(a) * 32, vx: -Math.cos(a) * 900, vy: -Math.sin(a) * 900, dmg: 26, mine: true, life: 1 }); };
-      shoot(false); await wait(150);
+      const settle = async () => { for (let i = 0; i < 20 && r.bullets.some(b => b.mine); i++) await wait(50); };
+      shoot(false); await settle();
       const front = e.hp;
-      e.a = t; shoot(true); await wait(150);
+      Object.assign(e, { state: 'patrol', aware: 0, a: t, lookA: t, waitT: 9, lookT: 9 }); // el golpe le hace girarse: otra vez de espaldas
+      shoot(true); await settle();
       return [front, e.hp];
     }
     return null;
@@ -207,7 +209,7 @@ const path = require('path');
 
   // Perro: te huele aunque vayas a oscuras y en sigilo, por la espalda
   const dog = await ev(async () => {
-    const A = __apagon, r = A.room, e = r.enemies[0];
+    const A = __apagon, r = A.room, e = r.enemies.find(e => e.type !== 'civil');
     for (let k = 0; e && k < 8; k++) {
       const t = k * Math.PI / 4;
       A.useFloor(e.z);
@@ -283,11 +285,11 @@ const path = require('path');
   assert.strictEqual(await ev(() => __apagon.state), 'play', 'sin botín la salida está cerrada');
   await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await page.waitForTimeout(200);
-  const alarm = await ev(() => { const r = __apagon.room; return { alarm: r.alarm, taken: r.loot.taken, timer: r.timer > 20 }; });
-  assert.deepStrictEqual(alarm, { alarm: false, taken: true, timer: true });
+  const alarm = await ev(() => { const r = __apagon.room; return { alarm: r.alarm, taken: r.loot.taken, timer: r.timer > 20, car: r.exitCar.state }; });
+  assert.deepStrictEqual(alarm, { alarm: false, taken: true, timer: true, car: 'coming' }, 'con el botín, el coche de extracción viene de camino');
   await shot('alarm');
   // Salida → resultados (rango, objetivos) → tienda → comprar arma y mejora → siguiente sala (con la vida llena aunque acabaras herido)
-  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 23; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 23; if (r.exitCar) Object.assign(r.exitCar, { state: 'wait', x: r.exit.x }); r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(200);
   assert.strictEqual(await ev(() => __apagon.state), 'results');
   assert.match(await page.textContent('#rsRank'), /^[SABC]$/);
@@ -342,13 +344,15 @@ const path = require('path');
     const c = r.enemies.find(e => e.type === 'civil'); if (!c) return null;
     r.enemies.splice(0, r.enemies.length, c); A.run.hp = 999; A.useFloor(c.z);
     for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4; if (A.castRay(c.x, c.y, Math.cos(t), Math.sin(t), 90) >= 90) { Object.assign(r.p, { x: c.x + Math.cos(t) * 70, y: c.y + Math.sin(t) * 70, z: c.z }); Object.assign(c, { a: t, lookA: t, waitT: 9, lookT: 9 }); break; } }
-    A.run.light = true; await wait(2500); const seen = c.state;
+    A.run.light = true; for (let i = 0; i < 20 && c.state !== "panic"; i++) await wait(250); const seen = c.state;
     r.enemies.forEach(e => { if (e.callT > 0) e.callT = 0.05; }); await wait(200);
     const called = r.alarm && !r.police;
     r.policeT = 0.05; await wait(300);
-    return { seen, called, police: r.police, cops: r.enemies.some(e => e.type === 'police' || e.type === 'swatp') };
+    const car = r.copCars.length > 0; r.copCars.forEach(c => { c.x = c.tx; }); await wait(200); // llegan en coche patrulla: que aparque ya
+    window.__civ = { ped: !!c.ped, aware: c.aware, exp: r.exposure, d: Math.hypot(c.x - r.p.x, c.y - r.p.y), disg: !!r.disguise, z: [c.z, r.p.z] };
+    return { seen, called, police: r.police && car, cops: r.enemies.some(e => e.type === 'police' || e.type === 'swatp') };
   });
-  if (civ) assert.deepStrictEqual(civ, { seen: 'panic', called: true, police: true, cops: true }); else console.warn('aviso: sin civiles en la misión 1');
+  if (civ) assert.deepStrictEqual(civ, { seen: 'panic', called: true, police: true, cops: true }, JSON.stringify(await ev(() => window.__civ))); else console.warn('aviso: sin civiles en la misión 1');
 
   // Sigilo (misión 2, almacén): puertas que tapan la vista, cámaras (te graban → aviso; de un tiro se rompen),
   // cuerpos que se arrastran y se esconden, y una moneda que atrae a un guardia
@@ -384,7 +388,8 @@ const path = require('path');
       r.enemies.push(guard); Object.assign(guard, { state: 'patrol', waitT: 9, lookT: 9, aware: 0 });
       for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; if (A.castRay(guard.x, guard.y, Math.cos(t), Math.sin(t), 260) >= 250) { Object.assign(r.p, { x: guard.x + Math.cos(t) * 240, y: guard.y + Math.sin(t) * 240, z: 0, a: t + Math.PI, noiseT: 0 }); break; } }
       document.getElementById('bNoise').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      await wait(900); out.coin = guard.state !== 'patrol';
+      for (let i = 0; i < 12 && guard.state === 'patrol'; i++) await wait(250); // la moneda tarda en caer
+      out.coin = guard.state !== 'patrol';
     }
     return out;
   });
@@ -414,7 +419,7 @@ const path = require('path');
   // Persecución (misión 4): al subir al coche te persiguen; el stick derecho dispara a sus coches; al perderlos, tienda
   await ev(() => { const A = __apagon; A.run.level = 4; A.startRoom(); const r = A.room; r.enemies.length = 0; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await page.waitForTimeout(200);
-  await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  await ev(() => { const r = __apagon.room; if (r.exitCar) Object.assign(r.exitCar, { state: 'wait', x: r.exit.x }); r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(300);
   assert(await ev(() => !!__apagon.room.chase && __apagon.state === 'play'), 'en la misión 4 te persiguen al huir');
   // Caer en la persecución solo la repite a ella, con el botín y la bolsa
@@ -461,7 +466,7 @@ const path = require('path');
     const W = r.W, M = r.maps[d.z], fl = [];
     for (const c of d.cells) for (const n of [c - 1, c + 1, c - W, c + W]) if (M[n] === 0) fl.push({ x: (n % W) * 40 + 20, y: ((n / W) | 0) * 40 + 20 });
     fl.sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y));
-    const at = o => { Object.assign(r.p, { x: o.x, y: o.y, z: o.z || d.z, vx: 0, vy: 0 }); };
+    const at = o => { Object.assign(r.p, { x: o.x, y: o.y, z: o.z ?? d.z, vx: 0, vy: 0 }); };
     at(fl[0]); await wait(50);
     A.use(); out.hack = r.act && [r.act.kind, r.act.label, r.act.time];
     await wait(500); A.use(); out.kept = d.hack > 0.3 && !r.act;
@@ -482,14 +487,14 @@ const path = require('path');
     return out;
   });
   assert(vault, 'la misión del banco debe tener puerta de cámara');
-  assert.deepStrictEqual(vault, { hack: ['door', 'Hackear la puerta', 18], kept: true, src: vault.src, cash: true, code: true, type: true, open: true });
-  assert(['body', 'Hackear la terminal'].includes(vault.src), 'el código sale del supervisor o de la terminal');
+  assert.deepStrictEqual(vault, { hack: ['door', 'Hackear la puerta', 18], kept: true, src: vault.src, cash: true, code: true, type: true, open: true }, JSON.stringify(vault));
+  assert(['body', 'Hackear la terminal (código y cámaras)'].includes(vault.src), 'el código sale del supervisor o de la terminal');
   await shot('vault');
   // Lo saqueado se cobra al escapar
   const bag = await ev(() => __apagon.room.cash);
   await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await page.waitForTimeout(200);
-  await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  await ev(() => { const r = __apagon.room; if (r.exitCar) Object.assign(r.exitCar, { state: 'wait', x: r.exit.x }); r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(300);
   assert.strictEqual(await ev(() => __apagon.state), 'results');
   await page.click('#bRsGo');

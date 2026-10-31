@@ -401,14 +401,15 @@ function layoutBoss() { // vestíbulo a la izquierda y una gran arena con column
 // Golpe: un edificio (a veces con primera planta) en medio de un patio con aparcamiento, garita,
 // contenedores y barreras. Llegas por la izquierda, el botín está en la sala más alejada y la furgoneta espera a la derecha
 function layoutHeist(level, rand, ri, M) {
-  W = Math.min(64, 44 + level * 2); H = Math.min(46, 32 + level);
+  W = Math.min(64, 44 + level * 2); H = Math.min(52, 38 + level); // abajo, 6 filas de calle con sus aceras
   newMap(0, 0);
   const G = maps[0], FK = fks[0];
-  const bx0 = 9 + ri(3), bx1 = W - 10 - ri(3), by0 = 5 + ri(2), by1 = H - 6 - ri(2), bw = bx1 - bx0, bh = by1 - by0;
+  const bx0 = 9 + ri(3), bx1 = W - 10 - ri(3), by0 = 5 + ri(2), by1 = H - 12 - ri(2), bw = bx1 - bx0, bh = by1 - by0;
   const inB = (x, y, m) => x >= bx0 - m && x <= bx1 + m && y >= by0 - m && y <= by1 + m;
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     const c = y * W + x;
-    if (inB(x, y, 0)) { FK[c] = 3; if (x === bx0 || x === bx1 || y === by0 || y === by1) G[c] = WALL; else zone[c] = 1; }
+    if (y >= H - 8) FK[c] = y >= H - 6 && y <= H - 3 ? 11 : 2; // calzada (dos carriles por sentido) y aceras
+    else if (inB(x, y, 0)) { FK[c] = 3; if (x === bx0 || x === bx1 || y === by0 || y === by1) G[c] = WALL; else zone[c] = 1; }
     else if (inB(x, y, 2)) FK[c] = 2; // acera alrededor del edificio
     else FK[c] = vnoise(x, y, 5) > 0.58 ? 1 : 0;
   }
@@ -426,7 +427,7 @@ function layoutHeist(level, rand, ri, M) {
     }
   };
   windows(bx0, by0, bx1, by1, nearDoor, 6 + ri(5));
-  const start = (H >> 1) * W + 2, exit = (by0 + 1 + ri(bh - 2)) * W + W - 3;
+  const front = doors[inner + 3][0], start = (H - 7) * W + front, exit = (H - 7) * W + (front < W / 2 ? W - 5 : 4); // te dejan en la acera frente a la puerta; te recogen al otro extremo de la calle
 
   // Primera planta sobre parte del edificio, con escaleras desde la planta baja
   const stairs = [];
@@ -495,7 +496,7 @@ function layoutHeist(level, rand, ri, M) {
   for (const row of [2, 6]) if (row + 1 <= py1) for (let x = px0 + 1; x <= px1; x += 2) if (rand() < 0.65) place([row * W + x, (row + 1) * W + x], LOW);
   const yard = (m = 1) => { // casilla libre del patio, lejos de la fachada y del aparcamiento
     const x = 1 + ri(W - 2), y = 1 + ri(H - 2);
-    return inB(x, y, m + 2) || (x >= px0 - 1 && y <= py1 + 1) ? -1 : y * W + x;
+    return inB(x, y, m + 2) || (x >= px0 - 1 && y <= py1 + 1) || y >= H - 9 ? -1 : y * W + x;
   };
   // Garita: caseta de 4x4 con puerta y una bombilla dentro
   for (let tries = 0; tries < 30; tries++) {
@@ -522,6 +523,7 @@ function layoutHeist(level, rand, ri, M) {
   for (let x = bx0; x <= bx1; x += 8 + ri(4)) lamps.push(street((by0 - 2) * W + x), street((by1 + 2) * W + x));
   for (let y = by0 + 4; y < by1; y += 9 + ri(4)) { lamps.push(street(y * W + bx1 + 2)); if (rand() < 0.4) lamps.push(street(y * W + bx0 - 2)); }
   lamps.push({ ...street(4 * W + ((px0 + px1) >> 1)), r: 190 });
+  for (let x = 3 + ri(3); x < W - 3; x += 8 + ri(3)) lamps.push({ ...street((H - 8) * W + x), r: 230 }); // farolas de la calle: alumbran la calzada
 
   if (maps[1]) { // amueblar la primera planta
     useFloor(1);
@@ -576,7 +578,8 @@ function layoutHeist(level, rand, ri, M) {
   }
   useFloor(0);
   return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, lamps, secure, terminal, idoors, vault: { ...vault, z: lootUp ? 1 : 0 },
-    spawnOk: i => !hasVault || lootUp || !(i % W >= vault.x0 && i % W <= vault.x1 && ((i / W) | 0) >= vault.y0 && ((i / W) | 0) <= vault.y1) };
+    road: { y0: H - 6, east: (H - 5) * T, west: (H - 3) * T },
+    spawnOk: i => ((i / W) | 0) < H - 9 && (!hasVault || lootUp || !(i % W >= vault.x0 && i % W <= vault.x1 && ((i / W) | 0) >= vault.y0 && ((i / W) | 0) <= vault.y1)) };
 }
 
 function buildRoom(level, seed) {
@@ -592,6 +595,7 @@ function buildRoom(level, seed) {
     mission: M, op: M.op, cash: 0, shownCash: 0, searched: new Set(), act: null, reinfT: 20, code: null, hasCode: false, codeDrawer: -1,
     doors: (L.secure || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, hack: 0 })),
     vault: L.vault || null, idoors: (L.idoors || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, t: 0, swing: 0 })), cams: [], camsOff: false, jams: 0, jamT: 0, drag: null,
+    road: L.road || null, traffic: [], trafT: 2, copCars: [], dropCar: null, exitCar: null,
     obj: missionObjectives(level), civKilled: 0, subdued: 0, policeT: 0, police: false, alarmBeforeLoot: false, vaultBy: null, escaped: false,
   };
   if (r.loot) r.loot.type = SCENE_LOOT[M.scene] || 'lingotes';
@@ -665,6 +669,19 @@ function buildRoom(level, seed) {
       const [dx, dy] = dirs[ri(dirs.length)], a0 = Math.atan2(-dy, -dx);
       if (castRay(q.x, q.y, -dx, -dy, 200) < 140 || r.cams.some(k => Math.hypot(k.x - q.x, k.y - q.y) < T * 7)) continue;
       r.cams.push({ x: q.x + dx * 17, y: q.y + dy * 17, z: 0, a0, a: a0, t: rand() * 6, on: true, spot: 0 });
+    }
+  }
+  if (r.road) { // te deja un coche en la acera; el de extracción llegará cuando tengas el botín; peatones por las aceras
+    const R = r.road, east = r.exit.x > r.start.x;
+    r.dropCar = { x: r.start.x, y: R.east, a: Math.PI / 2, v: 0, t: 1.4, kind: 'sedan', paint: '#3a3f48' };
+    r.exitCar = { state: 'away', x: east ? -80 : W * T + 80, y: R.east, a: east ? Math.PI / 2 : -Math.PI / 2, kind: M.car || 'van' };
+    for (let k = 2 + ri(3) + Math.floor(level / 5), tries = 0; k > 0 && tries < 60; tries++) {
+      const row = rand() < 0.6 ? H - 8 : H - 2, x = 3 + ri(W - 6);
+      if (Math.abs(x - r.start.x / T) < 8) continue;
+      const e = makeEnemy('civil', row * W + x, rand), x2 = clamp(x + (rand() < 0.5 ? -1 : 1) * (6 + ri(10)), 2, W - 3);
+      Object.assign(e, { ped: true, look: CIV_LOOKS[ri(CIV_LOOKS.length)], skin: ri(SKIN.length), wps: [center(row * W + x), center(row * W + x2)], fleeTo: { x: x < W / 2 ? T : (W - 1) * T, y: (row + 0.5) * T } });
+      e.goal = jitter(e.wps[1]);
+      r.enemies.push(e); k--;
     }
   }
   if (r.doors.length) r.obj.splice(0, 0, { id: 'vault', text: 'Abre la cámara acorazada', primary: true, state: 0 });
@@ -940,7 +957,7 @@ function updateChase(dt) {
   if (C.t < C.len && alive.length < 2 + (lv >> 2) && (C.spawnT -= dt) <= 0) {
     C.spawnT = rnd(2.2, 4.2);
     const pool = Object.keys(PURSUERS).filter(k => lv >= PURSUERS[k].from), fk = pool[Math.floor(Math.random() * pool.length)], P = PURSUERS[fk], hp = P.hp + lv * 8;
-    C.foes.push({ kind: fk, w: P.w, h: P.h, tall: P.tall, x: rnd(-rw / 2 + 40, rw / 2 - 40), y: car.y + 1100, vx: 0, rot: 0, hp, maxHp: hp, side: Math.random() < 0.5 ? -1 : 1, off: rnd(0, 200), dy: rnd(150, 420), mode: 'follow', modeT: rnd(3, 6), skill: rnd(0.45, 0.95), shootT: rnd(1, 2), gunT: 0, burst: 0, police: !!P.police, ph: rnd(0, 6.3) });
+    C.foes.push({ kind: fk, w: P.w, h: P.h, tall: P.tall, x: rnd(-rw / 2 + 40, rw / 2 - 40), y: car.y + 1100, vx: 0, rot: 0, hp, maxHp: hp, side: Math.random() < 0.5 ? -1 : 1, off: 0, dy: rnd(150, 420), mode: 'follow', modeT: rnd(3, 6), skill: rnd(0.45, 0.95), shootT: rnd(1, 2), gunT: 0, burst: 0, police: !!P.police, ph: rnd(0, 6.3) });
   }
   for (const f of C.foes) {
     const P = PURSUERS[f.kind];
@@ -948,8 +965,9 @@ function updateChase(dt) {
     f.hitT = Math.max(0, (f.hitT || 0) - dt);
     if ((f.modeT -= dt) <= 0) { // cambia de táctica: seguirte o lanzarse contra ti
       if (f.mode === 'follow' && lv >= 3 && Math.random() < (P.ram || 0.45)) { f.mode = 'ram'; f.modeT = 2.2; }
-      else { f.mode = 'follow'; f.modeT = rnd(3, 6); f.side = Math.random() < 0.5 ? -1 : 1; f.off = rnd(0, 200); f.dy = rnd(150, 420); }
+      else { f.mode = 'follow'; f.modeT = rnd(3, 6); f.side = Math.random() < 0.5 ? -1 : 1; f.dy = rnd(150, 420); f.off = rnd(0, Math.min(200, f.dy * 0.8)); } // siempre a la vista: de cerca, no muy abiertos
     }
+    f.off = Math.min(f.off, Math.max(0, (f.y - car.y) * 0.8)); // si se acerca, se cierra hacia el centro para no salirse de la vista
     let tx = f.mode === 'ram' ? car.x : car.x + f.side * f.off, ty = car.y + (f.mode === 'ram' ? (f.h + car.h) / 2 - 6 : f.dy);
     if (P.weave) tx += Math.sin(C.t * 2.6 + f.ph) * 70;
     for (const t of C.traffic) { // esquivan el tráfico que tienen delante, unos mejor que otros
@@ -1441,6 +1459,13 @@ function triggerAlarm(msg) {
   sfx('radio');
 }
 function spawnPolice(n) {
+  if (room.road) { // en coche patrulla: entra por un extremo de la calle, frena cerca de la entrada y bajan los agentes
+    for (let i = 0; i < Math.ceil(n / 3); i++) {
+      const fromLeft = Math.random() < 0.5, tx = clamp(room.start.x + rnd(-160, 160) + i * 70, 2 * T, (W - 2) * T);
+      room.copCars.push({ x: fromLeft ? -70 - i * 90 : W * T + 70 + i * 90, y: room.road.east, a: fromLeft ? Math.PI / 2 : -Math.PI / 2, tx, n: Math.min(3, n - i * 3), v: 320, parked: false, ph: Math.random() * 6 });
+    }
+    return;
+  }
   const cells = [];
   for (let y = 2; y < H - 2; y++) for (let x = 1; x <= 3; x++) if (!BLOCK_WALK[maps[0][y * W + x]]) cells.push(y * W + x);
   const z0 = curZ;
@@ -1697,6 +1722,7 @@ const found = () => room.bodies.filter(b => !b.hidden).concat(room.enemies.filte
 function panic(e, x, y) {
   if (e.state === 'panic' || e.state === 'subdued') return;
   e.state = 'panic'; e.callT = 4.5; e.path = null; e.aware = 1;
+  if (!e.ped) { const p = room.p; e.fleeTo = dist(room.start, p) > dist(room.exit, p) ? room.start : room.exit; } // huye por la salida que le pille lejos de ti
   if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '¡!', '#ff8a5c');
   sfx('scream', e.x, e.y);
   noise(e.x, e.y, 230, 'alert', e, x ?? room.p.x, y ?? room.p.y); // los gritos atraen a los guardias
@@ -1706,7 +1732,7 @@ function updateCivil(e, dt) {
   e.moveA = null;
   if (e.state === 'subdued') return;
   if (e.state === 'patrol' || e.state === 'suspicious') {
-    const R = F.vision * (0.6 + 0.4 * Math.min(1, room.exposure));
+    const R = F.vision * (0.6 + 0.4 * Math.min(1, room.exposure)) * (e.ped ? 0.6 : 1);
     if (same && d < R && !disguised() && Math.abs(angDiff(e.a, ang(e, p))) < 1.05 && los(e.x, e.y, p.x, p.y)) {
       e.aware += dt * Math.max(0.6, room.exposure) * (1 + 1.5 * (1 - d / R));
       if (e.aware >= 1) panic(e, p.x, p.y); else if (e.aware > 0.35) suspicious(e, p.x, p.y);
@@ -1723,7 +1749,8 @@ function updateCivil(e, dt) {
   } else if (e.state === 'panic') { // corre a la calle con el móvil en la mano
     if (e.callT > 0 && (e.callT -= dt) <= 0 && !room.alarm) triggerAlarm('Un civil ha llamado a la policía');
     if ((e.ringT = (e.ringT || 0) - dt) <= 0 && e.callT > 0) { e.ringT = 1.2; sfx('phone', e.x, e.y); }
-    if (moveTo(e, room.start.x, room.start.y, F.run, dt) || dist(e, room.start) < 40) { // ha escapado: si no había llamado, llama ahora
+    const fl = e.fleeTo || room.start;
+    if (moveTo(e, fl.x, fl.y, F.run, dt) || dist(e, fl) < 40) { // ha escapado: si no había llamado, llama ahora
       if (!room.alarm) triggerAlarm('Un testigo ha escapado y ha llamado a la policía');
       room.enemies.splice(room.enemies.indexOf(e), 1);
       return;
@@ -1733,6 +1760,62 @@ function updateCivil(e, dt) {
   e.a += clamp(angDiff(e.a, want), -4 * dt, 4 * dt);
 }
 // Puertas de las salas: se abren cuando alguien se acerca y se cierran solas al rato; cerradas tapan la vista
+// La calle: el coche que te dejó se va, el de extracción llega con el botín, tráfico que para si te pones delante y patrullas
+function updateStreet(dt) {
+  const R = room.road; if (!R) return;
+  const p = room.p, D = room.dropCar, X = room.exitCar;
+  if (D) { if ((D.t -= dt) <= 0) { D.v = Math.min(300, D.v + 260 * dt); D.x += D.v * dt; if (D.x > W * T + 120) room.dropCar = null; } }
+  if (X.state === 'away' && room.loot && room.loot.taken) { X.state = 'coming'; banner('El vehículo de extracción viene de camino'); }
+  if (X.state === 'coming') {
+    const dx = room.exit.x - X.x, v = clamp(Math.abs(dx) * 1.6, 40, 340);
+    X.x += Math.sign(dx) * Math.min(Math.abs(dx), v * dt);
+    if (Math.abs(dx) < 2) { X.state = 'wait'; banner('¡El vehículo de extracción te espera!'); sfx('horn', X.x, X.y); }
+  }
+  if ((room.trafT -= dt) <= 0 && room.traffic.length < 3) { // tráfico de vez en cuando, en los dos sentidos
+    room.trafT = rnd(5, 11);
+    const east = Math.random() < 0.5, kind = ['sedan', 'van', 'suv'][Math.floor(Math.random() * 3)];
+    room.traffic.push({ x: east ? -80 : W * T + 80, y: east ? R.east : R.west, a: east ? Math.PI / 2 : -Math.PI / 2, dir: east ? 1 : -1, v: rnd(170, 230), kind, paint: ['#7a2f2a', '#c8c2b0', '#2f5d7a', '#6b6f75', '#3d6b3f'][Math.floor(Math.random() * 5)], honkT: 0 });
+  }
+  const blockers = [p, ...room.enemies.filter(e => e.ped || e.cop || FOES[e.type].cop), ...room.copCars, X, D].filter(Boolean);
+  for (const c of room.traffic) { // frena si tiene algo delante en su carril (y pita)
+    const ahead = blockers.some(o => o !== c && (o.z === undefined || o.z === 0) && Math.abs(o.y - c.y) < 34 && (o.x - c.x) * c.dir > 0 && (o.x - c.x) * c.dir < 90);
+    if (ahead) { c.honkT -= dt; if (c.honkT <= 0) { c.honkT = 2.5; sfx('horn', c.x, c.y); } }
+    else c.x += c.dir * c.v * dt;
+  }
+  room.traffic = room.traffic.filter(c => c.x > -150 && c.x < W * T + 150);
+  for (const c of room.copCars) { // la patrulla frena y aparca; bajan los agentes
+    if (c.parked) continue;
+    const dx = c.tx - c.x; c.x += Math.sign(dx) * Math.min(Math.abs(dx), clamp(Math.abs(dx) * 2, 60, c.v) * dt);
+    if (Math.abs(dx) < 3) {
+      c.parked = true; useFloor(0);
+      for (let i = 0; i < c.n; i++) {
+        const e = makeEnemy(run.level > 7 && Math.random() < 0.35 ? 'swatp' : 'police', cellOf(c.x + (i - 1) * 26, (H - 7) * T + 20), Math.random);
+        Object.assign(e, { state: 'investigate', target: { x: p.x, y: p.y }, urgent: true, alertLvl: 2 });
+        room.enemies.push(e);
+      }
+      useFloor(p.z);
+    }
+  }
+}
+function drawStreetCars(c) { // coches de la calle, el que te dejó, el de extracción y las patrullas (con su barra de luces)
+  if (!room.road) return;
+  for (const t of room.traffic) drawCar(c, t.kind, t.x, t.y, t.a, t.paint);
+  if (room.dropCar) drawCar(c, room.dropCar.kind, room.dropCar.x, room.dropCar.y, room.dropCar.a, room.dropCar.paint);
+  if (room.exitCar.state !== 'away') drawCar(c, room.exitCar.kind, room.exitCar.x, room.exitCar.y, room.exitCar.a);
+  for (const k of room.copCars) {
+    drawCar(c, 'sedan', k.x, k.y, k.a, '#e4e6ea');
+    c.save(); c.translate(k.x, k.y); c.rotate(k.a); c.fillStyle = '#15171b'; c.fillRect(-14, -6, 28, 10); // capó y techo con la barra
+    const on = Math.sin(room.time * 14 + k.ph) > 0; c.fillStyle = on ? '#ff3a3a' : '#4a1010'; c.fillRect(-9, 2, 8, 4); c.fillStyle = on ? '#1a2a55' : '#4a7aff'; c.fillRect(1, 2, 8, 4);
+    c.restore();
+  }
+}
+function streetLights(c) { // faros y sirenas (emisivos, se ven a oscuras)
+  if (!room.road) return;
+  for (const t of room.traffic) carLights(c, t.kind, t.x, t.y, true, t.a);
+  if (room.dropCar) carLights(c, room.dropCar.kind, room.dropCar.x, room.dropCar.y, true, room.dropCar.a);
+  if (room.exitCar.state !== 'away') carLights(c, room.exitCar.kind, room.exitCar.x, room.exitCar.y, true, room.exitCar.a);
+  for (const k of room.copCars) { carLights(c, 'sedan', k.x, k.y, !k.parked, k.a); const on = Math.sin(room.time * 14 + k.ph) > 0; c.fillStyle = glow(c, k.x, k.y, 90, on ? '255,40,40' : '50,100,255', 0.45); c.beginPath(); c.arc(k.x, k.y, 90, 0, 7); c.fill(); }
+}
 function updateDoors(dt) {
   for (const d of room.idoors) {
     const near = (room.p.z === d.z && !room.p.dead && Math.hypot(room.p.x - d.x, room.p.y - d.y) < 38) || room.enemies.some(e => e.z === d.z && e.state !== 'subdued' && Math.hypot(e.x - d.x, e.y - d.y) < 34);
@@ -2273,7 +2356,7 @@ function update(dt) {
     if (!room.police) { if ((room.policeT -= dt) <= 0) { room.police = true; room.reinfT = 22; spawnPolice(3 + (run.level >> 2)); banner('¡Ha llegado la policía!'); sfx('siren'); } }
     else if (room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
   }
-  updateDoors(dt); updateCams(dt); updateCoins(dt);
+  updateDoors(dt); updateCams(dt); updateCoins(dt); updateStreet(dt);
   if (room.drag) { // el cuerpo que arrastras va detrás de ti y deja un rastro de sangre
     const b = room.drag, tx = p.x - Math.cos(p.a) * 22, ty = p.y - Math.sin(p.a) * 22;
     useFloor(b.z);
@@ -2284,7 +2367,8 @@ function update(dt) {
   updateObjectives();
   if (room.loot && room.loot.taken && (room.exhaustT = (room.exhaustT || 0) - dt) <= 0) { // el coche de huida, en marcha
     room.exhaustT = 0.18; useFloor(0);
-    fx({ k: 'smoke', x: room.exit.x + rnd(-4, 4), y: room.exit.y + CAR_DIM[room.mission.car][1] / 2 + 4, vx: rnd(-8, 8), vy: rnd(15, 30), life: 0.9, r0: 3, r1: 11, g: 95 });
+    const X = room.exitCar, ca = X ? X.a : 0, cx = X ? X.x : room.exit.x, cy = X ? X.y : room.exit.y, back = CAR_DIM[room.mission.car][1] / 2 + 4; // humo del tubo de escape, detrás del coche
+    if (!X || X.state !== 'away') fx({ k: 'smoke', x: cx - Math.sin(ca) * back + rnd(-4, 4), y: cy + Math.cos(ca) * back, vx: -Math.sin(ca) * 20 + rnd(-8, 8), vy: Math.cos(ca) * 20, life: 0.9, r0: 3, r1: 11, g: 95 });
     useFloor(p.z);
   }
   if (room.loot && !room.loot.taken && !p.dead && room.loot.z === p.z && dist(p, room.loot) < 24) stealLoot();
@@ -2296,8 +2380,8 @@ function update(dt) {
       return;
     }
   }
-  const locked = room.boss || (room.loot && !room.loot.taken);
-  if (!p.dead && p.z === 0 && dist(p, room.exit) < 40) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? 'Salida bloqueada: abate al Alcaide' : 'Primero roba el botín'); }
+  const locked = room.boss || (room.loot && !room.loot.taken) || (room.road && room.exitCar.state !== 'wait');
+  if (!p.dead && p.z === 0 && dist(p, room.exit) < 40) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? 'Salida bloqueada: abate al Alcaide' : room.loot && !room.loot.taken ? 'Primero roba el botín' : 'Espera: el vehículo de extracción está llegando'); }
 }
 
 // ================= Horneado del mapa =================
@@ -2405,6 +2489,13 @@ function bakeRegion(z, x0, y0, x1, y1) {
 }
 function drawFloor(g, x, y, k, z) {
   const X = x * T, Y = y * T, h = hash(x, y, 7);
+  if (k === 11) { // calzada
+    g.fillStyle = '#121519'; g.fillRect(X, Y, T, T);
+    for (let i = 0; i < 8; i++) { g.fillStyle = hash(x, y, i) < 0.5 ? '#1a1e24' : '#0c0f12'; g.fillRect(X + hash(x, y, i + 31) * T, Y + hash(x, y, i + 57) * T, 1.5, 1.5); }
+    if (y === H - 5 && x % 2) { g.fillStyle = 'rgba(230,220,170,0.55)'; g.fillRect(X + 4, Y + T - 1.5, T - 8, 3); } // línea discontinua
+    if (y === H - 6) { g.fillStyle = '#3a3f46'; g.fillRect(X, Y, T, 3); } if (y === H - 3) { g.fillStyle = '#3a3f46'; g.fillRect(X, Y + T - 3, T, 3); } // bordillos
+    return;
+  }
   const dots = (n, c1, c2, s = 1.5) => { for (let i = 0; i < n; i++) { g.fillStyle = hash(x, y, i) < 0.5 ? c1 : c2; g.fillRect(X + hash(x, y, i + 31) * T, Y + hash(x, y, i + 57) * T, s, s); } };
   if (k === 0 || k === 7) { // asfalto con grava y alguna grieta
     g.fillStyle = '#13181e'; g.fillRect(X, Y, T, T); dots(9, '#1b2128', '#0d1115');
@@ -2971,7 +3062,8 @@ function render() {
   }
   for (const c of room.coins || []) if (here(c)) { const k = c.t / c.T, x = c.x + (c.tx - c.x) * k, y = c.y + (c.ty - c.y) * k - Math.sin(k * Math.PI) * 30; ctx.fillStyle = '#e8c45a'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 7); ctx.fill(); }
   if (room.loot && here(room.loot)) drawLoot(room.loot);
-  if (!up) drawCar(ctx, room.mission.car, room.exit.x, room.exit.y);
+  if (!up && !room.road) drawCar(ctx, room.mission.car, room.exit.x, room.exit.y);
+  if (!up) drawStreetCars(ctx);
   for (const e of room.enemies) {
     const rr = visionRange(e);
     if (!here(e) || !onScreen(e.x, e.y, rr)) continue;
@@ -3071,7 +3163,8 @@ function render() {
   if (cone) { ctx.fillStyle = glow(ctx, p.x, p.y, BEAM, '255,217,138', 0.06); fillPoly(ctx, cone); }
   if (L && !L.taken && here(L)) { ctx.fillStyle = glow(ctx, L.x, L.y, 80, '255,200,90', 0.14); fillPoly(ctx, L.poly); }
   // lo que emite luz, en modo aditivo: luminarias encendidas, trazadoras, fogonazos, fuego, onda y brasas
-  if (!up) carLights(ctx, room.mission.car, room.exit.x, room.exit.y, !(room.boss || (room.loot && !room.loot.taken)));
+  if (!up && !room.road) carLights(ctx, room.mission.car, room.exit.x, room.exit.y, !(room.boss || (room.loot && !room.loot.taken)));
+  if (!up) streetLights(ctx);
   for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) { // LED de los racks y pantallas de las terminales
     const t = maps[p.z][y * W + x], X = x * T, Y = y * T;
     if (t === RACK) for (let i = 0; i < 4; i++) { if (Math.sin(room.time * (2 + hash(x, y, i) * 6) + i * 3) > 0.2) { ctx.fillStyle = hash(x, y, i + 5) < 0.75 ? 'rgba(80,220,140,0.9)' : 'rgba(255,170,60,0.9)'; ctx.fillRect(X + 8 + i * 7, Y + 30, 2, 2); } }
@@ -3179,7 +3272,7 @@ function drawHud() {
       const a = Math.atan2(sy - vh / 2, sx - vw / 2);
       const k = Math.min((vw / 2 - m) / (Math.abs(Math.cos(a)) || 1e-6), (vh / 2 - m) / (Math.abs(Math.sin(a)) || 1e-6));
       const right = touchMode ? vw - $('acts').getBoundingClientRect().left + 14 : m; // en móvil, sin meterse bajo los botones
-      ctx.save(); ctx.translate(clamp(vw / 2 + Math.cos(a) * k, m, vw - right), vh / 2 + Math.sin(a) * k); ctx.rotate(a);
+      ctx.save(); ctx.translate(clamp(vw / 2 + Math.cos(a) * k, m, vw - right), Math.max(118 * ui + inset.t, vh / 2 + Math.sin(a) * k)); ctx.rotate(a); // por debajo del HUD de arriba
       ctx.globalAlpha = 0.85; ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-7, -9); ctx.lineTo(-3, 0); ctx.lineTo(-7, 9); ctx.closePath(); ctx.fill();
       ctx.restore();
@@ -3562,6 +3655,7 @@ function sfx(k, x, y) {
     case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
     case 'plant': burst(0.03, 0.2, 2500, 'bandpass', 3); tone(1800, 1800, 0.05, 0.08, 'square', 0.12); break;
     case 'click': tone(1600, 1600, 0.03, 0.12); tone(800, 800, 0.05, 0.1, 'square', 0.05); break;
+    case 'horn': tone(410, 400, 0.35, 0.06 * v, 'square'); tone(520, 510, 0.35, 0.05 * v, 'square'); break;
     case 'door': burst(0.08, 0.12 * v, 900, 'bandpass', 2); tone(180, 120, 0.12, 0.05 * v, 'triangle'); break;
     case 'tink': tone(3200, 2800, 0.06, 0.08 * v, 'triangle'); tone(4100, 3600, 0.05, 0.05 * v, 'triangle', 0.07); break;
     case 'scream': tone(700, 1150, 0.35, 0.11 * v, 'sawtooth'); tone(1000, 640, 0.32, 0.08 * v, 'sawtooth', 0.28); break;
