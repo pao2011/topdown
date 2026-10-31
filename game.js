@@ -1265,7 +1265,7 @@ function updatePlayer(dt) {
   const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   if (kx || ky) {
-    mag = keys.KeyC ? 0.45 : 1; sprint = mag === 1 && !!(keys.ShiftLeft || keys.ShiftRight);
+    sprint = !!(keys.ShiftLeft || keys.ShiftRight); mag = sneakOn && !sprint ? 0.45 : 1; // Mayús corre aunque el sigilo esté activado
     const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
   }
   if (p.tired || !mag) sprint = false;
@@ -2521,7 +2521,7 @@ function drawHud() {
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-    ctx.fillText('WASD mover · Mayús correr · C sigilo · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
+    ctx.fillText('WASD mover · Mayús correr · C sigilo (activa/desactiva) · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
   }
   syncHud();
   syncUse();
@@ -2814,11 +2814,13 @@ function pause() {
   $('pauseInfo').textContent = `Misión ${run.level}: ${room.mission.name} · $${run.money} (+$${room.cash} en la bolsa) · vida ${Math.ceil(run.hp)}`;
   show('pause');
 }
+let sneakOn = false; // C alterna el sigilo con teclado
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') { state = 'play'; show(null); } }
   if (state !== 'play' || e.repeat) return;
+  if (e.code === 'KeyC') { sneakOn = !sneakOn; banner(sneakOn ? 'Sigilo activado (C para desactivar)' : 'Sigilo desactivado'); return; }
   const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
   else if (/^Digit[1-5]$/.test(e.code) && run.weapons[e.code[5] - 1]) selectWeapon(e.code[5] - 1);
