@@ -41,7 +41,7 @@ const path = require('path');
   assert(gen.some(g => g.upper), 'algunas salas deben tener primera planta');
   // castRay: desde el centro de la casilla (1,1) hacia el muro exterior izquierdo hay 20 px
   assert.strictEqual(await ev(() => __apagon.castRay(60, 60, -1, 0, 500)), 20);
-  // Salen los 6 tipos de enemigo en las salas 1-7 y la sala 8 es la del jefe
+  // Salen los 9 tipos de enemigo en las primeras salas y la sala 8 es la del jefe
   const kinds = await ev(() => {
     const A = __apagon, seen = new Set();
     for (let lvl = 1; lvl <= 7; lvl++) for (let k = 0; k < 4; k++) A.buildRoom(lvl, lvl * 31 + k).enemies.forEach(e => e.type !== 'civil' && seen.add(e.type));
