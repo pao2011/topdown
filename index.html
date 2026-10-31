@@ -244,11 +244,16 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
   .brief-card .bf-title { font-size: 26px; } .brief-card .eyebrow { font-size: 10px; } .brief-card #bfBrief { font-size: 12px; } #bfObj { font-size: 11.5px; line-height: 1.28; }
   .results { gap: 6px; } .results .rank { font-size: 46px; width: 58px; height: 58px; } .rs-obj, .rs-rows { font-size: 12px; } .rs-rows { gap: 1px; }
 }
+/* Mando: aviso al conectarlo y foco visible en los menús */
+#padNote { position: fixed; z-index: 60; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 16px; border: 1px solid var(--ok); border-radius: 20px; background: rgba(14, 19, 26, .92); color: var(--ok); font-weight: 600; font-size: 14px; letter-spacing: .04em; white-space: nowrap; pointer-events: none; }
+#padNote.in { animation: tagIn .35s both; }
+.padfocus { outline: 3px solid var(--beam) !important; outline-offset: 3px; box-shadow: 0 0 16px rgba(255, 217, 138, .45); }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="safe"></div>
+<div id="padNote" role="status" hidden></div>
 
 <div id="boot" aria-live="polite">
   <div class="boot-in">
@@ -311,7 +316,8 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
       <div><dt>Cuchillo</dt><dd>Casi no hace ruido. Por la espalda o sin que te hayan detectado, elimina al instante.</dd></div>
       <div><dt>Ruido y granadas</dt><dd>El ruido atrae guardias hacia donde estás. Una granada se oye en todo el edificio.</dd></div>
       <div><dt>Luz y sombra</dt><dd>Con la linterna apagada cuesta más verte. Dispara a las lámparas para crear sombras. En los setos no te ven; sobre mesas y coches sí.</dd></div>
-      <div><dt>Teclado</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> esprintar · <kbd>C</kbd> activa/desactiva el sigilo · <kbd>Espacio</kbd> usar · ratón apunta y dispara · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> ruido · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>Esc</kbd> pausa</dd></div>
+      <div><dt>Teclado y ratón</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> correr · <kbd>C</kbd> sigilo (activa/desactiva) · ratón apunta · clic dispara · <kbd>Espacio</kbd> usar · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> moneda · <kbd>H</kbd> consumible · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>L</kbd> láser · <kbd>J</kbd> inhibidor · <kbd>O</kbd> objetivos · <kbd>Esc</kbd> pausa</dd></div>
+      <div><dt>Mando</dt><dd>Se detecta solo al conectarlo (USB o Bluetooth) y pulsar un botón. <kbd>Stick izq.</kbd> mover (poco recorrido = sigilo) · <kbd>LT</kbd> correr · <kbd>Stick der.</kbd> apuntar · <kbd>RT</kbd> disparar · <kbd>A</kbd> usar · <kbd>B</kbd> sigilo · <kbd>X</kbd> recargar · <kbd>Y</kbd> cambiar arma · <kbd>RB</kbd> cuchillo · <kbd>LB</kbd> granada · cruceta <kbd>↑</kbd> C4 · <kbd>←</kbd> moneda · <kbd>↓</kbd> consumible · <kbd>→</kbd> linterna · <kbd>L3</kbd> láser · <kbd>R3</kbd> inhibidor · <kbd>Select</kbd> objetivos · <kbd>Start</kbd> pausa. En los menús: cruceta o stick para moverte, <kbd>A</kbd> aceptar, <kbd>B</kbd> volver.</dd></div>
       <div><dt>Enemigos</dt><dd>Los perros te huelen de cerca aunque vayas a oscuras. El francotirador te avisa en rojo antes de disparar: corre para esquivarlo. El escudo para las balas de frente: rodéalo o usa una granada. En las misiones 8 y 16 te espera el Alcaide.</dd></div>
       <div><dt>Munición y guardado</dt><dd>La munición es limitada: recoge cajas (los guardias sueltan algunas) o cómprala en la tienda, con tipos especiales para cada arma. La partida se guarda sola al empezar cada misión y en la tienda.</dd></div>
     </dl>

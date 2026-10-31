@@ -213,7 +213,7 @@ function angDiff(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= 
 function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 1442695041) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function mulberry32(a) { return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const $ = id => document.getElementById(id);
-const buzz = ms => { if (typeof settings !== 'undefined' && !settings.vib) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* sin vibración */ } };
+const buzz = ms => { if (typeof settings !== 'undefined' && !settings.vib) return; try { navigator.vibrate && navigator.vibrate(ms); padRumble(ms); } catch (e) { /* sin vibración */ } };
 
 // ================= Estado =================
 const cv = $('c'), ctx = cv.getContext('2d');
@@ -1074,14 +1074,14 @@ function updateChase(dt) {
     p.bloom = Math.max(0, p.bloom - dt * 1.6);
     // conductor: lo que le pides con el stick izquierdo (o WASD) y, si no le pides nada, esquiva el tráfico de delante
     const L = stickVec(sticks.L), kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0), ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
-    let steer = kx || L.x;
+    let steer = kx || L.x || pad.L.x;
     if (Math.abs(steer) < 0.5) for (const t of C.traffic) if (!t.wreck && t.y < car.y && car.y - t.y < 280 && Math.abs(t.x - car.x) < (t.w + car.w) / 2 + 14) steer = Math.sign(car.x - t.x || -car.x || 1) * (Math.abs(car.x) > rw / 2 - 70 ? -1 : 1);
     for (const o of C.obst) if (o.y < car.y && car.y - o.y < 480 && car.x + car.w / 2 + 16 > o.x0 && car.x - car.w / 2 - 16 < o.x1) { // control o pinchos delante: el conductor se aparta sí o sí
       const free = LANES.filter(x => x + 40 < o.x0 || x - 40 > o.x1);
       if (free.length) { const tx = free.reduce((a, b) => Math.abs(b - car.x) < Math.abs(a - car.x) ? b : a); steer = clamp((tx - car.x) / 40, -1, 1); }
     }
     car.vx += (steer * 260 - car.vx) * Math.min(1, dt * 6);
-    car.vy += ((ky || L.y) * 210 - car.vy) * Math.min(1, dt * 4);
+    car.vy += ((ky || L.y || pad.L.y) * 210 - car.vy) * Math.min(1, dt * 4);
     car.x += car.vx * dt; car.y = clamp(car.y + car.vy * dt, -120, 160);
     const edge = rw / 2 - car.w / 2 - 4;
     if (Math.abs(car.x) > edge) { if (Math.abs(car.vx) > 90) sfx('clank', car.x, car.y); car.x = Math.sign(car.x) * edge; car.vx *= -0.3; }
@@ -1090,12 +1090,13 @@ function updateChase(dt) {
     const R = stickVec(sticks.R);
     let firing = false;
     if (sticks.R) { C.aim.x += R.x * 1150 * settings.sens * U * dt; C.aim.y += R.y * 1150 * settings.sens * U * dt; firing = R.m > FIRE; }
+    else if (padMode) { C.aim.x += pad.R.x * 1000 * settings.sens * U * dt; C.aim.y += pad.R.y * 1000 * settings.sens * U * dt; firing = pad.fire; }
     else if (mouse.active && !touchMode) { C.aim.x = mouse.x * cw / vw; C.aim.y = mouse.y * ch / vh; firing = mouse.down; }
     C.aim.x = clamp(C.aim.x, 0, cw); C.aim.y = clamp(C.aim.y, ch * 0.06, ch * 0.92);
     const tgt = pickAt(C.aim.x, C.aim.y);
     C.onTarget = !!tgt && !tgt.civ;
-    if (touchMode && sticks.R) {
-      firing = firing || C.onTarget;
+    if ((touchMode && sticks.R) || (padMode && pad.R.m > 0)) {
+      if (!padMode) firing = firing || C.onTarget;
       const K = chaseCam(); let best = null, bd = 80 * U; // ayuda de apuntado: la mira se deja llevar hacia el perseguidor más cercano
       for (const t of chaseTargets()) if (!t.civ) { const o = t.o, q = t.heli ? proj(K, o.x, o.y, o.h) : proj(K, o.x, o.y - o.h / 2, o.tall / 2); if (q) { const d = Math.hypot(q.x - C.aim.x, q.y - C.aim.y); if (d < bd) { bd = d; best = q; } } }
       if (best) { C.aim.x += (best.x - C.aim.x) * Math.min(1, dt * 3); C.aim.y += (best.y - C.aim.y) * Math.min(1, dt * 3); }
@@ -2313,6 +2314,10 @@ function updatePlayer(dt) {
   if (kx || ky) {
     sprint = !!(keys.ShiftLeft || keys.ShiftRight); mag = sneakOn && !sprint ? 0.45 : 1; // Mayús corre aunque el sigilo esté activado
     const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
+  } else if (pad.L.m > 0) { // mando: poco recorrido es sigilo, a fondo andas, con el gatillo izquierdo corres
+    mx = pad.L.x; my = pad.L.y; mag = pad.L.m; sprint = pad.run;
+    if (sneakOn && !sprint && mag > SNEAK) { const k = SNEAK / mag; mx *= k; my *= k; mag = SNEAK; }
+    if (sprint) { mx /= mag; my /= mag; mag = 1; }
   }
   if (p.stunT > 0) { p.stunT -= dt; mag = 0; mx = my = 0; } // aturdido por el táser
   if (p.tired || !mag || room.drag) sprint = false;
@@ -2345,6 +2350,9 @@ function aimAndFire(dt, mx, my, mag, help) {
   if (R.m > 0) {
     aim = Math.atan2(R.y, R.x); firing = R.m > FIRE;
     if (firing) aim = help(aim);
+  } else if (padMode && (pad.R.m > 0 || pad.fire)) { // mando: el stick derecho apunta y el gatillo derecho dispara (con ayuda de apuntado)
+    aim = pad.R.m > 0 ? Math.atan2(pad.R.y, pad.R.x) : mag > 0.1 ? Math.atan2(my, mx) : p.a;
+    firing = pad.fire; if (firing) aim = help(aim);
   } else if (mouse.active && !touchMode) {
     aim = Math.atan2(mouse.y - (vh / 2 + (p.y - cam.y) * zoom), mouse.x - (vw / 2 + (p.x - cam.x) * zoom));
     firing = mouse.down;
@@ -3843,7 +3851,7 @@ function drawHud() {
     if (room.banner) { ctx.globalAlpha = Math.min(1, room.banner.t * 2); ctx.font = '700 15px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a'; ctx.fillText(room.banner.text, uw / 2, y + 70); ctx.globalAlpha = 1; }
     if (C.t < 8) { // cómo se dispara desde el techo
       ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.75)';
-      ctx.fillText(touchMode ? 'MIRA: STICK DERECHO (DISPARA SOLA SOBRE UN COCHE) · CONDUCTOR: IZQUIERDO' : 'RATÓN: APUNTA Y DISPARA · A/D: CARRIL · W/S: ACELERAR/FRENAR · G: GRANADA A LA MIRA', uw / 2, y + 90);
+      ctx.fillText(padMode ? 'MIRA: STICK DERECHO · DISPARAR: RT · CONDUCTOR: STICK IZQUIERDO · GRANADA A LA MIRA: LB' : touchMode ? 'MIRA: STICK DERECHO (DISPARA SOLA SOBRE UN COCHE) · CONDUCTOR: IZQUIERDO' : 'RATÓN: APUNTA Y DISPARA · A/D: CARRIL · W/S: ACELERAR/FRENAR · G: GRANADA A LA MIRA', uw / 2, y + 90);
     }
     syncHud(); syncUse();
     return;
@@ -3897,7 +3905,7 @@ function drawHud() {
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-    ctx.fillText('WASD mover · Mayús correr · C sigilo (activa/desactiva) · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
+    if (padMode) ctx.fillText('Stick izq. mover (poco = sigilo) · LT correr · stick der. apuntar · RT disparar · A usar · B sigilo · X recargar · Y arma · RB cuchillo · LB granada · cruceta: C4, moneda, consumible, linterna', uw / 2, uh - 86); else ctx.fillText('WASD mover · Mayús correr · C sigilo (activa/desactiva) · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
   }
   syncHud();
   syncUse();
@@ -3950,7 +3958,7 @@ function syncHud() {
 }
 function syncUse() { // botón contextual: qué puedes hacer aquí
   const A = room.act, u = A ? null : nearUse(), b = $('bUse');
-  const label = A ? `${A.label}… ${Math.floor(100 * Math.min(1, A.t / A.time))} %` : u ? u.label + (touchMode ? '' : ' [Espacio]') : '';
+  const label = A ? `${A.label}… ${Math.floor(100 * Math.min(1, A.t / A.time))} %` : u ? u.label + (padMode ? ' [A]' : touchMode ? '' : ' [Espacio]') : '';
   if (b.textContent !== label) b.textContent = label;
   b.hidden = !label;
 }
@@ -4263,16 +4271,16 @@ resize();
 cv.addEventListener('pointerdown', e => {
   if (state !== 'play') return;
   if (e.pointerType === 'mouse') {
-    touchMode = false; mouse.active = true; mouse.x = e.clientX; mouse.y = e.clientY;
+    touchMode = false; padMode = false; mouse.active = true; mouse.x = e.clientX; mouse.y = e.clientY;
     if (e.button === 2) melee(); else mouse.down = true;
     return;
   }
-  touchMode = true;
+  touchMode = true; padMode = false;
   const side = e.clientX < vw / 2 ? 'L' : 'R';
   if (!sticks[side]) sticks[side] = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
 });
 addEventListener('pointermove', e => {
-  if (e.pointerType === 'mouse') { mouse.x = e.clientX; mouse.y = e.clientY; if (state === 'play') { mouse.active = true; touchMode = false; } return; }
+  if (e.pointerType === 'mouse') { mouse.x = e.clientX; mouse.y = e.clientY; if (state === 'play') { mouse.active = true; touchMode = false; padMode = false; } return; }
   for (const k in sticks) {
     const s = sticks[k];
     if (!s || s.id !== e.pointerId) continue;
@@ -4348,6 +4356,78 @@ addEventListener('wheel', e => {
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+// ================= Mando (Gamepad API, distribución estándar tipo Xbox) =================
+// Juego: stick izq. mover · LT correr · stick der. apuntar · RT disparar · A usar · B sigilo · X recargar · Y arma ·
+// RB cuchillo · LB granada · cruceta ↑ C4 · ← moneda · ↓ consumible · → linterna · L3 láser · R3 inhibidor · Select objetivos · Start pausa.
+// Menús: cruceta o stick izq. para moverte, A aceptar, B volver, ←/→ ajustan los deslizadores.
+const pad = { L: { x: 0, y: 0, m: 0 }, R: { x: 0, y: 0, m: 0 }, fire: false, run: false, prev: [], navT: 0, idx: null };
+let padMode = false;
+const PAD_DEAD = 0.18;
+function padStick(x, y) { const m = Math.hypot(x, y); if (m < PAD_DEAD) return { x: 0, y: 0, m: 0 }; const k = Math.min(1, (m - PAD_DEAD) / (1 - PAD_DEAD)); return { x: x / m * k, y: y / m * k, m: k }; }
+function getPad() { try { for (const g of navigator.getGamepads ? navigator.getGamepads() : []) if (g && g.connected) { pad.idx = g.index; return g; } } catch (e) { /* sin permiso para mandos */ } return null; }
+function padRumble(ms) { const g = padMode && getPad(); if (g && g.vibrationActuator) g.vibrationActuator.playEffect('dual-rumble', { duration: ms * 3, strongMagnitude: 0.6, weakMagnitude: 0.4 }).catch(() => {}); }
+function padNote(text) { const n = $('padNote'); n.textContent = text; n.hidden = false; n.classList.remove('in'); void n.offsetWidth; n.classList.add('in'); clearTimeout(padNote.t); padNote.t = setTimeout(() => { n.hidden = true; }, 3500); }
+addEventListener('gamepadconnected', e => { padNote(`🎮 Mando conectado: ${e.gamepad.id.replace(/\s*\(.*$/, '').slice(0, 40) || 'mando'}`); });
+addEventListener('gamepaddisconnected', () => { padNote('Mando desconectado'); if (padMode) { padMode = false; touchMode = matchMedia('(pointer: coarse)').matches; if (state === 'play') pause(); } });
+function pollPad() {
+  const g = getPad();
+  if (!g) { pad.L = pad.R = { x: 0, y: 0, m: 0 }; pad.fire = pad.run = false; return; }
+  const b = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5)), ax = i => g.axes[i] || 0;
+  const now = g.buttons.map((_, i) => b(i)), prev = pad.prev, hit = i => now[i] && !prev[i];
+  pad.L = padStick(ax(0), ax(1)); pad.R = padStick(ax(2), ax(3));
+  pad.fire = b(7); pad.run = b(6);
+  if (!padMode && (now.some(Boolean) || pad.L.m > 0 || pad.R.m > 0)) { // al tocar el mando, pasa a mandar él: fuera botones táctiles y ratón
+    padMode = true; touchMode = false; mouse.active = false; sticks.L = sticks.R = null; resize();
+  }
+  pad.prev = now;
+  if (!padMode) return;
+  const boot = $('boot');
+  if (boot && (hit(0) || hit(9))) { boot.dispatchEvent(new Event('pointerdown')); return; }
+  if (state === 'play') {
+    if (hit(9)) { pause(); return; }
+    if (hit(8)) { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; }
+    const acts = { 0: use, 1: toggleSneak, 2: reload, 3: cycleWeapon, 5: melee, 4: throwNade, 12: breach, 14: makeNoise, 13: useItem, 15: toggleLight, 11: useJammer,
+      10: () => { settings.laser = !settings.laser; saveSettings(); banner(settings.laser ? 'Mira láser encendida' : 'Mira láser apagada'); } };
+    for (const k in acts) if (hit(+k)) acts[k]();
+    return;
+  }
+  padMenu(hit, now);
+}
+function padMenu(hit, now) { // menús: foco que salta al botón más cercano en la dirección pulsada
+  const ov = [...document.querySelectorAll('.overlay')].find(o => !o.hidden);
+  if (!ov) return;
+  if (state === 'results' && rsSkip && (hit(0) || hit(1))) { rsSkip(); return; }
+  const els = [...ov.querySelectorAll('button:not([disabled]), input, summary')].filter(e => e.offsetParent !== null && e.getClientRects().length);
+  if (!els.length) return;
+  let cur = document.activeElement;
+  if (!els.includes(cur)) cur = null;
+  const focus = e => { document.querySelectorAll('.padfocus').forEach(x => x.classList.remove('padfocus')); e.focus({ preventScroll: true }); e.classList.add('padfocus'); e.scrollIntoView({ block: 'nearest', inline: 'nearest' }); };
+  const dx = (now[15] ? 1 : 0) - (now[14] ? 1 : 0) || Math.round(pad.L.m > 0.5 ? pad.L.x : 0), dy = (now[13] ? 1 : 0) - (now[12] ? 1 : 0) || Math.round(pad.L.m > 0.5 ? pad.L.y : 0);
+  const t = performance.now(), fresh = hit(12) || hit(13) || hit(14) || hit(15);
+  if ((dx || dy) && (fresh || t > pad.navT)) {
+    pad.navT = t + (fresh ? 380 : 160); // mantener pulsado repite
+    if (!cur) { focus(els.find(e => e.classList.contains('cta')) || els[0]); return; }
+    if (cur.type === 'range' && dx && !dy) { cur.value = +cur.value + dx * (cur.max - cur.min) / 20; cur.dispatchEvent(new Event('input', { bubbles: true })); cur.dispatchEvent(new Event('change', { bubbles: true })); return; }
+    const r0 = cur.getBoundingClientRect(), c0 = { x: r0.left + r0.width / 2, y: r0.top + r0.height / 2 };
+    let best = null, bs = Infinity;
+    for (const e of els) {
+      if (e === cur) continue;
+      const r = e.getBoundingClientRect(), vx = r.left + r.width / 2 - c0.x, vy = r.top + r.height / 2 - c0.y;
+      const along = dx ? vx * dx : vy * dy, across = dx ? Math.abs(vy) : Math.abs(vx);
+      if (along <= 4) continue;
+      const sc = along + across * 2.2;
+      if (sc < bs) { bs = sc; best = e; }
+    }
+    if (best) focus(best);
+    return;
+  }
+  if (hit(0)) { if (cur) cur.click(); else focus(els.find(e => e.classList.contains('cta')) || els[0]); return; }
+  if (hit(1) || (hit(9) && state === 'pause')) { // volver
+    const back = { pause: 'bResume', settings: 'bSetBack', slots: 'bSlotsBack' }[ov.id];
+    if (back) $(back).click();
+  }
+}
 
 function begin() {
   initAudio();
@@ -4456,6 +4536,7 @@ function frame(now) {
   requestAnimationFrame(frame); // primero: si algo falla en este fotograma, el juego no se congela
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
+  pollPad();
   if (state === 'play') update(dt);
   else if (room && room.demo) { // menú: la cámara recorre el mapa de fondo
     room.time += dt; cam.shake = 0;
@@ -4467,5 +4548,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Gancho para las pruebas automáticas (test/smoke.js)
-window.__apagon = { pickAt, get music() { return music; }, get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, use, nearUse, shoot, zoneAt: c => zone[c], get view() { return { cam, S: zoom * dpr, cw, ch }; } };
+window.__apagon = { pad, get padMode() { return padMode; }, pollPad, pickAt, get music() { return music; }, get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, use, nearUse, shoot, zoneAt: c => zone[c], get view() { return { cam, S: zoom * dpr, cw, ch }; } };
 })();

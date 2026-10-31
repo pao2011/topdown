@@ -24,26 +24,38 @@ Guarda el keystore y su contraseña. Para instalar una versión nueva encima de 
 
 ## Controles
 
-| Táctil | Teclado / ratón | Acción |
-|---|---|---|
-| Stick izquierdo (poco recorrido) o botón Sigilo | `WASD` con el sigilo activado (`C` lo activa y lo desactiva) | Moverte en sigilo, sin ruido |
-| Stick izquierdo (a fondo) | `WASD` | Caminar: los pasos se oyen |
-| Stick izquierdo (más allá del borde) | `WASD` + `Mayús` | Correr: más rápido, mucho ruido y gasta aguante |
-| Stick derecho | Ratón | Apuntar la linterna |
-| Stick derecho hasta el borde | Clic izquierdo | Disparar |
-| Usar (aparece al acercarte) | `Espacio` | Registrar, hackear, arrastrar y esconder cuerpos. Volver a pulsar cancela |
-| Cuchillo | `E` / clic derecho | Ataque cuerpo a cuerpo casi silencioso; a los civiles los reduce sin matarlos |
-| Granada | `G` | Se lanza en arco, rebota y estalla: abre paredes y se oye en todo el edificio |
-| C4 | `B` | Primera pulsación: la plantas casi sin ruido. Segunda: la detonas |
-| Moneda | `Q` | La lanzas hacia donde apuntas: al caer suena y los guardias cercanos van a mirar |
-| Consumible | `H` | Usa vendas, botiquín, bebida energética o analgésicos; el botón muestra cuál y cuántos |
-| Inhibidor | `J` | Ciega las cámaras cercanas 20 s, si lo compraste en la planificación |
-| Linterna | `F` | Apagarla reduce tu visibilidad y lo que ves |
-| Láser | `L` | Enciende o apaga la línea de la mira láser (también en Ajustes) |
-| Objetivos | `O` / tocar la lista | Despliega o recoge la lista de objetivos |
-| Recargar | `R` | Recarga (también es automática) |
-| Recuadro del arma | `1`-`5`, rueda o `Tab` | Cambiar de arma |
-| Pausa | `Esc` | Pausa, con acceso a Ajustes |
+Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego cambia solo según lo último que toques, y los botones táctiles se ocultan con teclado o mando.
+
+| Acción | Táctil | Teclado / ratón | Mando |
+|---|---|---|---|
+| Moverte en sigilo, sin ruido | Stick izquierdo con poco recorrido, o botón Sigilo | `WASD` con el sigilo activado (`C`) | Stick izquierdo con poco recorrido, o `B` para fijar el sigilo |
+| Caminar (los pasos se oyen) | Stick izquierdo a fondo | `WASD` | Stick izquierdo a fondo |
+| Correr (más rápido, mucho ruido, gasta aguante) | Stick izquierdo más allá del borde | `WASD` + `Mayús` | Mantener `LT` mientras te mueves |
+| Apuntar la linterna | Stick derecho | Ratón | Stick derecho |
+| Disparar | Stick derecho hasta el borde | Clic izquierdo | `RT` |
+| Usar: registrar, hackear, arrastrar y esconder cuerpos (volver a pulsar cancela) | Botón Usar (aparece al acercarte) | `Espacio` | `A` |
+| Cuchillo: casi silencioso; a los civiles los reduce sin matarlos | Cuchillo | `E` / clic derecho | `RB` |
+| Granada: vuela en arco, rebota, abre paredes | Granada | `G` | `LB` |
+| C4: plantar (casi sin ruido) y, la segunda vez, detonar | C4 | `B` | Cruceta `↑` |
+| Moneda: la lanzas y los guardias van a mirar donde cae | Ruido | `Q` | Cruceta `←` |
+| Consumible: vendas, botiquín, bebida o analgésicos | Botón del botiquín | `H` | Cruceta `↓` |
+| Linterna | Botón Linterna | `F` | Cruceta `→` |
+| Recargar (también es automática) | Recargar | `R` | `X` |
+| Cambiar de arma | Recuadro del arma | `1`-`5`, rueda o `Tab` | `Y` |
+| Activar o desactivar el sigilo | Botón Sigilo | `C` | `B` |
+| Láser de la mira | Ajustes | `L` | `L3` (pulsar el stick izquierdo) |
+| Inhibidor de cámaras (si lo compraste) | Botón del inhibidor | `J` | `R3` (pulsar el stick derecho) |
+| Lista de objetivos | Tocar la lista | `O` | `Select` / `View` |
+| Pausa | Botón Pausa | `Esc` | `Start` / `Menu` |
+
+**En la persecución:** el stick derecho (o el ratón) mueve la mira y `RT` (o el clic) dispara. Con el mando y en táctil hay ayuda de apuntado: la mira se deja llevar hacia el perseguidor más cercano. El stick izquierdo (o `WASD`) le dice al conductor que cambie de carril, acelere o frene, y la granada (`LB` o `G`) vuela hasta el punto bajo la mira.
+
+**Mando:**
+- Vale cualquier mando con la distribución estándar del navegador (Xbox, PlayStation, Switch Pro y la mayoría de mandos Bluetooth o USB). Los nombres de la tabla son los de Xbox; en PlayStation, `A`/`B`/`X`/`Y` son ✕/○/□/△, `LB`/`RB` son L1/R1 y `LT`/`RT` son L2/R2.
+- Se detecta solo: conéctalo y pulsa cualquier botón. Arriba aparece «Mando conectado» con su nombre. Si se desconecta en plena misión, el juego se pausa.
+- En los menús, la cruceta o el stick izquierdo mueven el foco (marcado en amarillo), `A` acepta y `B` vuelve. En Ajustes, `←`/`→` mueven los deslizadores. En la pantalla de carga y en los resultados, `A` adelanta la animación.
+- Vibra con los golpes y las explosiones si el mando lo admite y la vibración está activada en Ajustes.
+- En el APK de Android también funciona, por USB OTG o Bluetooth.
 
 ## Mecánicas
 
@@ -202,7 +214,10 @@ En algunas misiones, al huir te persiguen para recuperar el botín. Vas asomado 
 ```
 node test/smoke.js                  # requiere Playwright con Chromium
 SHOTS=capturas node test/smoke.js   # además guarda capturas
+node test/pad.js                    # el mando, con un gamepad simulado
 ```
+
+`test/pad.js` comprueba que se detecta el mando, que se navega por los menús con la cruceta, que se mueve, apunta y dispara, el sigilo con `B`, la pausa con `Start`, los deslizadores de Ajustes y la mira y el disparo en la persecución.
 
 La prueba de humo comprueba:
 
