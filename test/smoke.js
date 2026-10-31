@@ -12,6 +12,7 @@ const path = require('path');
   page.on('console', m => { if (m.type() === 'error' && !/fonts|ERR_/.test(m.text())) errors.push(m.text()); });
   const shot = name => process.env.SHOTS && page.screenshot({ path: path.join(process.env.SHOTS, name + '.png') });
   const ev = fn => page.evaluate(fn);
+  const story = async pg => { if (await pg.isVisible('#bStGo')) await pg.click('#bStGo'); }; // escena de historia antes de algunas misiones
   const url = 'file://' + path.resolve(__dirname, '../index.html');
   await page.goto(url);
   await shot('menu');
@@ -52,6 +53,9 @@ const path = require('path');
 
   // Menú → briefing de la misión 1 → a jugar
   await page.tap('#bPlay');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('stTitle').textContent]), ['story', 'Primer trabajo'], 'la historia empieza antes de la primera misión');
+  await shot('story');
+  await story(page);
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('bfName').textContent]), ['brief', 'POLILLA']);
   await shot('brief');
   await page.tap('#bGo');
@@ -120,7 +124,9 @@ const path = require('path');
       r.p.x = e.x + c * 130; r.p.y = e.y + s * 130; r.p.z = e.z; r.p.a = a; // de espaldas al guardia
       if (A.lit(e.x, e.y, e.z)) continue;
       Object.assign(e, { state: 'patrol', aware: 0, a: a + Math.PI, lookA: a + Math.PI, waitT: 5, lookT: 5 });
-      window.__dark = e; r.enemies.splice(0, r.enemies.length, e); return true; // solo él: nada lo atrae hacia tu luz
+      window.__dark = e; r.enemies.splice(0, r.enemies.length, e);
+      window.__goal = [r.loot, r.boss]; r.loot = null; r.boss = { type: 'boss', hp: 1, maxHp: 1 }; // sin flecha de objetivo en el HUD: podría caer justo encima
+      return true; // solo él: nada lo atrae hacia tu luz
     }
     return false;
   });
@@ -137,6 +143,7 @@ const path = require('path');
     }
     const dbg = await ev(() => { const A = __apagon, r = A.room, e = window.__dark; return { st: e.state, d: Math.round(Math.hypot(e.x - r.p.x, e.y - r.p.y)), lit: A.lit(e.x, e.y, e.z), fl: r.flashes.length, alive: r.enemies.includes(e), pa: r.p.a.toFixed(2), ez: e.z, pz: r.p.z, floors: r.maps.length,
       lamps: r.lamps.filter(l => Math.hypot(l.x - e.x, l.y - e.y) < l.r + 60).map(l => [l.z, Math.round(Math.hypot(l.x - e.x, l.y - e.y)), l.r]), tile: r.maps[e.z][A.cellOf(e.x, e.y)] }; });
+    await ev(() => { [__apagon.room.loot, __apagon.room.boss] = window.__goal; });
     if (!px.every(v => v < 10)) await shot('darkfail');
     assert(px.every(v => v < 10), 'un guardia fuera de tu luz debe quedar a oscuras, píxel: ' + px + ' ' + JSON.stringify(dbg));
   } else console.warn('aviso: ningún guardia apto; se omite la prueba de oscuridad');
@@ -455,6 +462,7 @@ const path = require('path');
 
   // Cámara (misión 5): la puerta se hackea (cancelar guarda el progreso) o se abre con el código; registrar cuerpos llena la bolsa
   await page.click('#bNext');
+  await story(page);
   assert.strictEqual(await page.textContent('#bfName'), 'BÓVEDA NORTE');
   const cash0 = await ev(() => __apagon.run.money);
   await page.click('[data-plan="tool:jammer"]'); // el plan se compra en el briefing
@@ -529,6 +537,7 @@ const path = require('path');
   await dp.reload();
   assert(await dp.isHidden('#bCont'), 'una partida corrupta no debe ofrecer continuar');
   await dp.click('#bPlay');
+  await story(dp);
   await dp.click('#bGo');
   await dp.waitForTimeout(300);
   assert(await dp.isHidden('#acts'), 'en PC no se muestran los botones táctiles');
@@ -549,7 +558,7 @@ const path = require('path');
   assert.strictEqual(await dp.evaluate(() => JSON.parse(localStorage.getItem('apagon-ajustes')).music), 0.3);
   await dp.click('#bSetBack'); await dp.click('#bQuit'); await dp.click('#bSlots');
   assert.match(await dp.textContent('#slotList'), /Ranura 1 · actual.*Misión 1/);
-  await dp.click('[data-slot="new:2"]'); await dp.click('#bGo');
+  await dp.click('[data-slot="new:2"]'); await story(dp); await dp.click('#bGo');
   assert.deepStrictEqual(await dp.evaluate(() => [!!localStorage.getItem('apagon-ranura-1'), !!localStorage.getItem('apagon-ranura-2'), localStorage.getItem('apagon-ranura-actual')]), [true, true, '2']);
   await desk.close();
 

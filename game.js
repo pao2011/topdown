@@ -134,11 +134,11 @@ const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diam
 const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco', joyeria: 'joyas', casino: 'efectivo', museo: 'reliquia', yate: 'cuadro', tren: 'oro' };
 const CARS = { van: 'Furgoneta', sedan: 'Berlina', suv: 'Todoterreno', armored: 'Furgón blindado' };
 function mission(level) {
-  if (level <= MISSIONS.length) return { scene: 'fortaleza', op: 'mixta', ...MISSIONS[level - 1], n: level };
+  if (level <= MISSIONS.length) return { scene: 'fortaleza', op: 'mixta', rain: [3, 7, 10, 14, 18, 22].includes(level), ...MISSIONS[level - 1], n: level };
   const r = mulberry32(level * 7919), pick = a => a[Math.floor(r() * a.length)], boss = level % BOSS_EVERY === 0;
   const bt = ['boss', 'coronel', 'viuda'][(level / BOSS_EVERY - 1) % 3];
   return { n: level, name: boss ? `${FOES[bt].title} · ${level / BOSS_EVERY}` : `Contrato ${level}`, boss: boss && bt, scene: boss ? 'fortaleza' : pick(['oficinas', 'almacen', 'galeria', 'banco', 'datos', 'joyeria', 'casino', 'museo', 'tren', 'yate']),
-    op: pick(['sigilo', 'asalto', 'mixta']), car: pick(['van', 'sedan', 'suv', 'armored']), chase: !boss && r() < 0.45, brief: 'Un contrato más en la ciudad. Cada vez pagan más y vigilan mejor.' };
+    op: pick(['sigilo', 'asalto', 'mixta']), car: pick(['van', 'sedan', 'suv', 'armored']), chase: !boss && r() < 0.45, rain: !boss && r() < 0.3, brief: 'Un contrato más en la ciudad. Cada vez pagan más y vigilan mejor.' };
 }
 // Objetivos: primarios (obligatorios) y secundarios (dan dinero y estrellas). Salen de la misión, así el briefing ya los conoce
 function missionObjectives(level) {
@@ -698,7 +698,7 @@ function buildRoom(level, seed) {
     mission: M, op: M.op, cash: 0, shownCash: 0, searched: new Set(), act: null, reinfT: 20, code: null, hasCode: false, codeDrawer: -1,
     doors: (L.secure || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, hack: 0 })),
     vault: L.vault || null, idoors: (L.idoors || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, t: 0, swing: 0 })), cams: [], camsOff: false, jams: 0, jamT: 0, drag: null,
-    road: L.road || null, traffic: [], trafT: 2, copCars: [], dropCar: null, exitCar: null,
+    rain: !!M.rain && !boss, puddles: [], road: L.road || null, traffic: [], trafT: 2, copCars: [], dropCar: null, exitCar: null,
     obj: missionObjectives(level), civKilled: 0, subdued: 0, policeT: 0, police: false, alarmBeforeLoot: false, vaultBy: null, escaped: false,
   };
   if (r.loot) r.loot.type = SCENE_LOOT[M.scene] || 'lingotes';
@@ -786,6 +786,11 @@ function buildRoom(level, seed) {
       e.goal = jitter(e.wps[1]);
       r.enemies.push(e); k--;
     }
+  }
+  if (!boss && (r.rain || rand() < 0.4)) for (let k = r.rain ? 22 : 10, tries = 0; k > 0 && tries < 400; tries++) { // charcos en el asfalto y las aceras (con lluvia, más)
+    const c = ri(W * H), f = fks[0][c];
+    if (maps[0][c] !== FLOOR || zone[c] || ![0, 2, 7, 11, 13, 17].includes(f)) continue;
+    const q = center(c); r.puddles.push({ x: q.x + rnd(-10, 10), y: q.y + rnd(-10, 10), rx: 14 + rand() * 22, ry: 9 + rand() * 12, seed: rand() }); k--;
   }
   if (r.doors.length) r.obj.splice(0, 0, { id: 'vault', text: 'Abre la cámara acorazada', primary: true, state: 0 });
   if (M.op === 'asalto') { // entrar con todo: la alarma suena desde el principio y la policía ya está en camino
@@ -1558,8 +1563,59 @@ function showMenu() { // de fondo, un mapa de verdad con sus luces y la cámara 
   refreshMenu(); show('menu');
 }
 // ---- Briefing: tarjeta animada antes de cada misión
+// ---- Historia: escenas cortas antes de algunas misiones, con una ilustración dibujada y un rival (Darío Vela)
+const STORY = {
+  1: ['Primer trabajo', 'city', ['La ciudad lleva semanas a oscuras: cortes de luz cada noche y nadie hace preguntas.', 'Marta, al teléfono: «Te he conseguido algo fácil. Un maletín en una gestoría. Si sale bien, habrá más».', '«Y recuerda: si nadie te ve, nadie te busca».']],
+  3: ['Un nombre', 'figure', ['Alguien ha preguntado por ti en el puerto: Darío Vela, un ladrón que trabaja para el Alcaide.', 'Marta: «Dice que esta ciudad es suya y que los golpes los da él. Ten cuidado: no es de los que perdonan».']],
+  5: ['El banco Norte', 'bank', ['Darío intentó este mismo golpe la semana pasada. Salió con las manos vacías y dos hombres menos.', 'Marta: «Si lo consigues tú, lo vas a humillar delante del Alcaide. Me gusta la idea».']],
+  8: ['Precio por tu cabeza', 'fortress', ['Darío le ha dado tu nombre al Alcaide. Ahora hay precio por tu cabeza.', 'Marta: «Solo hay una forma de que dejen de buscarte. Entra en su fortaleza y termina con esto».']],
+  9: ['Un trono vacío', 'heli', ['El Alcaide ha caído. Darío escapó con sus contactos y su dinero.', 'Un mercenario, el Coronel, ocupa el sitio del Alcaide. Y Darío ya trabaja para él.']],
+  13: ['El oro del Alcaide', 'train', ['Darío ha cargado lo que queda del oro del Alcaide en un tren de mercancías.', 'Marta: «Si pierde ese oro, el Coronel lo mata. No me digas que no te tienta».']],
+  15: ['La fiesta', 'yacht', ['El Coronel celebra en su yate. Darío estará allí, y en un camarote cuelga un cuadro que vale una fortuna.', 'Marta: «Entra, coge el cuadro y sal. Ni se te ocurra hacer una locura con Darío».']],
+  16: ['Vendido otra vez', 'soldiers', ['Darío te ha vuelto a vender: el Coronel sabe dónde estás y te espera con todos sus hombres.', '«Pues que espere sentado», dices. Y cargas el arma.']],
+  17: ['Cabos sueltos', 'city', ['Con el Coronel fuera de juego, Darío desaparece del mapa.', 'Marta: «Alguien está limpiando la ciudad. Los que trabajaban para el Coronel aparecen muertos».']],
+  22: ['Ochocientos metros', 'scope', ['Encuentran a Darío en una azotea. Un solo disparo, desde ochocientos metros.', 'Marta: «La Viuda. Ella es quien limpia. Y tú eres el último cabo suelto».']],
+  24: ['El último trabajo', 'rooftop', ['La azotea de la Viuda, en lo alto de la torre más alta de la ciudad.', 'Marta: «Es ella o tú. Cuando acabe, nos vamos de esta ciudad. Te lo prometo».']],
+};
+function drawStory(kind) { // ilustración nocturna: cielo, luna, ciudad y una silueta según la escena
+  const cv = $('stCanvas'), g = cv.getContext('2d'), w = cv.width, h = cv.height, r = mulberry32(kind.length * 977 + 3);
+  const sky = g.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#05070d'); sky.addColorStop(1, '#1c2533'); g.fillStyle = sky; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(220,230,255,0.7)'; for (let i = 0; i < 50; i++) g.fillRect(r() * w, r() * h * 0.5, 1.2, 1.2);
+  g.fillStyle = 'rgba(255,240,210,0.9)'; g.beginPath(); g.arc(w * 0.8, h * 0.22, 18, 0, 7); g.fill(); g.fillStyle = glow(g, w * 0.8, h * 0.22, 60, '255,230,190', 0.25); g.beginPath(); g.arc(w * 0.8, h * 0.22, 60, 0, 7); g.fill();
+  const sil = '#06080c', city = (base, hmax, col) => { for (let x = 0; x < w;) { const bw = 18 + r() * 40, bh = 20 + r() * hmax; g.fillStyle = col; g.fillRect(x, base - bh, bw, bh); g.fillStyle = 'rgba(255,200,120,0.55)'; for (let y = base - bh + 5; y < base - 4; y += 7) for (let xx = x + 3; xx < x + bw - 3; xx += 6) if (r() < 0.15) g.fillRect(xx, y, 2, 3); x += bw + 2; } };
+  city(h * 0.82, h * 0.45, '#0c111a'); g.fillStyle = '#05070a'; g.fillRect(0, h * 0.82, w, h * 0.18);
+  g.fillStyle = sil;
+  if (kind === 'figure' || kind === 'scope') { // silueta con abrigo bajo una farola, con lluvia
+    g.fillStyle = glow(g, w * 0.3, h * 0.42, 90, '255,170,90', 0.35); g.beginPath(); g.arc(w * 0.3, h * 0.42, 90, 0, 7); g.fill();
+    g.fillStyle = sil; g.fillRect(w * 0.3 - 2, h * 0.35, 4, h * 0.5); g.fillRect(w * 0.3 - 2, h * 0.35, 22, 4);
+    g.beginPath(); g.moveTo(w * 0.42, h * 0.86); g.lineTo(w * 0.44, h * 0.55); g.lineTo(w * 0.5, h * 0.5); g.lineTo(w * 0.56, h * 0.55); g.lineTo(w * 0.58, h * 0.86); g.fill(); g.beginPath(); g.arc(w * 0.5, h * 0.44, 9, 0, 7); g.fill(); g.fillRect(w * 0.46, h * 0.385, 16, 4);
+    if (kind === 'scope') { g.strokeStyle = 'rgba(255,60,60,0.8)'; g.lineWidth = 2; g.beginPath(); g.arc(w * 0.5, h * 0.45, 40, 0, 7); g.moveTo(w * 0.5 - 50, h * 0.45); g.lineTo(w * 0.5 + 50, h * 0.45); g.moveTo(w * 0.5, h * 0.45 - 50); g.lineTo(w * 0.5, h * 0.45 + 50); g.stroke(); }
+    g.strokeStyle = 'rgba(160,190,220,0.25)'; g.lineWidth = 1; for (let i = 0; i < 70; i++) { const x = r() * w, y = r() * h; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 4, y + 12); g.stroke(); }
+  } else if (kind === 'bank') { g.fillStyle = '#0e131c'; g.fillRect(w * 0.3, h * 0.38, w * 0.4, h * 0.44); for (let i = 0; i < 5; i++) { g.fillStyle = '#1a2230'; g.fillRect(w * 0.33 + i * w * 0.07, h * 0.46, 10, h * 0.36); } g.fillStyle = '#141b26'; g.beginPath(); g.moveTo(w * 0.28, h * 0.38); g.lineTo(w * 0.5, h * 0.26); g.lineTo(w * 0.72, h * 0.38); g.fill(); }
+  else if (kind === 'fortress' || kind === 'rooftop') { g.fillStyle = sil; g.fillRect(w * 0.35, h * 0.3, w * 0.3, h * 0.55); g.fillRect(w * 0.3, h * 0.22, w * 0.06, h * 0.63); g.fillRect(w * 0.64, h * 0.22, w * 0.06, h * 0.63);
+    g.fillStyle = 'rgba(230,240,255,0.12)'; for (const [x, a] of [[0.33, -0.5], [0.67, 0.6]]) { g.beginPath(); g.moveTo(w * x, h * 0.22); g.lineTo(w * x + Math.sin(a) * 300 - 30, -10); g.lineTo(w * x + Math.sin(a) * 300 + 30, -10); g.fill(); } }
+  else if (kind === 'heli') { g.save(); g.translate(w * 0.45, h * 0.32); g.fillStyle = sil; g.beginPath(); g.ellipse(0, 0, 34, 14, 0, 0, 7); g.fill(); g.fillRect(20, -4, 50, 6); g.fillRect(-50, -18, 100, 3); g.fillStyle = 'rgba(230,240,255,0.15)'; g.beginPath(); g.moveTo(-6, 10); g.lineTo(-70, h * 0.6); g.lineTo(40, h * 0.6); g.fill(); g.restore(); }
+  else if (kind === 'train') { g.fillStyle = sil; for (let i = 0; i < 5; i++) g.fillRect(20 + i * 92, h * 0.64, 86, h * 0.16); g.fillStyle = '#2a2f36'; g.fillRect(0, h * 0.8, w, 3); }
+  else if (kind === 'yacht') { g.fillStyle = '#0a1622'; g.fillRect(0, h * 0.72, w, h * 0.28); g.fillStyle = '#d8dde3'; g.beginPath(); g.moveTo(w * 0.18, h * 0.72); g.lineTo(w * 0.78, h * 0.72); g.lineTo(w * 0.86, h * 0.62); g.lineTo(w * 0.24, h * 0.62); g.fill(); g.fillStyle = '#9aa2ab'; g.fillRect(w * 0.32, h * 0.52, w * 0.36, h * 0.1); g.fillStyle = 'rgba(255,210,140,0.8)'; for (let i = 0; i < 8; i++) g.fillRect(w * 0.34 + i * w * 0.04, h * 0.56, 8, 4); }
+  else if (kind === 'soldiers') { g.fillStyle = sil; for (let i = 0; i < 7; i++) { const x = w * 0.15 + i * w * 0.11, y = h * 0.86; g.fillRect(x - 7, y - 40, 14, 40); g.beginPath(); g.arc(x, y - 46, 8, 0, 7); g.fill(); g.fillRect(x + 5, y - 32, 18, 3); } }
+  else { g.fillStyle = sil; g.fillRect(w * 0.42, h * 0.74, 60, 22); g.fillStyle = 'rgba(255,240,210,0.5)'; g.fillRect(w * 0.42 + 56, h * 0.76, 4, 4); } // la furgoneta
+}
+let storyT = 0;
+function showStory(n, next) {
+  const [title, kind, lines] = STORY[n];
+  $('stTitle').textContent = title; drawStory(kind);
+  const el = $('stText'); el.innerHTML = ''; let i = 0;
+  clearInterval(storyT);
+  const add = () => { if (i >= lines.length) { clearInterval(storyT); return; } const p = document.createElement('p'); p.textContent = lines[i++]; el.appendChild(p); };
+  add(); storyT = setInterval(add, 1400);
+  storyNext = () => { clearInterval(storyT); next(); };
+  state = 'story'; show('story');
+}
+let storyNext = null;
 let goAfter = null, typeT = 0;
 function brief(after) {
+  run.seen = Array.isArray(run.seen) ? run.seen : [];
+  if (STORY[run.level] && !run.seen.includes(run.level)) { run.seen.push(run.level); showStory(run.level, () => brief(after)); return; } // la escena va antes del briefing, una vez por partida
   const M = mission(run.level), car = CARS[M.car] || 'Furgoneta', vault = M.scene === 'banco' || M.scene === 'datos';
   $('bfNum').textContent = `MISIÓN ${String(M.n).padStart(2, '0')} / ${MISSIONS.length}${M.n > MISSIONS.length ? ' · MODO INFINITO' : ''} · ${(SCENES[M.scene] || '').toUpperCase()}`;
   $('bfName').textContent = M.name.toUpperCase();
@@ -1568,7 +1624,7 @@ function brief(after) {
     : [vault ? 'La cámara tiene puerta de seguridad: busca el código en los cajones, en el supervisor o en la terminal, o hackéala.' : M.scene === 'galeria' ? 'Puede que la pieza esté en una cámara cerrada.' : 'Registra cajones, estanterías y cuerpos: lo que saquees va a la bolsa.',
       OPS[M.op].desc, LOOT_ALARM[M.scene] ? 'El botín tiene sensor: al cogerlo saltará la alarma.' : 'El botín no tiene alarma: si nadie te ve, nadie sabrá que te lo has llevado.',
       PUBLIC[M.scene] ? 'Hay civiles: si te ven armado o ven un cuerpo, huirán a llamar a la policía. Con el cuchillo se les reduce sin hacerles daño.' : '',
-      M.chase ? 'Al huir te perseguirán: derriba sus coches o aguanta hasta perderlos.' : ''].filter(Boolean);
+      M.chase ? 'Al huir te perseguirán: derriba sus coches o aguanta hasta perderlos.' : '', M.rain ? 'Llueve: tus pasos se oyen menos y fuera se ve peor.' : ''].filter(Boolean);
   let i = 0; const li = t => `<li style="--i:${i++}">${t}</li>`;
   $('bfObj').innerHTML = `<li class="bf-h">Objetivos principales</li>${objs.filter(o => o.primary).map(o => li(o.text)).join('')}<li class="bf-h">Secundarios</li>${objs.filter(o => !o.primary).map(o => li(`${o.text} <em>+$${o.reward}</em>`)).join('')}<li class="bf-h">Información</li>${info.map(li).join('')}`;
   const card = $('bfCard'); card.classList.remove('anim'); void card.offsetWidth; card.classList.add('anim');
@@ -1828,7 +1884,7 @@ function moveTo(e, tx, ty, speed, dt) {
   return false;
 }
 const visionHalf = e => FOES[e.type].half ? (e.state === 'combat' ? 0.45 : FOES[e.type].half) : e.state === 'combat' ? 1.2 : 0.62;
-const visionRange = e => FOES[e.type].vision * (1 + 0.15 * e.alertLvl) * (e.state === 'combat' ? 1.4 : 0.6 + 0.4 * Math.min(1, room.exposure));
+const visionRange = e => FOES[e.type].vision * (room.rain && !zone[cellOf(e.x, e.y)] ? 0.85 : 1) * (1 + 0.15 * e.alertLvl) * (e.state === 'combat' ? 1.4 : 0.6 + 0.4 * Math.min(1, room.exposure));
 function lookAround(e, dt, spread) {
   if ((e.lookT -= dt) <= 0) { e.lookT = rnd(0.7, 1.8); e.lookA = e.a + rnd(-spread, spread); }
   return e.lookA;
@@ -2193,7 +2249,7 @@ function updatePlayer(dt) {
   p.onStairs = onStairs;
   if (!p.sneak && p.speed > 90 && (p.stepT -= dt) <= 0) {
     p.stepT = p.sprint ? 0.24 : 0.34;
-    noise(p.x, p.y, (p.sprint ? 280 : 40 + p.speed * 0.6) * (1 - 0.2 * sk('feet')), 'step');
+    noise(p.x, p.y, (p.sprint ? 280 : 40 + p.speed * 0.6) * (1 - 0.2 * sk('feet')) * (room.rain ? 0.75 : 1), 'step');
     sfx('step');
   }
   aimAndFire(dt, mx, my, mag, assist);
@@ -2543,6 +2599,7 @@ function blood(x, y, a, n) {
 function updateFx(dt) {
   for (const q of room.parts) {
     q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.9; q.vy *= 0.9;
+    if (q.t - dt <= 0 && q.t > 0 && q.shell && room.p && Math.hypot(q.x - room.p.x, q.y - room.p.y) < 500 && !(room.tinkT > room.time)) { room.tinkT = room.time + 0.07; sfx('shell', q.x, q.y); } // tintineo del casquillo al caer
     if ((q.t -= dt) <= 0 && (q.shell || q.debris || q.blood)) decal({ x: q.x, y: q.y, z: q.z, r: q.shell ? 1.6 : q.blood ? q.s * 0.55 : q.s * 0.6, shell: q.shell, rubble: q.debris, drop: q.blood }); // quedan en el suelo
   }
   room.parts = room.parts.filter(q => q.t > 0);
@@ -2689,6 +2746,15 @@ function bakeRegion(z, x0, y0, x1, y1) {
   g.globalCompositeOperation = 'source-atop'; // grano solo sobre lo pintado: rompe lo plano de cada superficie
   g.fillStyle = g.createPattern(grainCv, 'repeat'); g.fillRect(X0 * T, Y0 * T, (X1 - X0 + 1) * T, (Y1 - Y0 + 1) * T);
   g.globalCompositeOperation = 'source-over';
+  if (z === 0 && room && room.puddles) for (const d of room.puddles) { // charcos: oscuros y brillantes; reflejan las farolas cercanas
+    if (d.x < (X0 - 1) * T || d.x > (X1 + 2) * T || d.y < (Y0 - 1) * T || d.y > (Y1 + 2) * T) continue;
+    const h = i => hash(Math.floor(d.seed * 1e6), i, 5), blob = () => { g.beginPath(); for (let i = 0; i < 4; i++) g.ellipse(d.x + (h(i) - 0.5) * d.rx * 0.8, d.y + (h(i + 4) - 0.5) * d.ry * 0.7, d.rx * (0.5 + h(i + 8) * 0.4), d.ry * (0.5 + h(i + 12) * 0.4), 0, 0, 7); };
+    g.save(); blob(); g.clip();
+    g.fillStyle = 'rgba(4,10,20,0.55)'; g.fillRect(d.x - d.rx * 1.5, d.y - d.ry * 1.5, d.rx * 3, d.ry * 3);
+    for (const l of room.lamps) { const dd = Math.hypot(l.x - d.x, l.y - d.y); if (l.z === 0 && dd < 260) { g.fillStyle = glow(g, d.x + (l.x - d.x) * 0.15, d.y + (l.y - d.y) * 0.15, d.rx, l.rgb, 0.45 * (1 - dd / 260)); g.fillRect(d.x - d.rx * 1.5, d.y - d.ry * 1.5, d.rx * 3, d.ry * 3); } }
+    g.fillStyle = 'rgba(200,220,240,0.12)'; g.fillRect(d.x - d.rx, d.y - d.ry * 0.6, d.rx * 1.2, 1.5);
+    g.restore();
+  }
   // sombras: oclusión al pie de muros y estanterías, y sombra proyectada de cada prop
   const ao = [g.createLinearGradient(0, 0, 0, 12), g.createLinearGradient(0, 0, 12, 0)];
   for (const a of ao) { a.addColorStop(0, 'rgba(0,0,0,0.5)'); a.addColorStop(1, 'rgba(0,0,0,0)'); }
@@ -3466,6 +3532,16 @@ function render() {
     if (maps[1]) { ctx.globalAlpha = 0.14; blit(ctx, bakes[1]); }
     ctx.globalAlpha = 1;
   }
+  if (room.rain) { // salpicaduras de lluvia en el suelo (solo se ven donde hay luz)
+    ctx.strokeStyle = 'rgba(170,200,230,0.45)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 46; i++) {
+      const per = 0.5, cyc = Math.floor((room.time + hash(i, 7, 3) * per) / per), k = ((room.time + hash(i, 7, 3) * per) % per) / per;
+      const x = cx + (hash(i, cyc, 4) * 2 - 1) * hw, y = cy + (hash(i, cyc, 5) * 2 - 1) * hh;
+      if (solidPx(x, y)) continue;
+      ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.ellipse(x, y, 1 + 5 * k, 0.6 + 3 * k, 0, 0, 7); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   drawFxUnder(here);
 
   // ---- Oscuridad: luz horneada de las lámparas + linterna, halo y fogonazos ----
@@ -3497,6 +3573,11 @@ function render() {
   lctx.restore();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(lightCv, 0, 0, cw, ch);
+  if (room.rain && !room.demo) { // lluvia: trazos que caen (se ven algo incluso a oscuras)
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.strokeStyle = 'rgba(170,200,230,0.2)'; ctx.lineWidth = dpr; ctx.beginPath();
+    for (let i = 0; i < 140; i++) { const x = (hash(i, 1, 9) * cw + room.time * 120 * dpr) % cw, y = (hash(i, 2, 9) * ch + room.time * 900 * dpr * (0.8 + hash(i, 3, 9) * 0.4)) % ch; ctx.moveTo(x, y); ctx.lineTo(x - 6 * dpr, y + 18 * dpr); }
+    ctx.stroke();
+  }
   ctx.setTransform(S, 0, 0, S, ox, oy);
   ctx.globalCompositeOperation = 'lighter'; // tono cálido de la linterna (el de las lámparas va horneado en el suelo)
   if (cone) { ctx.fillStyle = glow(ctx, p.x, p.y, BEAM, '255,217,138', 0.06); fillPoly(ctx, cone); }
@@ -3882,7 +3963,11 @@ function initAudio() {
     const hf = ac.createBiquadFilter(); hf.type = 'lowpass'; hf.frequency.value = 150;
     const hg = ac.createGain(); hg.gain.value = 0;
     hum.connect(hf).connect(hg).connect(master); hum.start();
-    amb = { wg, hg };
+    const rs = ac.createBufferSource(); rs.buffer = noiseBuf; rs.loop = true; // lluvia: ruido filtrado de fondo
+    const rf = ac.createBiquadFilter(); rf.type = 'bandpass'; rf.frequency.value = 2400; rf.Q.value = 0.5;
+    const rg = ac.createGain(); rg.gain.value = 0;
+    rs.connect(rf).connect(rg).connect(master); rs.start();
+    amb = { wg, hg, rg };
     initMusic();
   } catch (e) { ac = null; }
 }
@@ -3916,7 +4001,25 @@ function hit(t, dur, vol, freq, type, verbAmt = 0) { // golpe de ruido filtrado 
   if (verbAmt) { const s2 = ac.createGain(); s2.gain.value = verbAmt; v.connect(s2).connect(verb); }
   src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
 }
-function musicStep(i, t) {
+function musicStep(i, t, mode) {
+  if (mode === 'stealth') { // sigilo: pads graves, un pulso lento, charles suave y alguna nota con eco
+    const st = i % 32, [root, tri] = CHORDS[Math.floor(i / 32) % 4];
+    if (st === 0) for (const k of tri) note('triangle', mfreq(root + 24 + k), t, STEP * 32 + 0.5, 0.03, { cut: 700, att: 1.2, verbAmt: 0.6, sus: true });
+    if (st % 8 === 0) note('sine', mfreq(root), t, STEP * 3, 0.2, { cut: 300 });
+    if (st % 4 === 2) hit(t, 0.03, 0.025, 8000, 'highpass');
+    if (st === 20 || (st === 28 && Math.floor(i / 32) % 2)) note('triangle', mfreq(root + 36 + tri[Math.floor(i / 4) % 3]), t, 0.5, 0.04, { cut: 2400, to: music.dl });
+    return;
+  }
+  if (mode === 'alarm') { // alarma, combate o persecución: golpes de acorde, bajo que empuja, batería y arpegio
+    const st = i % 16, [root, tri] = CHORDS[Math.floor(i / 16) % 4];
+    if (st === 0) for (const k of tri) note('sawtooth', mfreq(root + 24 + k), t, STEP * 3, 0.045, { cut: 1600, verbAmt: 0.3 });
+    if (st % 2 === 0) note('sawtooth', mfreq(root + (st % 4 === 2 ? 12 : 0)), t, STEP * 1.6, 0.22, { cut: 620 });
+    if (st % 4 === 0) note('sine', 125, t, 0.3, 0.8, { f1: 45, cut: 800 });
+    if (st === 4 || st === 12) { hit(t, 0.18, 0.32, 1900, 'bandpass', 0.3); note('sine', 200, t, 0.1, 0.16, { f1: 120 }); }
+    hit(t, 0.03, st % 2 ? 0.035 : 0.06, 8000, 'highpass');
+    const k = tri[i % 3] + (Math.floor(i / 3) % 2) * 12; note('square', mfreq(root + 36 + k), t, 0.12, 0.03, { cut: 2200, to: music.dl });
+    return;
+  }
   const st = i % 16, [root, tri] = CHORDS[Math.floor(i / 16) % 4], part = Math.floor(i / 64) % 4; // part 0: solo pads y bajo
   if (st === 0) for (const k of tri) for (const dt of [-8, 8]) note(k === tri[0] ? 'sawtooth' : 'triangle', mfreq(root + 24 + k), t, STEP * 16 + 0.5, 0.05, { cut: 1000, att: 0.7, verbAmt: 0.5, detune: dt, sus: true });
   if (st % 2 === 0) note('sawtooth', mfreq(root + (st % 4 === 2 ? 12 : 0)), t, STEP * 1.9, 0.22, { cut: 480 });
@@ -3929,11 +4032,14 @@ function musicStep(i, t) {
 }
 setInterval(() => { // programa la música con un poco de antelación
   if (!ac || !music) return;
-  const want = state === 'menu' || state === 'brief' || state === 'shop', now = ac.currentTime;
-  music.g.gain.setTargetAtTime(want ? 0.55 : 0, now, want ? 1.2 : 0.4);
-  if (!want) { music.next = 0; return; }
+  const now = ac.currentTime, menuish = ['menu', 'brief', 'shop', 'story', 'results', 'slots', 'settings'].includes(state);
+  const playing = state === 'play' && room && !room.demo, hot = playing && (room.chase || room.alarm || room.enemies.some(e => e.state === 'combat'));
+  const mode = menuish ? 'menu' : playing ? (hot ? 'alarm' : 'stealth') : null; // en la misión, la música sube cuando salta la alarma
+  if (mode !== music.mode) { music.mode = mode; music.step = 0; }
+  music.g.gain.setTargetAtTime(mode === 'menu' ? 0.55 : mode === 'alarm' ? 0.42 : mode === 'stealth' ? 0.3 : 0, now, mode ? 1.2 : 0.4);
+  if (!mode) { music.next = 0; return; }
   if (music.next < now) music.next = now + 0.05;
-  while (music.next < now + 0.3) { musicStep(music.step++, music.next); music.next += STEP; }
+  while (music.next < now + 0.3) { musicStep(music.step++, music.next, mode); music.next += STEP; }
 }, 70);
 addEventListener('pointerdown', () => initAudio(), { once: true }); // los navegadores solo dejan sonar tras el primer toque
 addEventListener('keydown', () => initAudio(), { once: true });
@@ -3942,6 +4048,7 @@ function ambience(on) {
   const t = ac.currentTime, inside = on && indoors();
   amb.wg.gain.setTargetAtTime(!on ? 0 : inside ? 0.01 : 0.045 + 0.03 * Math.sin(t * 0.6) * Math.sin(t * 0.23), t, 0.4); // rachas
   amb.hg.gain.setTargetAtTime(inside ? 0.018 : 0, t, 0.4);
+  amb.rg.gain.setTargetAtTime(on && room && room.rain ? (inside ? 0.025 : 0.08) : 0, t, 0.5);
 }
 function send(g) {
   g.connect(out);
@@ -4022,6 +4129,7 @@ function sfx(k, x, y) {
     case 'heal': tone(520, 780, 0.18, 0.09, 'sine'); tone(780, 1040, 0.2, 0.07, 'sine', 0.12); break;
     case 'horn': tone(410, 400, 0.35, 0.06 * v, 'square'); tone(520, 510, 0.35, 0.05 * v, 'square'); break;
     case 'door': burst(0.08, 0.12 * v, 900, 'bandpass', 2); tone(180, 120, 0.12, 0.05 * v, 'triangle'); break;
+    case 'shell': tone(3600 + rnd(-300, 300), 3000, 0.04, 0.03 * v * (room && room.rain ? 0.5 : 1), 'triangle'); tone(4400, 4000, 0.03, 0.02 * v, 'triangle', 0.05); break;
     case 'tink': tone(3200, 2800, 0.06, 0.08 * v, 'triangle'); tone(4100, 3600, 0.05, 0.05 * v, 'triangle', 0.07); break;
     case 'scream': tone(700, 1150, 0.35, 0.11 * v, 'sawtooth'); tone(1000, 640, 0.32, 0.08 * v, 'sawtooth', 0.28); break;
     case 'radio': burst(0.22, 0.12, 1700, 'bandpass', 3); tone(1250, 1250, 0.05, 0.05, 'square', 0.24); break;
@@ -4038,7 +4146,7 @@ function sfx(k, x, y) {
 function show(id) {
   ambience(id === null);
   if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
-  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots', 'story']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -4107,6 +4215,7 @@ press('bWeapon', cycleWeapon);
 press('bSneak', toggleSneak);
 $('bPause').addEventListener('click', () => pause());
 $('bObjs').addEventListener('click', e => { e.stopPropagation(); objsOpen = !objsOpen; objsKey = ''; if (room) room.objSeen = true; });
+$('bStGo').addEventListener('click', () => { initAudio(); const f = storyNext; storyNext = null; if (f) f(); });
 $('bRsGo').addEventListener('click', () => { const f = resultsNext; resultsNext = null; if (f) f(); });
 
 function pause() {

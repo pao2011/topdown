@@ -130,6 +130,10 @@ details.howto[open] summary { margin-bottom: 10px; }
 .slot-list { display: grid; gap: 8px; }
 .slot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; }
 .slot.cur { border-color: var(--beam); } .slot b { display: block; color: var(--ink); } .slot small { color: var(--dim); font-size: 12px; } .slot .row { flex-wrap: nowrap; }
+.story { width: min(560px, 100%); }
+#stCanvas { position: static; inset: auto; display: block; cursor: default; touch-action: auto; width: 100%; height: auto; border-radius: 3px; border: 1px solid var(--line); background: #05070d; }
+.st-text { display: grid; gap: 6px; min-height: 4.5em; } .st-text p { margin: 0; color: var(--ink); line-height: 1.45; animation: tagIn .5s both; }
+@media (max-height: 480px) { .story { display: grid; grid-template-columns: 1fr 1.1fr; gap: 6px 16px; padding: 14px 18px; } #stCanvas { grid-row: span 4; } .story .bf-title { font-size: 28px !important; } .st-text p { font-size: 13px; } }
 #objs { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 92px * var(--hud, 1)); transform: scale(var(--hud, 1)); transform-origin: top left; max-width: 260px; }
 #bObjs { padding: 4px 10px; border: 1px solid var(--line); border-radius: 3px; background: rgba(14, 19, 26, .62); color: var(--beam); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 #bObjs::after { content: ' ▾'; } #bObjs[aria-expanded="true"]::after { content: ' ▴'; }
@@ -269,6 +273,16 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
       <button id="bOverShop" class="ghost">Tienda</button>
       <button id="bNew" class="ghost">Nueva partida</button>
     </div>
+  </div>
+</div>
+
+<div id="story" class="overlay brief" hidden>
+  <div class="panel story">
+    <canvas id="stCanvas" width="480" height="200"></canvas>
+    <p class="eyebrow">Historia</p>
+    <h2 class="bf-title" id="stTitle" style="font-size:38px"></h2>
+    <div id="stText" class="st-text"></div>
+    <button id="bStGo" class="cta">Continuar</button>
   </div>
 </div>
 
