@@ -13,7 +13,7 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 
 | Táctil | Teclado / ratón | Acción |
 |---|---|---|
-| Stick izquierdo (poco recorrido) | `WASD` + `Ctrl` o `C` | Moverte en sigilo, sin ruido |
+| Stick izquierdo (poco recorrido) | `WASD` + `C` | Moverte en sigilo, sin ruido |
 | Stick izquierdo (a fondo) | `WASD` | Caminar: los pasos se oyen |
 | Stick izquierdo (más allá del borde) | `WASD` + `Mayús` | Correr: más rápido, mucho ruido y gasta aguante |
 | Stick derecho | Ratón | Apuntar la linterna |

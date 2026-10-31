@@ -1265,7 +1265,7 @@ function updatePlayer(dt) {
   const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   if (kx || ky) {
-    mag = keys.ControlLeft || keys.ControlRight || keys.KeyC ? 0.45 : 1; sprint = mag === 1 && !!(keys.ShiftLeft || keys.ShiftRight);
+    mag = keys.KeyC ? 0.45 : 1; sprint = mag === 1 && !!(keys.ShiftLeft || keys.ShiftRight);
     const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
   }
   if (p.tired || !mag) sprint = false;
@@ -2521,7 +2521,7 @@ function drawHud() {
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-    ctx.fillText('WASD mover · Mayús correr · Ctrl sigilo · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
+    ctx.fillText('WASD mover · Mayús correr · C sigilo · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
   }
   syncHud();
   syncUse();
