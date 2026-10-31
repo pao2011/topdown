@@ -47,6 +47,7 @@ button:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
 #top .btn { width: 40px; height: 40px; }
 #top .btn svg { width: 20px; height: 20px; }
 #bWeapon { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(var(--hud, 1)); transform-origin: bottom center; min-width: 150px; padding: 6px 16px 8px; border-radius: 6px; border: 1px solid rgba(217, 226, 236, .2); background: linear-gradient(90deg, rgba(255, 217, 138, .25) var(--p, 0%), rgba(14, 19, 26, .6) var(--p, 0%)); display: grid; gap: 0; text-align: center; touch-action: none; }
+.use { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(var(--hud, 1)); transform-origin: bottom center; padding: 9px 18px; border-radius: 22px; border: 1.5px solid #8fb8ff; background: rgba(14, 19, 26, .75); color: #cfe0ff; font-weight: 600; letter-spacing: .04em; white-space: nowrap; touch-action: none; }
 #wName { font-size: 11px; letter-spacing: .14em; color: var(--dim); }
 #wAmmo { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
 
@@ -90,6 +91,35 @@ kbd { font-family: inherit; color: var(--ink); }
 .item button:disabled { border-color: var(--line); color: var(--dim); cursor: default; }
 .item button.own { border-color: var(--ok); color: var(--ok); }
 #bNext { position: sticky; bottom: 0; box-shadow: 0 0 0 10px var(--panel); }
+#menu { background: radial-gradient(ellipse at 30% 40%, rgba(5, 7, 10, .35), rgba(5, 7, 10, .88)); }
+#menu .panel { background: rgba(14, 19, 26, .82); }
+.camp { display: flex; flex-wrap: wrap; gap: 6px; }
+.camp span { font-size: 12px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--dim); opacity: .55; white-space: nowrap; }
+.camp span.done { color: var(--ok); border-color: rgba(98, 214, 173, .5); opacity: 1; }
+.camp span.next { color: var(--night); background: var(--beam); border-color: var(--beam); opacity: 1; font-weight: 700; }
+details.howto summary { cursor: pointer; color: var(--beam); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+details.howto[open] summary { margin-bottom: 10px; }
+.brief { background: radial-gradient(ellipse at center, rgba(5, 7, 10, .55), rgba(5, 7, 10, .94)); }
+.brief-card { width: min(620px, 100%); border-left: 3px solid var(--beam); }
+.bf-title { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(40px, 9vw, 72px); line-height: .95; letter-spacing: .03em; color: var(--ink); }
+.tag { padding: 3px 10px; border-radius: 3px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid var(--line); color: var(--dim); }
+.tag.op-sigilo { color: var(--ok); border-color: var(--ok); }
+.tag.op-asalto { color: var(--alarm); border-color: var(--alarm); }
+.tag.op-mixta { color: var(--beam); border-color: var(--beam); }
+#bfBrief { min-height: 3em; }
+#bfObj { margin: 0; padding-left: 18px; color: var(--dim); font-size: 14px; line-height: 1.45; display: grid; gap: 4px; }
+.brief-card.anim { animation: cardIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+.brief-card.anim .bf-title { animation: titleIn .9s .15s cubic-bezier(.2, .8, .2, 1) both; }
+.brief-card.anim .tag { animation: tagIn .35s both; }
+.brief-card.anim .tag:nth-child(2) { animation-delay: .5s; } .brief-card.anim .tag:nth-child(3) { animation-delay: .6s; } .brief-card.anim .tag:nth-child(4) { animation-delay: .7s; }
+.brief-card.anim .tag:first-child { animation-delay: .4s; }
+.brief-card.anim #bfObj li { animation: tagIn .4s both; animation-delay: calc(.9s + var(--i) * .08s); }
+@keyframes cardIn { from { transform: translateY(26px) scale(.97); opacity: 0; } }
+@keyframes titleIn { from { letter-spacing: .45em; opacity: 0; filter: blur(6px); } }
+@keyframes tagIn { from { transform: translateY(6px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .brief-card.anim, .brief-card.anim * { animation: none !important; } }
+body.chase #bNoise, body.chase #bBreach, body.chase #bKnife { visibility: hidden; }
+@media (max-height: 480px) { .brief-card { gap: 8px; padding: 14px 20px; } .bf-title { font-size: 40px; } .brief-card .lead { font-size: 14px; } #bfBrief { min-height: 0; } #bfObj { font-size: 12.5px; gap: 1px; } .brief-card .cta { padding: 9px 26px; } }
 .over h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--alarm); }
 .over p, .pause p { margin: 0; color: var(--dim); }
 </style>
@@ -111,6 +141,7 @@ kbd { font-family: inherit; color: var(--ink); }
     <span></span>
     <button id="bKnife" class="btn big" aria-label="Cuchillo"><svg viewBox="0 0 24 24"><path d="M4 20l5-5"/><path d="M8 16l4 4"/><path d="M10 14L20 4c1 4-1 8-5 11z"/></svg><small>Cuchillo</small></button>
   </div>
+  <button id="bUse" class="use" hidden></button>
   <button id="bWeapon" aria-label="Cambiar arma"><span id="wName">PISTOLA</span><span id="wAmmo">12/12</span></button>
 </div>
 
@@ -124,18 +155,35 @@ kbd { font-family: inherit; color: var(--ink); }
       <button id="bPlay" class="cta">Jugar</button>
     </div>
     <p class="hint">Gira el teléfono: se juega en horizontal.</p>
+    <p class="eyebrow">Campaña</p>
+    <div id="camp" class="camp"></div>
+    <details class="howto"><summary>Cómo se juega</summary>
     <dl class="help">
-      <div><dt>El golpe</dt><dd>Corre el tiempo desde que entras: el botín brilla en la sala más profunda (a veces en la primera planta, sube por la escalera). Al cogerlo salta la alarma y empieza otra cuenta atrás para llegar a la furgoneta.</dd></div>
+      <div><dt>Operaciones</dt><dd>Sigilo: si te ven, llaman a la policía, pero sin ser visto el botín vale el doble. Asalto: alarma desde el principio, más guardias y equipo de más. Mixta: tú decides.</dd></div>
+      <div><dt>Usar</dt><dd>Registra cajones, estanterías, cuerpos y cajas de seguridad, hackea terminales y puertas, o teclea el código de la cámara. El dinero va a la bolsa y solo lo cobras si escapas.</dd></div>
+      <div><dt>El golpe</dt><dd>Corre el tiempo desde que entras: el botín brilla en la sala más profunda (a veces en la primera planta, sube por la escalera). Al cogerlo salta la alarma y empieza otra cuenta atrás para llegar al vehículo de huida.</dd></div>
       <div><dt>C4</dt><dd>Plántala en una pared, una caja o el suelo casi sin ruido y vuelve a pulsar para detonarla: abre huecos para atajar o sirve de trampa, pero la explosión se oye en todo el edificio. Las balas y el cuchillo rompen cajas y ventanas.</dd></div>
-      <div><dt>Stick izquierdo</dt><dd>Moverte. Poco recorrido es sigilo silencioso; a fondo corres y haces ruido.</dd></div>
+      <div><dt>Stick izquierdo</dt><dd>Moverte. Poco recorrido es sigilo silencioso; a fondo andas; más allá del borde esprintas, que hace mucho ruido y gasta resistencia.</dd></div>
       <div><dt>Stick derecho</dt><dd>Apunta la linterna. Llévalo hasta el borde para disparar.</dd></div>
       <div><dt>Cuchillo</dt><dd>Casi no hace ruido. Por la espalda o sin que te hayan detectado, elimina al instante.</dd></div>
       <div><dt>Ruido y granadas</dt><dd>El ruido atrae guardias hacia donde estás. Una granada se oye en todo el edificio.</dd></div>
       <div><dt>Luz y sombra</dt><dd>Con la linterna apagada cuesta más verte. Dispara a las lámparas para crear sombras. En los setos no te ven; sobre mesas y coches sí.</dd></div>
-      <div><dt>Teclado</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> sigilo · ratón apunta y dispara · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> ruido · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>Esc</kbd> pausa</dd></div>
-      <div><dt>Enemigos</dt><dd>Los perros te huelen de cerca aunque vayas a oscuras. El francotirador te avisa en rojo antes de disparar: corre para esquivarlo. El escudo para las balas de frente: rodéalo o usa una granada. En la sala 8 te espera el Alcaide.</dd></div>
-      <div><dt>Munición y guardado</dt><dd>La munición es limitada: recoge cajas (los guardias sueltan algunas) o cómprala en la tienda. La partida se guarda sola al entrar en cada sala y en la tienda.</dd></div>
+      <div><dt>Teclado</dt><dd><kbd>WASD</kbd> mover · <kbd>Mayús</kbd> esprintar · <kbd>Ctrl</kbd>/<kbd>C</kbd> sigilo · <kbd>Espacio</kbd> usar · ratón apunta y dispara · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> ruido · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>Esc</kbd> pausa</dd></div>
+      <div><dt>Enemigos</dt><dd>Los perros te huelen de cerca aunque vayas a oscuras. El francotirador te avisa en rojo antes de disparar: corre para esquivarlo. El escudo para las balas de frente: rodéalo o usa una granada. En las misiones 8 y 16 te espera el Alcaide.</dd></div>
+      <div><dt>Munición y guardado</dt><dd>La munición es limitada: recoge cajas (los guardias sueltan algunas) o cómprala en la tienda, con tipos especiales para cada arma. La partida se guarda sola al empezar cada misión y en la tienda.</dd></div>
     </dl>
+    </details>
+  </div>
+</div>
+
+<div id="brief" class="overlay brief" hidden>
+  <div class="panel brief-card" id="bfCard">
+    <p class="eyebrow" id="bfNum">MISIÓN 01</p>
+    <h2 class="bf-title" id="bfName">POLILLA</h2>
+    <div class="row" id="bfTags"></div>
+    <p class="lead" id="bfBrief"></p>
+    <ul id="bfObj"></ul>
+    <button id="bGo" class="cta">Empezar</button>
   </div>
 </div>
 

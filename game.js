@@ -7,12 +7,17 @@ let LS = 0.5; // escala de la máscara de oscuridad: más fina en PC
 const BEAM = 270, HALO_ON = 58, HALO_OFF = 92, LAMP_R = 125; // alcance de la luz (px de mundo)
 const CONE = { patrol: '150,195,255', suspicious: '255,181,71', investigate: '255,181,71', search: '255,181,71', combat: '255,84,68' };
 
-const WEAPONS = {
-  pistol:   { name: 'Pistola',  price: 0,   dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, reserve: 48, pellets: 1 },
-  smg:      { name: 'Subfusil', price: 350, dmg: 15,  rate: 11,  mag: 32, reload: 1.4, spread: 0.10,  noise: 460, speed: 1000, reserve: 128, pellets: 1 },
-  shotgun:  { name: 'Escopeta', price: 450, dmg: 15,  rate: 1.3, mag: 6,  reload: 1.9, spread: 0.22,  noise: 620, speed: 900,  reserve: 24, pellets: 8 },
-  crossbow: { name: 'Ballesta', price: 500, dmg: 120, rate: 0.9, mag: 1,  reload: 1.1, spread: 0.01,  noise: 40,  speed: 760,  reserve: 10, pellets: 1, bolt: true },
-  rifle:    { name: 'Fusil',    price: 750, dmg: 32,  rate: 7.5, mag: 26, reload: 1.6, spread: 0.045, noise: 560, speed: 1150, reserve: 104, pellets: 1 },
+const WEAPONS = { // kick: cuánto sacude la cámara cada disparo
+  pistol:   { name: 'Pistola',              price: 0,    dmg: 26,  rate: 3.5, mag: 12, reload: 1.0, spread: 0.05,  noise: 420, speed: 1000, reserve: 48,  pellets: 1, kick: 2 },
+  revolver: { name: 'Revólver',             price: 300,  dmg: 70,  rate: 1.6, mag: 6,  reload: 1.8, spread: 0.03,  noise: 520, speed: 1100, reserve: 30,  pellets: 1, kick: 6 },
+  smg:      { name: 'Subfusil',             price: 350,  dmg: 15,  rate: 11,  mag: 32, reload: 1.4, spread: 0.10,  noise: 460, speed: 1000, reserve: 128, pellets: 1, kick: 1.5 },
+  shotgun:  { name: 'Escopeta',             price: 450,  dmg: 15,  rate: 1.3, mag: 6,  reload: 1.9, spread: 0.22,  noise: 620, speed: 900,  reserve: 24,  pellets: 8, kick: 7 },
+  crossbow: { name: 'Ballesta',             price: 500,  dmg: 120, rate: 0.9, mag: 1,  reload: 1.1, spread: 0.01,  noise: 40,  speed: 760,  reserve: 10,  pellets: 1, bolt: true, kick: 1 },
+  smgs:     { name: 'Subfusil silenciado',  price: 600,  dmg: 13,  rate: 10,  mag: 30, reload: 1.4, spread: 0.09,  noise: 130, speed: 950,  reserve: 120, pellets: 1, silenced: true, kick: 1 },
+  rifle:    { name: 'Fusil',                price: 750,  dmg: 32,  rate: 7.5, mag: 26, reload: 1.6, spread: 0.045, noise: 560, speed: 1150, reserve: 104, pellets: 1, kick: 2.5 },
+  autosg:   { name: 'Escopeta automática',  price: 900,  dmg: 13,  rate: 3.2, mag: 10, reload: 2.4, spread: 0.24,  noise: 640, speed: 900,  reserve: 40,  pellets: 7, kick: 6 },
+  dmr:      { name: 'Rifle de tirador',     price: 1000, dmg: 85,  rate: 1.8, mag: 10, reload: 2.0, spread: 0.008, noise: 600, speed: 1500, reserve: 40,  pellets: 1, kick: 5 },
+  lmg:      { name: 'Ametralladora ligera', price: 1300, dmg: 24,  rate: 12,  mag: 80, reload: 3.4, spread: 0.08,  noise: 640, speed: 1100, reserve: 240, pellets: 1, kick: 2.5 },
 };
 const MODS = {
   silencer: { name: 'Silenciador',       desc: 'Ruido −70 %, daño −10 %',            price: 180, apply: s => { s.noise *= 0.3; s.dmg *= 0.9; s.silenced = true; } },
@@ -20,6 +25,15 @@ const MODS = {
   laser:    { name: 'Mira láser',        desc: 'Dispersión −50 % y línea de tiro',   price: 140, apply: s => { s.spread *= 0.5; s.laser = true; } },
   barrel:   { name: 'Cañón pesado',      desc: '+30 % de daño',                      price: 200, apply: s => { s.dmg *= 1.3; } },
   trigger:  { name: 'Gatillo ligero',    desc: '+25 % cadencia, recarga −25 %',      price: 160, apply: s => { s.rate *= 1.25; s.reload *= 0.75; } },
+  comp:     { name: 'Compensador',       desc: 'Menos retroceso: la dispersión crece menos al disparar seguido', price: 150, apply: s => { s.bloom = 0.4; s.kick *= 0.6; } },
+  drum:     { name: 'Tambor',            desc: '+120 % de munición, recarga +40 %',  price: 240, apply: s => { s.mag = Math.ceil(s.mag * 2.2); s.reload *= 1.4; } },
+  thermal:  { name: 'Mira térmica',      desc: 'Ves la silueta de los guardias hacia los que apuntas, aunque estén a oscuras', price: 320, apply: s => { s.thermal = true; } },
+};
+const AMMO = {
+  normal: { name: 'Normal',      desc: 'Sin efectos',                                      price: 0 },
+  ap:     { name: 'Perforante',  desc: 'Atraviesa escudos y un enemigo; daño −10 %',       price: 220 },
+  hp:     { name: 'Expansiva',   desc: '+35 % de daño; los escudos la paran igual',         price: 180 },
+  inc:    { name: 'Incendiaria', desc: 'Prende fuego: 8 de daño por segundo durante 3 s',   price: 260 },
 };
 const FOES = {
   guard: { hp: 60,  walk: 58, run: 125, dmg: 9,  rate: 1.7, spread: 0.13, pellets: 1, vision: 250, reward: 30, r: 13, color: '#c9584a' },
@@ -33,17 +47,53 @@ const FOES = {
   shield: { hp: 120, walk: 42, run: 90,  dmg: 8,  rate: 1.4, spread: 0.12, pellets: 1, vision: 230, reward: 60, r: 15, color: '#5a6f8f', shield: true },
   boss:   { hp: 1400, walk: 50, run: 110, dmg: 7, rate: 1,   spread: 0.2,  pellets: 1, vision: 380, reward: 1000, r: 24, color: '#7a2e2e', boss: true },
 };
-const BOSS_EVERY = 8; // sala del jefe; después sigue el modo infinito con un jefe más duro cada 8 salas
+const BOSS_EVERY = 8; // misión del jefe; tras la campaña sigue el modo infinito con un jefe más duro cada 8 misiones
+// Campaña: cada misión tiene nombre, escenario, tipo de operación, vehículo de huida y, a veces, persecución
+const MISSIONS = [
+  { name: 'Polilla',         scene: 'oficinas', op: 'mixta',  car: 'van',     brief: 'Una gestoría guarda un maletín con documentos que valen una fortuna. Entra de noche, cógelo y vuelve a la furgoneta.' },
+  { name: 'Marea Baja',      scene: 'almacen',  op: 'sigilo', car: 'van',     brief: 'Un almacén del puerto esconde sacos de dinero negro. Si te ven, llamarán a la policía: mejor que no te vean.' },
+  { name: 'Cristal',         scene: 'galeria',  op: 'sigilo', car: 'sedan',   brief: 'La galería expone un diamante legendario. Sin ruido: la alarma de la sala salta al primer disparo.' },
+  { name: 'Hierro Fundido',  scene: 'almacen',  op: 'asalto', car: 'suv',     chase: true, brief: 'Asalto a un depósito armado hasta los dientes. Entra con todo, coge la carga y aguanta la persecución.' },
+  { name: 'Bóveda Norte',    scene: 'banco',    op: 'sigilo', car: 'sedan',   brief: 'La cámara del banco tiene puerta de seguridad. Consigue el código (cajones, el supervisor o la terminal) o hackéala.' },
+  { name: 'Silicio',         scene: 'datos',    op: 'mixta',  car: 'suv',     brief: 'Un centro de datos guarda un disco cifrado en su sala blindada. Los racks también llevan discos que se venden bien.' },
+  { name: 'Lluvia de Plomo', scene: 'banco',    op: 'asalto', car: 'armored', chase: true, brief: 'A plena alarma: revienta la cámara con C4, llévate el oro y quítate de encima a los que te persigan.' },
+  { name: 'El Alcaide',      boss: true,        car: 'armored', brief: 'El hombre que controla la ciudad te espera en su fortaleza. Ábrete paso y sal con vida.' },
+  { name: 'Terciopelo',      scene: 'galeria',  op: 'sigilo', car: 'sedan',   brief: 'Subasta privada: la galería está llena de seguridad privada. Que nadie sepa que has estado allí.' },
+  { name: 'Apagón Total',    scene: 'datos',    op: 'asalto', car: 'suv',     chase: true, brief: 'Tumba el centro de datos a lo grande y escapa con el disco. Te van a seguir.' },
+  { name: 'Caja Negra',      scene: 'oficinas', op: 'sigilo', car: 'van',     brief: 'Las oficinas de una aseguradora. Los cajones están llenos de secretos y de dinero.' },
+  { name: 'Lingote',         scene: 'banco',    op: 'mixta',  car: 'armored', chase: true, brief: 'La reserva de oro del banco central. Más guardias, más cámaras, más oro.' },
+  { name: 'Nube Negra',      scene: 'datos',    op: 'sigilo', car: 'sedan',   brief: 'Los servidores de un cártel. Hackea la sala blindada sin dejar rastro.' },
+  { name: 'Puerto Franco',   scene: 'almacen',  op: 'asalto', car: 'armored', chase: true, brief: 'El cártel mueve su dinero esta noche. Asalta el almacén y huye con los sacos.' },
+  { name: 'Última Cifra',    scene: 'banco',    op: 'asalto', car: 'armored', chase: true, brief: 'El golpe final antes de retirarte: la cámara más grande de la ciudad.' },
+  { name: 'Ajuste de Cuentas', boss: true,      car: 'armored', brief: 'El Alcaide ha vuelto, más fuerte y con todos sus hombres. Termina lo que empezaste.' },
+];
+const SCENES = { oficinas: 'Oficinas', almacen: 'Almacén del puerto', galeria: 'Galería de arte', banco: 'Banco', datos: 'Centro de datos', fortaleza: 'Fortaleza' };
+const OPS = {
+  sigilo: { name: 'Sigilo', desc: 'Si te detectan, llaman a la policía: salta la alarma y llegan refuerzos. Sin ser visto, el botín vale el doble.' },
+  asalto: { name: 'Asalto', desc: 'La alarma suena desde el principio y hay más guardias, pero llevas granadas y C4 de más, y la C4 revienta las puertas de seguridad.' },
+  mixta:  { name: 'Mixta',  desc: 'Tú decides: entrar en silencio o a tiros.' },
+};
+const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3] };
+const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco' };
+const CARS = { van: 'Furgoneta', sedan: 'Berlina', suv: 'Todoterreno', armored: 'Furgón blindado' };
+function mission(level) {
+  if (level <= MISSIONS.length) return { scene: 'fortaleza', op: 'mixta', ...MISSIONS[level - 1], n: level };
+  const r = mulberry32(level * 7919), pick = a => a[Math.floor(r() * a.length)], boss = level % BOSS_EVERY === 0;
+  return { n: level, name: boss ? `El Alcaide · ${level / BOSS_EVERY}` : `Contrato ${level}`, boss, scene: boss ? 'fortaleza' : pick(['oficinas', 'almacen', 'galeria', 'banco', 'datos']),
+    op: pick(['sigilo', 'asalto', 'mixta']), car: pick(['van', 'sedan', 'suv', 'armored']), chase: !boss && r() < 0.45, brief: 'Un contrato más en la ciudad. Cada vez pagan más y vigilan mejor.' };
+}
 function pickFoe(level, roll) {
   const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite'] : [])];
   return pool[Math.floor(roll * pool.length)];
 }
 // Casillas: suelo, muro, caja, mesa/coche (bajo), estantería, ventana, seto, árbol/planta, escalera,
 // vacío (fuera de la primera planta), contenedor y barrera de hormigón (cubre de las balas, no de la vista)
+// puerta de seguridad (se hackea o se abre con código), rack de servidores, cajas de seguridad, terminal y muro blindado de la cámara
 const FLOOR = 0, WALL = 1, CRATE = 2, LOW = 3, SHELF = 4, GLASS = 5, BUSH = 6, TREE = 7, STAIRS = 8, VOID = 9, METAL = 10, BARRIER = 11;
-const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1];
-const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0];
-const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1];
+const SECURE = 12, RACK = 13, DEPOSIT = 14, TERMINAL = 15, VWALL = 16;
+const BLOCK_WALK  = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1];
+const BLOCK_SIGHT = [0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+const BLOCK_SHOT  = [0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1];
 const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIR8 = [...DIR4, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -215,13 +265,42 @@ function placer(start, avoid) {
   };
 }
 // Amuebla una sala según su uso y le pone suelo a juego; devuelve el color de su luz
-function furnish(L, place, rand, ri, fk) {
-  const w = L.x1 - L.x0 + 1, h = L.y1 - L.y0 + 1, cell = () => (L.y0 + ri(h)) * W + L.x0 + ri(w), kind = rand();
+const KINDS = {
+  oficinas: [['office', 0.55], ['lounge', 0.2], ['storage', 0.12], ['corridor', 0.13]],
+  almacen:  [['storage', 0.45], ['warehouse', 0.35], ['office', 0.1], ['corridor', 0.1]],
+  galeria:  [['gallery', 0.6], ['lounge', 0.2], ['office', 0.1], ['corridor', 0.1]],
+  banco:    [['lobby', 0.35], ['office', 0.35], ['lounge', 0.1], ['storage', 0.1], ['corridor', 0.1]],
+  datos:    [['servers', 0.55], ['office', 0.25], ['storage', 0.1], ['corridor', 0.1]],
+};
+function furnish(L, place, rand, ri, fk, scene) {
+  const w = L.x1 - L.x0 + 1, h = L.y1 - L.y0 + 1, cell = () => (L.y0 + ri(h)) * W + L.x0 + ri(w);
+  let roll = rand(), kind = 'corridor';
+  for (const [k, p] of KINDS[scene] || KINDS.oficinas) { if (roll < p) { kind = k; break; } roll -= p; }
   let floor, rgb = '200,220,255';
-  if (kind < 0.35) { // oficina: moqueta y filas de mesas
+  if (kind === 'warehouse') { // nave: hormigón, contenedores y palés de cajas
+    floor = 6;
+    for (let i = 0; i < 2; i++) { const c = cell(); place(rand() < 0.5 ? [c, c + 1, c + 2, c + W, c + W + 1, c + W + 2] : [c, c + 1, c + W, c + W + 1, c + 2 * W, c + 2 * W + 1], METAL); }
+    for (let i = 1 + ri(3); i > 0; i--) { const c = cell(); place([c, c + 1, c + W, c + W + 1], CRATE); }
+  } else if (kind === 'gallery') { // galería: mármol, peanas con obras en cuadrícula (y cuadros en las paredes)
+    floor = 8; rgb = '255,225,190';
+    for (let y = L.y0 + 1; y < L.y1; y += 3) for (let x = L.x0 + 1; x < L.x1; x += 3) if (rand() < 0.75) place([y * W + x], LOW);
+  } else if (kind === 'lobby') { // vestíbulo del banco: mármol, mostrador con hueco y columnas
+    floor = 8; rgb = '255,230,200';
+    const cy = L.y0 + Math.max(1, Math.floor(h * 0.35)), gap = L.x0 + 1 + ri(Math.max(1, w - 2)), cells = [];
+    for (let x = L.x0 + 1; x < L.x1; x++) if (Math.abs(x - gap) > 0) cells.push(cy * W + x);
+    if (cells.length > 1) place(cells, LOW);
+    for (const c of [(L.y1 - 1) * W + L.x0 + 1, (L.y1 - 1) * W + L.x1 - 1]) if (w >= 6 && h >= 5) place([c], WALL);
+  } else if (kind === 'servers') { // sala de servidores: suelo técnico y filas de racks
+    floor = 9; rgb = '170,210,255';
+    for (let y = L.y0 + 1; y < L.y1; y += 2) {
+      const gap = L.x0 + ri(w), cells = [];
+      for (let x = L.x0 + 1; x < L.x1; x++) if (x !== gap) cells.push(y * W + x);
+      if (rand() < 0.85) place(cells, RACK);
+    }
+  } else if (kind === 'office') { // oficina: moqueta y filas de mesas
     floor = 5;
     for (let y = L.y0 + 1; y < L.y1; y += 3) for (let x = L.x0 + 1; x + 1 < L.x1; x += 3) if (rand() < 0.7) place([y * W + x, y * W + x + 1], LOW);
-  } else if (kind < 0.65) { // almacén: hormigón, estanterías con un hueco y cajas
+  } else if (kind === 'storage') { // almacén: hormigón, estanterías con un hueco y cajas
     floor = 6;
     for (let x = L.x0 + 1; x < L.x1; x += 2) {
       if (rand() > 0.75) continue;
@@ -230,7 +309,7 @@ function furnish(L, place, rand, ri, fk) {
       place(cells, SHELF);
     }
     for (let i = ri(3); i > 0; i--) place([cell()], CRATE);
-  } else if (kind < 0.85) { // sala: parqué, mesa grande y plantas en las esquinas
+  } else if (kind === 'lounge') { // sala: parqué, mesa grande y plantas en las esquinas
     floor = 4; rgb = '255,205,150';
     const c = lcell(L);
     if (w >= 5 && h >= 5) place([c, c + 1, c + W, c + W + 1], LOW);
@@ -260,7 +339,7 @@ function layoutBoss() { // vestíbulo a la izquierda y una gran arena con column
 
 // Golpe: un edificio (a veces con primera planta) en medio de un patio con aparcamiento, garita,
 // contenedores y barreras. Llegas por la izquierda, el botín está en la sala más alejada y la furgoneta espera a la derecha
-function layoutHeist(level, rand, ri) {
+function layoutHeist(level, rand, ri, M) {
   W = Math.min(64, 44 + level * 2); H = Math.min(46, 32 + level);
   newMap(0, 0);
   const G = maps[0], FK = fks[0];
@@ -289,13 +368,12 @@ function layoutHeist(level, rand, ri) {
 
   // Primera planta sobre parte del edificio, con escaleras desde la planta baja
   const stairs = [];
-  let uleaves = [], nearUDoor = () => false;
+  let uleaves = [], udoors = [], nearUDoor = () => false;
   if (rand() < 0.65) {
     const left = rand() < 0.5, ux0 = left ? bx0 : bx0 + Math.floor(bw * 0.4), ux1 = left ? bx0 + Math.ceil(bw * 0.6) : bx1;
     maps.push(new Uint8Array(W * H).fill(VOID)); fks.push(new Uint8Array(W * H).fill(3));
     useFloor(1);
     for (let y = by0; y <= by1; y++) for (let x = ux0; x <= ux1; x++) map[y * W + x] = x === ux0 || x === ux1 || y === by0 || y === by1 ? WALL : FLOOR;
-    const udoors = [];
     splitRooms(ux0 + 1, by0 + 1, ux1 - 1, by1 - 1, uleaves, udoors, rand, ri);
     for (const [dx, dy, v] of udoors) carveDoor(dx, dy, v);
     nearUDoor = nearDoors(udoors);
@@ -336,9 +414,17 @@ function layoutHeist(level, rand, ri) {
     }
   };
   let place = placer(start, c => nearDoor(c) || nearStairs(c) || md(c, start) <= 3 || md(c, exit) <= 2);
+  const scene = M.scene, hasVault = scene === 'banco' || scene === 'datos' || (scene === 'galeria' && rand() < 0.5);
+  const vaultProps = place => { // la cámara del botín, a oscuras: cajas de seguridad en el banco, racks en los datos
+    const L = vault, row = [];
+    if (hasVault) for (let y = L.y0; y <= L.y1; y++) for (let x = L.x0; x <= L.x1; x++) fks[lootUp ? 1 : 0][y * W + x] = 10;
+    if (scene === 'banco') { for (let x = L.x0; x <= L.x1; x++) row.push(L.y0 * W + x, L.y1 * W + x); for (const c of row) place([c], DEPOSIT); }
+    else if (scene === 'datos') { for (let x = L.x0; x <= L.x1; x++) place([L.y0 * W + x], RACK); }
+    else { place([L.y0 * W + L.x0], CRATE); place([L.y1 * W + L.x1], CRATE); }
+  };
   for (const L of leaves) {
-    if (L === vault) { place([L.y0 * W + L.x0], CRATE); place([L.y1 * W + L.x1], CRATE); continue; } // la cámara del botín, a oscuras
-    light(L, furnish(L, place, rand, ri, FK), 0);
+    if (L === vault) { if (!lootUp) vaultProps(place); continue; }
+    light(L, furnish(L, place, rand, ri, FK, scene), 0);
   }
 
   // Patio: aparcamiento con plazas pintadas junto a la furgoneta
@@ -379,10 +465,22 @@ function layoutHeist(level, rand, ri) {
     useFloor(1);
     place = placer(stairs[0], c => nearUDoor(c) || nearStairs(c));
     for (const L of uleaves) {
-      if (L === vault) { place([L.y0 * W + L.x0], CRATE); place([L.y1 * W + L.x1], CRATE); continue; }
-      light(L, furnish(L, place, rand, ri, fks[1]), 1);
+      if (L === vault) { vaultProps(place); continue; }
+      light(L, furnish(L, place, rand, ri, fks[1], scene), 1);
     }
     useFloor(0);
+  }
+  // Terminal de seguridad (da el código de la cámara) en otra sala de la planta baja
+  let terminal = -1;
+  if (hasVault) {
+    useFloor(0);
+    place = placer(start, c => nearDoor(c) || nearStairs(c) || md(c, start) <= 3 || md(c, exit) <= 2);
+    for (let tries = 0; tries < 60 && terminal < 0; tries++) {
+      const L = leaves[ri(leaves.length)];
+      if (L === vault && !lootUp) continue;
+      const c = (L.y0 + ri(L.y1 - L.y0 + 1)) * W + L.x0 + ri(L.x1 - L.x0 + 1);
+      if (map[c - W] === WALL && place([c], TERMINAL)) terminal = c;
+    }
   }
   // el botín, en la casilla libre más cercana al centro de la cámara (nunca sobre la escalera: te cambiaría de planta)
   useFloor(lootUp ? 1 : 0);
@@ -391,21 +489,40 @@ function layoutHeist(level, rand, ri) {
     const c = y * W + x;
     if (map[c] === FLOOR && (loot < 0 || md(c, lcell(vault)) < md(loot, lcell(vault)))) loot = c;
   }
+  // Cámara blindada: sus muros no se rompen y sus puertas son de seguridad (código, hackeo o, en asalto, C4)
+  const secure = [];
+  if (hasVault) {
+    const z = lootUp ? 1 : 0, ring = (x, y) => { const c = y * W + x; if (map[c] !== SECURE && !border(x, y)) map[c] = VWALL; };
+    for (const [dx, dy, v] of lootUp ? udoors : doors) {
+      const cells = v ? [dy * W + dx, (dy + 1) * W + dx] : [dy * W + dx, dy * W + dx + 1];
+      const touches = v ? (dx === vault.x0 - 1 || dx === vault.x1 + 1) && dy >= vault.y0 - 1 && dy + 1 <= vault.y1 + 1
+        : (dy === vault.y0 - 1 || dy === vault.y1 + 1) && dx >= vault.x0 - 1 && dx + 1 <= vault.x1 + 1;
+      if (touches) { cells.forEach(c => { map[c] = SECURE; }); secure.push({ cells, z, v }); }
+    }
+    // todo el contorno es muro blindado: también tapa los huecos que abren las puertas vecinas al tallarse
+    for (let x = vault.x0 - 1; x <= vault.x1 + 1; x++) { ring(x, vault.y0 - 1); ring(x, vault.y1 + 1); }
+    for (let y = vault.y0; y <= vault.y1; y++) { ring(vault.x0 - 1, y); ring(vault.x1 + 1, y); }
+  }
   useFloor(0);
-  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, lamps, spawnOk: () => true };
+  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, lamps, secure, terminal, vault: { ...vault, z: lootUp ? 1 : 0 },
+    spawnOk: i => !hasVault || lootUp || !(i % W >= vault.x0 && i % W <= vault.x1 && ((i / W) | 0) >= vault.y0 && ((i / W) | 0) <= vault.y1) };
 }
 
 function buildRoom(level, seed) {
-  const rand = mulberry32(seed), ri = n => Math.floor(rand() * n), boss = level % BOSS_EVERY === 0;
-  const L = boss ? layoutBoss() : layoutHeist(level, rand, ri);
+  const rand = mulberry32(seed), ri = n => Math.floor(rand() * n), boss = level % BOSS_EVERY === 0, M = mission(level);
+  const L = boss ? layoutBoss() : layoutHeist(level, rand, ri, M);
   useFloor(0);
   const dist0 = bfs(L.start);
   const r = {
     level, W, H, maps, fks, map: maps[0], stairs: L.stairs, start: center(L.start), exit: center(L.exit),
     loot: L.loot >= 0 ? { ...center(L.loot), z: L.lootZ, taken: false } : null,
     lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [], charges: [], crateHp: {}, fx: [],
-    detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0,
+    detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0, zone, introT: 1.6,
+    mission: M, op: M.op, cash: 0, shownCash: 0, searched: new Set(), act: null, reinfT: 20, code: null, hasCode: false, codeDrawer: -1,
+    doors: (L.secure || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, hack: 0 })),
+    vault: L.vault || null,
   };
+  if (r.loot) r.loot.type = SCENE_LOOT[M.scene] || 'lingotes';
   for (const s of L.lamps) {
     if (!maps[s.z]) continue;
     useFloor(s.z);
@@ -424,12 +541,13 @@ function buildRoom(level, seed) {
     r.enemies.push(b); r.boss = b;
   }
   // Enemigos lejos de la entrada y separados entre sí; los perros vigilan el patio y ~30 % guarda la primera planta
-  const count = boss ? 3 + (level >> 2) : Math.min(26, 5 + Math.round(level * 1.8));
+  // asalto: más y más duros; sigilo: algo menos
+  const count = boss ? 3 + (level >> 2) : Math.min(28, Math.round((5 + level * 1.8) * (M.op === 'asalto' ? 1.4 : M.op === 'sigilo' ? 0.85 : 1)));
   const upCount = maps[1] ? Math.max(1, Math.round(count * 0.3)) : 0;
   const spawn = (z, cands, outside, n) => {
     useFloor(z);
     for (let tries = 0, made = 0; made < n && tries < 600 && cands.length; tries++) {
-      let type = boss ? ['guard', 'elite', 'shield'][ri(3)] : pickFoe(level, rand());
+      let type = boss ? ['guard', 'elite', 'shield'][ri(3)] : pickFoe(level + (M.op === 'asalto' ? 2 : 0), rand());
       if (z && type === 'dog') type = 'guard';
       const pool = type === 'dog' && outside.length ? outside : cands, c = pool[ri(pool.length)], p = center(c);
       if (r.enemies.some(e => e.z === z && Math.hypot(e.x - p.x, e.y - p.y) < T * 3)) continue;
@@ -447,11 +565,24 @@ function buildRoom(level, seed) {
   spawn(0, cands, outside, count - upCount - (boss ? 1 : 0));
   useFloor(0);
   for (let i = 0; i < 2 + ((level / 3) | 0) && cands.length; i++) r.items.push({ ...center(cands[ri(cands.length)]), z: 0 });
-  r.p = { x: r.start.x, y: r.start.y, z: 0, onStairs: false, vx: 0, vy: 0, a: 0, r: 12, speed: 0, sneak: true, stepT: 0, fireT: 0, reloadT: 0, meleeT: 0, nadeT: 0, noiseT: 0, breachT: 0, swingT: 0, hurtT: 0, muzzleT: 0, dead: false };
+  if (r.doors.length) { // el código de la cámara: en un cajón, en el bolsillo del supervisor o en la terminal
+    r.code = String(1000 + ri(9000));
+    const desks = [];
+    for (let c = 0; c < W * H; c++) if (maps[0][c] === LOW && zone[c] && fks[0][c] !== 8 && L.spawnOk(c)) desks.push(c);
+    if (desks.length) r.codeDrawer = desks[ri(desks.length)];
+    const sup = r.enemies.filter(e => e.z === 0 && !FOES[e.type].melee && !FOES[e.type].post && !FOES[e.type].boss);
+    if (sup.length) sup[ri(sup.length)].keycard = true;
+    r.terminal = L.terminal;
+  }
+  if (M.op === 'asalto') { // entrar con todo: la alarma suena desde el principio
+    r.alarm = true; r.detected = true;
+    for (const e of r.enemies) e.alertLvl = 1;
+  }
+  r.p = { x: r.start.x, y: r.start.y, z: 0, onStairs: false, vx: 0, vy: 0, a: 0, r: 12, speed: 0, sneak: true, stepT: 0, fireT: 0, reloadT: 0, meleeT: 0, nadeT: 0, noiseT: 0, breachT: 0, swingT: 0, hurtT: 0, muzzleT: 0, dead: false, stam: 100, restT: 0, tired: false, sprint: false, bloom: 0 };
   const goal = r.loot || r.exit;
   r.p.a = Math.atan2(goal.y - r.start.y, goal.x - r.start.x);
   // Cuenta atrás siempre: hasta dar el golpe (o abatir al jefe); al robar, otra más corta para escapar
-  r.timer = boss ? 420 : Math.round(180 + Math.hypot(goal.x - r.start.x, goal.y - r.start.y) / T * 3);
+  r.timer = boss ? 480 : Math.round(240 + Math.hypot(goal.x - r.start.x, goal.y - r.start.y) / T * 3.5 + (r.doors.length ? 60 : 0));
   return r;
 }
 
@@ -480,16 +611,23 @@ function makeEnemy(type, c, rand) {
 
 // ================= Partida =================
 function newRun() {
-  run = { level: 1, money: 0, hp: 100, maxHp: 100, nades: 2, charges: 2, light: true, weapons: [{ id: 'pistol', mods: [], ammo: 12, reserve: 36 }], cur: 0, seed: (Math.random() * 1e9) | 0, snap: null };
+  run = { level: 1, money: 0, hp: 100, maxHp: 100, nades: 2, charges: 2, light: true, weapons: [{ id: 'pistol', mods: [], ammo: 12, reserve: 36, at: 'normal', ats: ['normal'] }], cur: 0, seed: (Math.random() * 1e9) | 0, snap: null };
 }
 const curW = () => run.weapons[run.cur];
-function wstats(w) { const s = { ...WEAPONS[w.id] }; for (const m of w.mods) MODS[m].apply(s); return s; }
+function wstats(w) {
+  const s = { ...WEAPONS[w.id] };
+  for (const m of w.mods) MODS[m].apply(s);
+  if (w.at === 'ap') { s.dmg *= 0.9; s.pierce = true; } else if (w.at === 'hp') s.dmg *= 1.35; else if (w.at === 'inc') s.burn = true;
+  return s;
+}
 
 function startRoom() {
+  document.body.classList.remove('chase');
   run.hp = run.maxHp; // cada sala (y cada reintento) empieza con la vida llena
   const { snap, ...rest } = run;
   run.snap = JSON.stringify(rest);
   room = buildRoom(run.level, run.seed + run.level * 977);
+  if (room.op === 'asalto') { run.nades++; run.charges++; } // entrar con todo: una granada y una C4 de más
   bakeAll();
   cam.x = room.p.x; cam.y = room.p.y;
   if (room.boss) banner('Sala final: abate al Alcaide para abrir la salida');
@@ -504,24 +642,180 @@ function retryRoom() {
   startRoom();
 }
 let winStats = '';
+// ================= Persecución =================
+// Tras subir al coche, en algunas misiones te persiguen: el stick izquierdo mueve el coche de un carril a otro,
+// el derecho apunta y dispara; las granadas caen a la carretera y se quedan atrás, hacia los perseguidores
+function startChase() {
+  const lv = run.level;
+  room.chase = { t: 0, len: Math.min(95, 55 + lv * 2.5), speed: 520, roadW: 380, scroll: 0, car: { x: 0, vx: 0 }, foes: [], spawnT: 1.5, killed: 0, done: false, doneT: 0 };
+  Object.assign(room, { bullets: [], nades: [], fx: [], parts: [], flashes: [], texts: [], rings: [], warns: [], enemies: [], act: null, introT: 0 });
+  document.body.classList.add('chase'); // en la carretera sobran C4, ruido y cuchillo
+  Object.assign(room.p, { x: 0, y: 0, z: 0, vx: 0, vy: 0, a: Math.PI / 2, dead: false });
+  useFloor(0);
+  cam.x = 0; cam.y = 60;
+  banner('¡Te persiguen! Derriba sus coches o aguanta hasta perderlos');
+  sfx('vault');
+}
+function chaseBoom(x, y) {
+  const C = room.chase, R = 115;
+  fx({ k: 'fire', x, y, life: 0.42, r: R * 0.85 }); fx({ k: 'ring', x, y, life: 0.3, r: R * 1.3 });
+  for (let i = 0; i < 6; i++) { const a = rnd(0, 6.3), v = rnd(10, 50); fx({ k: 'smoke', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v + 200, life: rnd(1, 1.8), r0: rnd(12, 20), r1: rnd(40, 60), g: Math.floor(rnd(60, 90)) }); }
+  for (let i = 0; i < 16; i++) { const a = rnd(0, 6.3), v = rnd(80, 300); room.parts.push({ x, y, z: 0, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: rnd(0.4, 0.9), c: '#ffb04a', s: 2, glow: true }); }
+  for (const f of C.foes) { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && d < R) hitCar(f, 220 * (1 - d / R) + 30); }
+  const p = room.p, dp = Math.hypot(p.x - x, p.y - y);
+  if (dp < R) hurtPlayer((150 * (1 - dp / R) + 15) * 0.5, Math.atan2(p.y - y, p.x - x));
+  cam.shake = 14; buzz(80); sfx('boom', x, y);
+}
+function hitCar(f, dmg) {
+  const C = room.chase;
+  f.hp -= dmg; f.hitT = 0.1;
+  if (f.hp > 0 || f.dead) return;
+  f.dead = true; f.spin = rnd(-4, 4); f.vx = rnd(-120, 120); C.killed++;
+  const reward = Math.round(70 + run.level * 6);
+  room.cash += reward; popup(f.x, f.y - 30, `+$${reward}`, '#7fe0a8');
+  chaseBoom(f.x, f.y);
+}
+function updateChase(dt) {
+  const C = room.chase, p = room.p, lv = run.level;
+  room.time += dt; C.t += dt; C.scroll += C.speed * dt;
+  if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ATRAPADO', `Te alcanzaron en la persecución de ${room.mission.name}.`); }
+  else {
+    for (const k of ['fireT', 'meleeT', 'nadeT', 'noiseT', 'breachT', 'swingT', 'hurtT', 'muzzleT']) p[k] -= dt;
+    p.bloom = Math.max(0, p.bloom - dt * 1.6);
+    const L = stickVec(sticks.L), kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0), steer = kx || L.x;
+    C.car.vx += (steer * 240 - C.car.vx) * Math.min(1, dt * 6);
+    C.car.x = clamp(C.car.x + C.car.vx * dt, -C.roadW / 2 + 28, C.roadW / 2 - 28);
+    p.x = C.car.x; p.y = -6; p.speed = 0; p.sneak = false;
+    aimAndFire(dt, 0, 0, 0, a => { // ayuda de apuntado hacia el coche más cercano a la línea de tiro
+      let best = null, bd = 0.25;
+      for (const f of C.foes) { const da = Math.abs(angDiff(a, Math.atan2(f.y - p.y, f.x - p.x))); if (!f.dead && da < bd) { best = f; bd = da; } }
+      return best ? Math.atan2(best.y - p.y, best.x - p.x) : a;
+    });
+  }
+  const alive = C.foes.filter(f => !f.dead);
+  if (C.t < C.len && alive.length < 2 + (lv >> 2) && (C.spawnT -= dt) <= 0) {
+    C.spawnT = rnd(2.2, 4.2);
+    const kind = lv > 8 && Math.random() < 0.3 ? 'armored' : Math.random() < 0.5 ? 'suv' : 'sedan', [w, h] = CAR_DIM[kind];
+    C.foes.push({ kind, w, h, x: rnd(-C.roadW / 2 + 40, C.roadW / 2 - 40), y: 560, vx: 0, rot: 0, hp: (kind === 'armored' ? 260 : 140) + lv * 8, side: Math.random() < 0.5 ? -1 : 1, off: rnd(55, 130), ty: rnd(80, 210), shootT: rnd(1, 2), gunT: 0, burst: 0, police: kind === 'sedan' });
+  }
+  for (const f of C.foes) {
+    if (f.dead) { f.y += 340 * dt; f.x += f.vx * dt; f.rot += f.spin * dt; if (Math.random() < dt * 20) fx({ k: 'smoke', x: f.x, y: f.y, vx: 0, vy: 260, life: 1, r0: 8, r1: 26, g: 40 }); continue; }
+    f.hitT = Math.max(0, (f.hitT || 0) - dt);
+    const tx = clamp(C.car.x + f.side * f.off, -C.roadW / 2 + 30, C.roadW / 2 - 30);
+    f.vx += (clamp((tx - f.x) / 40, -1, 1) * 170 - f.vx) * Math.min(1, dt * 2.5);
+    f.x = clamp(f.x + f.vx * dt, -C.roadW / 2 + 22, C.roadW / 2 - 22);
+    f.y += clamp(f.ty - f.y, -200 * dt, 200 * dt);
+    for (const g of C.foes) { // no se montan unos encima de otros
+      if (g === f || g.dead) continue;
+      const ox = (f.w + g.w) / 2 + 4 - Math.abs(f.x - g.x), oy = (f.h + g.h) / 2 + 4 - Math.abs(f.y - g.y);
+      if (ox <= 0 || oy <= 0) continue;
+      if (ox < oy) f.x += Math.sign(f.x - g.x || 1) * ox / 2;
+      else { f.y += Math.sign(f.y - g.y || 1) * oy / 2; f.ty = clamp(f.y, 80, 290); }
+    }
+    f.rot = f.vx * 0.0016;
+    if (Math.abs(f.x - C.car.x) < (f.w + 30) / 2 && Math.abs(f.y) < (f.h + 60) / 2) { // embestida: los dos se apartan y te hace daño
+      const push = Math.sign(f.x - C.car.x) || 1; f.vx += push * 220; C.car.vx -= push * 220; hurtPlayer(6); hitCar(f, 15); sfx('clank', f.x, f.y);
+    }
+    if (!p.dead && f.y < 300 && (f.shootT -= dt) <= 0) { f.shootT = rnd(1.4, 2.4); f.burst = 3 + Math.floor(Math.random() * 3); }
+    if (f.burst > 0 && (f.gunT -= dt) <= 0) {
+      f.gunT = 0.13; f.burst--;
+      const a = Math.atan2(p.y - f.y, p.x - f.x), mx = f.x + Math.cos(a) * 18, my = f.y - f.h / 2 + 10;
+      bullet(mx, my, a + rnd(-0.12, 0.12), 640, 5 + lv * 0.4, false);
+      fx({ k: 'muzzle', x: mx, y: my, a, life: 0.05, s: 1 });
+      sfx('eshot', f.x, f.y);
+    }
+  }
+  C.foes = C.foes.filter(f => !(f.dead && f.y > 800));
+  for (const b of room.bullets) { // balas: contra los coches (tuyas) o contra ti (suyas)
+    const n = Math.ceil(Math.hypot(b.vx, b.vy) * dt / 10);
+    for (let i = 0; i < n && !b.dead; i++) {
+      b.x += b.vx * dt / n; b.y += b.vy * dt / n;
+      if (b.mine) { for (const f of C.foes) if (!f.dead && Math.abs(b.x - f.x) < f.w / 2 && Math.abs(b.y - f.y) < f.h / 2) { b.dead = true; sparks(b.x, b.y, 3); hitCar(f, b.dmg); break; } }
+      else if (!p.dead && Math.hypot(b.x - p.x, b.y - p.y) < 13) { b.dead = true; hurtPlayer(b.dmg, Math.atan2(b.vy, b.vx)); }
+    }
+    if ((b.life -= dt) <= 0 || Math.abs(b.x) > 900 || Math.abs(b.y) > 900) b.dead = true;
+  }
+  room.bullets = room.bullets.filter(b => !b.dead);
+  for (const n of room.nades) { // la granada vuela y, al tocar el asfalto, se queda atrás con la carretera
+    n.vh -= 520 * dt; n.h += n.vh * dt;
+    if (n.h <= 0) { n.h = 0; n.vh = n.vh < -40 ? n.vh * -0.42 : 0; n.vy += (C.speed - n.vy) * Math.min(1, dt * 6); n.vx *= Math.exp(-4 * dt); }
+    n.x += n.vx * dt; n.y += n.vy * dt;
+    if ((n.t -= dt) <= 0) chaseBoom(n.x, n.y);
+  }
+  room.nades = room.nades.filter(n => n.t > 0);
+  for (const f of room.fx) if (f.k === 'smoke' || f.k === 'puff') f.y += C.speed * 0.6 * dt; // el humo se queda atrás
+  updateFx(dt);
+  if (room.banner && (room.banner.t -= dt) <= 0) room.banner = null;
+  room.shownCash += (room.cash - room.shownCash) * Math.min(1, dt * 5);
+  ambience(true);
+  if (!C.done && C.t >= C.len && C.foes.every(f => f.dead)) { C.done = true; C.doneT = 1.6; banner('¡Los has perdido! Rumbo a la guarida'); }
+  if (C.done && (C.doneT -= dt) <= 0) { room.chaseWon = true; completeRoom(); }
+}
+function renderChase() {
+  const C = room.chase, p = room.p, S = zoom * dpr, here = () => true;
+  const cx = C.car.x * 0.5 + rnd(-cam.shake, cam.shake), cy = 70 + rnd(-cam.shake, cam.shake);
+  const ox = cw / 2 - cx * S, oy = ch / 2 - cy * S, hw = cw / 2 / S, hh = ch / 2 / S, rw = C.roadW;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#070a08'; ctx.fillRect(0, 0, cw, ch);
+  ctx.setTransform(S, 0, 0, S, ox, oy);
+  const top = cy - hh - 80, bot = cy + hh + 80, sc = C.scroll;
+  ctx.fillStyle = '#15201a'; ctx.fillRect(cx - hw, top, hw * 2, bot - top); // campo
+  for (let y = Math.floor((top - sc) / 40) * 40; y < bot - sc + 40; y += 40) for (let k = 0; k < 6; k++) { // matas que pasan
+    const row = Math.floor(y / 40), side = k % 2 ? 1 : -1, x = side * (rw / 2 + 40 + hash(row, k, 1) * (hw + 60));
+    ctx.fillStyle = hash(row, k, 2) < 0.5 ? '#1c2b20' : '#101810'; ctx.fillRect(x, y + sc + hash(row, k, 3) * 30, 6, 3);
+  }
+  ctx.fillStyle = '#2a2e33'; ctx.fillRect(-rw / 2 - 26, top, 26, bot - top); ctx.fillRect(rw / 2, top, 26, bot - top); // aceras
+  ctx.fillStyle = '#1b1f24'; ctx.fillRect(-rw / 2, top, rw, bot - top); // asfalto
+  ctx.fillStyle = 'rgba(235,228,200,0.6)'; ctx.fillRect(-rw / 2 + 4, top, 3, bot - top); ctx.fillRect(rw / 2 - 7, top, 3, bot - top);
+  for (const lx of [-rw / 6, rw / 6]) for (let y = (sc % 80) - 80 + Math.floor(top / 80) * 80; y < bot; y += 80) ctx.fillRect(lx - 1.5, y, 3, 36); // marcas de carril
+  const posts = [];
+  for (let y = (sc % 420) - 420 + Math.floor(top / 420) * 420; y < bot; y += 420) for (const sx of [-1, 1]) posts.push([sx * (rw / 2 + 13), y + (sx > 0 ? 210 : 0)]);
+  for (const [x, y] of posts) { ctx.fillStyle = '#3a3e45'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); ctx.strokeStyle = '#2b2f35'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 26); ctx.lineTo(x - Math.sign(x) * 10, y - 28); ctx.stroke(); }
+  for (const n of room.nades) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(n.x + 2, n.y + 2, 5, 3.5, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(n.x, n.y - n.h * 0.6, 5, 0, 7); ctx.fill(); }
+  for (const f of C.foes) { drawCar(ctx, f.kind, f.x, f.y, f.rot); if (f.hitT > 0) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(f.x - f.w / 2, f.y - f.h / 2, f.w, f.h); } }
+  drawCar(ctx, room.mission.car, C.car.x, 0, C.car.vx * 0.0012);
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); // tú, asomado por el techo
+  const gw = GUN_SHAPE[curW().id] || [16, 6];
+  ctx.fillStyle = '#20262e'; ctx.fillRect(8, -gw[1] / 2, gw[0], gw[1]);
+  ctx.fillStyle = p.hurtT > 0 ? '#ff8f80' : '#62d6ad'; ctx.strokeStyle = '#0b2a22'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  drawFxUnder(here);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = 'rgba(2,4,9,0.6)'; ctx.fillRect(0, 0, cw, ch); // noche
+  ctx.setTransform(S, 0, 0, S, ox, oy);
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [x, y] of posts) { ctx.fillStyle = glow(ctx, x - Math.sign(x) * 10, y + 10, 120, '255,160,80', 0.22); ctx.beginPath(); ctx.arc(x - Math.sign(x) * 10, y + 10, 120, 0, 7); ctx.fill(); }
+  carLights(ctx, room.mission.car, C.car.x, 0, true, C.car.vx * 0.0012);
+  for (const f of C.foes) if (!f.dead) {
+    carLights(ctx, f.kind, f.x, f.y, true, f.rot);
+    if (f.police) { const on = Math.sin(room.time * 14) > 0; ctx.fillStyle = on ? 'rgba(255,40,40,0.9)' : 'rgba(40,90,255,0.9)'; ctx.fillRect(f.x - 9, f.y - 4, 8, 4); ctx.fillStyle = on ? 'rgba(40,90,255,0.9)' : 'rgba(255,40,40,0.9)'; ctx.fillRect(f.x + 1, f.y - 4, 8, 4);
+      ctx.fillStyle = glow(ctx, f.x, f.y, 60, on ? '255,40,40' : '40,90,255', 0.25); ctx.beginPath(); ctx.arc(f.x, f.y, 60, 0, 7); ctx.fill(); }
+  }
+  drawFxGlow(here);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.font = '700 13px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const t of room.texts) { ctx.globalAlpha = Math.min(1, t.t * 2); ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); }
+  ctx.globalAlpha = 1;
+  drawHud();
+}
 function completeRoom() {
-  const bonus = 80 + 20 * run.level, ghost = room.detected ? 0 : 120, wasBoss = run.level % BOSS_EVERY === 0;
-  const loot = room.loot ? 150 + 50 * run.level : 0;
-  run.money += bonus + ghost + loot;
+  if (room.mission.chase && !room.chaseWon) { startChase(); return; } // primero hay que despistarlos
+  const M = room.mission, bonus = 80 + 20 * run.level, wasBoss = run.level % BOSS_EVERY === 0;
+  const loot = room.loot ? Math.round((150 + 60 * run.level) * (LOOTS[room.loot.type] || [0, 1])[1]) : 0;
+  const ghost = room.detected ? 0 : M.op === 'sigilo' ? loot : 120; // en sigilo, sin ser visto, el botín vale el doble
+  run.money += room.cash + bonus + ghost + loot;
   run.level++;
   sfx('buy');
-  const stats = (loot ? `Botín <b>+$${loot}</b> · ` : '') + `Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
+  const stats = (loot ? `${LOOTS[room.loot.type][0]} <b>+$${loot}</b> · ` : '') + `saqueo <b>+$${room.cash}</b> · bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
     (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '');
   if (!wasBoss) { openShop(stats); return; }
   winStats = stats;
   state = 'win';
-  $('winInfo').textContent = `Has abatido al Alcaide en la sala ${run.level - 1}. Puedes seguir en modo infinito: cada ${BOSS_EVERY} salas vuelve un jefe más duro.`;
+  $('winInfo').textContent = run.level - 1 >= MISSIONS.length ? `Campaña completada: has acabado con el Alcaide para siempre. Puedes seguir en modo infinito: cada ${BOSS_EVERY} misiones vuelve un jefe más duro.` : `Has abatido al Alcaide en «${mission(run.level - 1).name}». La campaña sigue: quedan ${MISSIONS.length - run.level + 1} misiones.`;
   show('win');
   save();
 }
 function openShop(stats) {
   state = 'shop';
-  $('shopTitle').textContent = `Sala ${run.level - 1} superada`;
+  $('shopTitle').textContent = `${mission(run.level - 1).name}: completada`;
   $('shopStats').innerHTML = stats;
   shopTab = 'arm';
   renderShop();
@@ -539,17 +833,45 @@ function loadSave() {
     // lo guardado puede estar corrupto o venir de otra versión: solo se acepta si encaja
     if (r && Number.isInteger(r.level) && r.level > 0 && r.hp > 0 && [r.money, r.nades, r.maxHp, r.seed].every(Number.isFinite) &&
         Array.isArray(r.weapons) && r.weapons.length && Number.isInteger(r.cur) && r.weapons[r.cur] &&
-        r.weapons.every(w => WEAPONS[w.id] && Array.isArray(w.mods) && w.mods.every(m => MODS[m]) && Number.isFinite(w.ammo) && Number.isFinite(w.reserve))) return d;
+        r.weapons.every(w => WEAPONS[w.id] && Array.isArray(w.mods) && w.mods.every(m => MODS[m]) && Number.isFinite(w.ammo) && Number.isFinite(w.reserve) &&
+          (!w.ats || (Array.isArray(w.ats) && w.ats.every(a => AMMO[a]))) && (!w.at || AMMO[w.at]))) return d;
   } catch (e) { /* partida ilegible: se ignora */ }
   return null;
 }
 function refreshMenu() {
   const d = loadSave(), b = $('bPlay');
   $('bCont').hidden = !d;
-  if (d) $('bCont').textContent = `Continuar · sala ${d.run.level}`;
+  if (d) $('bCont').textContent = `Continuar · misión ${d.run.level}: ${mission(d.run.level).name}`;
+  const lv = d ? d.run.level : 1;
+  $('camp').innerHTML = MISSIONS.map((m, i) => `<span class="${i + 1 < lv ? 'done' : i + 1 === lv ? 'next' : ''}">${String(i + 1).padStart(2, '0')} ${m.name}</span>`).join('') +
+    (lv > MISSIONS.length ? `<span class="next">${String(lv).padStart(2, '0')} ${mission(lv).name}</span>` : '');
   delete b.dataset.sure;
   b.textContent = d ? 'Nueva partida' : 'Jugar';
   b.className = d ? 'ghost' : 'cta';
+}
+function showMenu() { // de fondo, un mapa de verdad con sus luces y la cámara recorriéndolo despacio
+  state = 'menu';
+  document.body.classList.remove('chase');
+  try { room = buildRoom(5, 4242); room.demo = true; room.p.dead = true; bakeAll(); } catch (e) { room = null; }
+  refreshMenu(); show('menu');
+}
+// ---- Briefing: tarjeta animada antes de cada misión
+let goAfter = null, typeT = 0;
+function brief(after) {
+  const M = mission(run.level), car = CARS[M.car] || 'Furgoneta', vault = M.scene === 'banco' || M.scene === 'datos';
+  $('bfNum').textContent = `MISIÓN ${String(M.n).padStart(2, '0')} / ${MISSIONS.length}${M.n > MISSIONS.length ? ' · MODO INFINITO' : ''} · ${(SCENES[M.scene] || '').toUpperCase()}`;
+  $('bfName').textContent = M.name.toUpperCase();
+  $('bfTags').innerHTML = [`<span class="tag op-${M.op}">${M.boss ? 'Jefe' : OPS[M.op].name}</span>`, `<span class="tag">${car}</span>`, M.chase ? '<span class="tag">Persecución</span>' : '', vault ? '<span class="tag">Cámara blindada</span>' : ''].join('');
+  const obj = M.boss ? ['Abate al Alcaide: la salida está bloqueada mientras siga en pie.', 'A media vida pide refuerzos.']
+    : [`Roba ${(LOOTS[SCENE_LOOT[M.scene]] || ['el botín'])[0]} y escapa en el vehículo (${car.toLowerCase()}).`,
+      vault ? 'La cámara tiene puerta de seguridad: busca el código en los cajones, en el supervisor o en la terminal, o hackéala.' : M.scene === 'galeria' ? 'Puede que la pieza esté en una cámara cerrada.' : 'Registra cajones, estanterías y cuerpos: lo que saquees va a la bolsa.',
+      OPS[M.op].desc, M.chase ? 'Al huir te perseguirán: derriba sus coches o aguanta hasta perderlos.' : 'La cuenta atrás empieza al entrar.'];
+  $('bfObj').innerHTML = obj.map((o, i) => `<li style="--i:${i}">${o}</li>`).join('');
+  const card = $('bfCard'); card.classList.remove('anim'); void card.offsetWidth; card.classList.add('anim');
+  const text = M.brief || '', el = $('bfBrief'); let n = 0; el.textContent = '';
+  clearInterval(typeT);
+  typeT = setInterval(() => { n += 2; el.textContent = text.slice(0, n); if (n >= text.length) clearInterval(typeT); }, 18); // a máquina
+  goAfter = after; state = 'brief'; show('brief');
 }
 function gameOver(title, msg) {
   state = 'over';
@@ -557,11 +879,97 @@ function gameOver(title, msg) {
   $('overInfo').textContent = `${msg} Puedes reintentarla con el equipo con el que entraste.`;
   show('over');
 }
+// ---- Usar: registrar cajones, estanterías, cuerpos, cajas de seguridad y racks; hackear la terminal o la puerta de la cámara
+const LOOTABLE = { [LOW]: ['Registrar cajones', 1], [SHELF]: ['Registrar estantería', 1.2], [DEPOSIT]: ['Forzar caja de seguridad', 2], [RACK]: ['Extraer disco duro', 1.5], [TERMINAL]: ['Hackear la terminal', 6] };
+function nearUse() {
+  const p = room.p;
+  if (!p || p.dead || room.chase) return null;
+  let best = null, bd = 48;
+  const consider = o => { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < bd) { bd = d; best = o; } };
+  for (const b of room.bodies) if (b.z === p.z && !b.looted) consider({ kind: 'body', ref: b, x: b.x, y: b.y, label: 'Registrar el cuerpo', time: 1.1 });
+  for (const d of room.doors) if (d.z === p.z && !d.open) consider({ kind: 'door', ref: d, x: d.x, y: d.y, label: room.hasCode ? `Teclear el código ${room.code}` : 'Hackear la puerta', time: room.hasCode ? 1.5 : 18 });
+  const cx = Math.floor(p.x / T), cy = Math.floor(p.y / T), M = maps[p.z];
+  for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
+    const c = y * W + x, t = M[c], info = LOOTABLE[t];
+    if (!info || room.searched.has(p.z + ':' + c) || (t === TERMINAL && room.hasCode)) continue;
+    if (t === LOW && ((p.z === 0 && !zone[c]) || (fks[p.z][c] === 8 && M[c - 1] !== LOW && M[c + 1] !== LOW))) continue; // coches y peanas no tienen cajones
+    consider({ kind: 'tile', ref: c, tt: t, x: x * T + T / 2, y: y * T + T / 2, label: info[0], time: info[1] });
+  }
+  return best;
+}
+function use() {
+  if (state !== 'play' || !room || room.chase) return;
+  if (room.act) { if (room.act.kind === 'door') room.act.ref.hack = room.act.t; room.act = null; return; } // volver a pulsar: cancelar
+  const o = nearUse();
+  if (o) { room.act = { ...o, t: o.kind === 'door' && !room.hasCode ? o.ref.hack : 0, beep: 0 }; sfx('click'); }
+}
+function updateUse(dt) {
+  const A = room.act, p = room.p;
+  if (!A) return;
+  if (p.dead || Math.hypot(A.x - p.x, A.y - p.y) > 62 || (A.kind === 'body' && A.ref.looted)) { if (A.kind === 'door') A.ref.hack = A.t; room.act = null; return; }
+  A.t += dt;
+  const hacking = (A.kind === 'door' && !room.hasCode) || A.tt === TERMINAL;
+  if (hacking && (A.beep -= dt) <= 0) { A.beep = 2.5; useFloor(p.z); noise(A.x, A.y, 150, 'step'); sfx('beep', A.x, A.y); } // el aparato pita: algún guardia puede oírlo
+  if (A.t >= A.time) { room.act = null; finishUse(A); }
+}
+function finishUse(A) {
+  const k = 1 + run.level * 0.12, p = room.p;
+  useFloor(p.z);
+  if (A.kind === 'body') {
+    A.ref.looted = true;
+    gainCash(Math.round(rnd(12, 40) * k), A.x, A.y);
+    if (Math.random() < 0.5) addAmmo(0.15);
+    if (A.ref.keycard) gotCode('la tarjeta del supervisor');
+  } else if (A.kind === 'door') openDoor(A.ref);
+  else {
+    room.searched.add(p.z + ':' + A.ref);
+    const nothing = () => popup(A.x, A.y - 16, 'Nada', '#7d8ca0'), ammo = () => { addAmmo(0.14); popup(A.x, A.y - 16, '+MUNICIÓN', '#ffd98a'); sfx('reload'); };
+    if (A.tt === LOW) { if (p.z === 0 && A.ref === room.codeDrawer) gotCode('una nota en un cajón'); else if (Math.random() < 0.6) gainCash(Math.round(rnd(8, 35) * k), A.x, A.y); else if (Math.random() < 0.5) ammo(); else nothing(); }
+    else if (A.tt === SHELF) { const r = Math.random(); r < 0.35 ? ammo() : r < 0.65 ? gainCash(Math.round(rnd(5, 20) * k), A.x, A.y) : nothing(); }
+    else if (A.tt === DEPOSIT) { gainCash(Math.round(rnd(40, 110) * k), A.x, A.y); bakeDirty(A.x, A.y); }
+    else if (A.tt === RACK) gainCash(Math.round(rnd(25, 70) * k), A.x, A.y);
+    else if (A.tt === TERMINAL) gotCode('la terminal de seguridad');
+  }
+}
+function gainCash(n, x, y) { room.cash += n; popup(x, y - 18, `+$${n}`, '#7fe0a8'); sfx('cash', x, y); }
+function gotCode(src) { if (room.hasCode) return; room.hasCode = true; banner(`Código de la cámara: ${room.code} (${src})`); sfx('buy'); }
+function openDoor(d) {
+  const z0 = curZ;
+  d.open = true;
+  useFloor(d.z);
+  for (const c of d.cells) map[c] = FLOOR;
+  refreshLamps(d.x, d.y); // también rehornea la zona
+  noise(d.x, d.y, 220, 'step');
+  sfx('vault', d.x, d.y); banner('Puerta de la cámara abierta'); cam.shake = 4;
+  useFloor(z0);
+}
+// Sigilo: si te detectan, llaman a la policía; asalto: suena desde el principio. Con alarma llegan refuerzos
+function triggerAlarm(msg) {
+  if (room.alarm) return;
+  const p = room.p, g = room.loot && !room.loot.taken ? room.loot : room.exit;
+  room.alarm = true; room.sirenT = 0; room.reinfT = 12;
+  room.timer = Math.min(room.timer, Math.round(70 + (Math.hypot(g.x - p.x, g.y - p.y) + Math.hypot(room.exit.x - g.x, room.exit.y - g.y)) / T * 1.2));
+  banner(msg);
+}
+function spawnPolice(n) {
+  const cells = [];
+  for (let y = 2; y < H - 2; y++) for (let x = 1; x <= 3; x++) if (!BLOCK_WALK[maps[0][y * W + x]]) cells.push(y * W + x);
+  const z0 = curZ;
+  useFloor(0);
+  for (let i = 0; i < n && cells.length; i++) {
+    const e = makeEnemy(run.level > 9 && Math.random() < 0.3 ? 'shield' : run.level > 5 && Math.random() < 0.3 ? 'elite' : 'guard', cells[(Math.random() * cells.length) | 0], Math.random);
+    Object.assign(e, { state: 'investigate', target: { x: room.p.x, y: room.p.y }, urgent: true, alertLvl: 2 });
+    room.enemies.push(e);
+  }
+  useFloor(z0);
+  if (!room.police) { room.police = true; banner('Llegan refuerzos de la policía'); }
+}
 // Al coger el botín salta la alarma: cuenta atrás para escapar y los guardias se movilizan
 function stealLoot() {
   const L = room.loot;
+  const escape = Math.round(50 + Math.hypot(room.exit.x - L.x, room.exit.y - L.y) / T * 1.0); // la nueva cuenta atrás: escapar
+  room.timer = room.alarm ? Math.max(room.timer, Math.min(escape, 45)) : escape;
   L.taken = true; room.alarm = true; room.sirenT = 0;
-  room.timer = Math.round(32 + Math.hypot(room.exit.x - L.x, room.exit.y - L.y) / T * 0.75); // la nueva cuenta atrás: escapar
   popup(L.x, L.y - 20, '¡BOTÍN!', '#ffd98a');
   banner('¡ALARMA! Escapa antes de que llegue la policía');
   // la mitad acude a la cámara del botín y la otra mitad corta el paso en la salida
@@ -626,6 +1034,7 @@ function enterCombat(e) {
   if (e.state !== 'combat') {
     e.state = 'combat'; e.reactT = Math.max(0.2, rnd(0.35, 0.7) - run.level * 0.015); e.aware = 1; e.path = null;
     room.detected = true;
+    if (room.op === 'sigilo') triggerAlarm('¡Te han descubierto! La policía está en camino');
     warn(e, '#ff5444');
     if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '!', '#ff5444');
     sfx(FOES[e.type].melee ? 'bark' : 'alert', e.x, e.y);
@@ -686,6 +1095,11 @@ function lookAround(e, dt, spread) {
 }
 function updateEnemy(e, dt) {
   const p = room.p, F = FOES[e.type], X = room.exposure;
+  if (e.burnT > 0) { // munición incendiaria: arde unos segundos
+    e.burnT -= dt; e.hp -= 8 * dt;
+    if (Math.random() < dt * 25) room.parts.push({ x: e.x + rnd(-6, 6), y: e.y + rnd(-6, 6), z: e.z, vx: rnd(-20, 20), vy: rnd(-40, -10), t: rnd(0.3, 0.6), c: '#ffb04a', s: 2, glow: true });
+    if (e.hp <= 0) { hurtEnemy(e, 0, e.a); return; }
+  }
   e.fireT -= dt; e.moveA = null;
   if (F.boss && !e.called && e.hp < e.maxHp / 2) { e.called = true; reinforcements(); } // aunque no te vea en ese momento
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
@@ -751,7 +1165,7 @@ function updateEnemy(e, dt) {
         e.reactT -= dt;
         if (F.melee) { // perro: corre hasta ti y muerde
           moveTo(e, p.x, p.y, F.run, dt);
-          if (d < e.r + p.r + 10 && e.fireT <= 0 && e.reactT <= 0) { e.fireT = 1 / F.rate; hurtPlayer(F.dmg); sfx('bite', e.x, e.y); }
+          if (d < e.r + p.r + 10 && e.fireT <= 0 && e.reactT <= 0) { e.fireT = 1 / F.rate; hurtPlayer(F.dmg, toP); sfx('bite', e.x, e.y); }
         } else if (F.boss) {
           if (d > 240 && e.burstT <= 0) moveTo(e, p.x, p.y, F.walk, dt);
           bossAttack(e, dt, d);
@@ -806,8 +1220,8 @@ function bossAttack(e, dt, d) {
   }
 }
 function bossNade(e) {
-  const p = room.p, a = ang(e, p), v = Math.min(dist(e, p), 320) * 2.4; // con el rozamiento llega casi justo a ti
-  room.nades.push({ z: curZ, x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.5, foe: true });
+  const p = room.p, a = ang(e, p), v = Math.min(dist(e, p), 320) * 1.45; // la parábola cae cerca de ti
+  room.nades.push({ z: curZ, x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.5, foe: true, h: 10, vh: 150 });
   sfx('throw', e.x, e.y);
 }
 function reinforcements() {
@@ -838,19 +1252,27 @@ function stickVec(s) {
   const dx = (s.x - s.ox) / STICK_R, dy = (s.y - s.oy) / STICK_R, m = Math.hypot(dx, dy);
   if (m < 0.12) return { x: 0, y: 0, m: 0 };
   const k = Math.min(1, (m - 0.12) / 0.88);
-  return { x: dx / m * k, y: dy / m * k, m: k };
+  return { x: dx / m * k, y: dy / m * k, m: k, over: m > 1.3, raw: m }; // over: más allá del borde, esprint
 }
 function updatePlayer(dt) {
   const p = room.p;
   useFloor(p.z);
   for (const k of ['fireT', 'meleeT', 'nadeT', 'noiseT', 'breachT', 'swingT', 'hurtT', 'muzzleT']) p[k] -= dt;
-  // Movimiento: el recorrido del stick decide entre sigilo y carrera
+  p.bloom = Math.max(0, p.bloom - dt * 1.6);
+  // Movimiento: poco recorrido = sigilo, a fondo = andar, más allá del borde (o Mayús) = esprintar, que gasta resistencia
   const L = stickVec(sticks.L);
-  let mx = L.x, my = L.y, mag = L.m;
+  let mx = L.x, my = L.y, mag = L.m, sprint = !!L.over;
   const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
-  if (kx || ky) { mag = keys.ShiftLeft || keys.ShiftRight ? 0.45 : 1; const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag; }
-  const speed = mag <= SNEAK ? 78 * mag / SNEAK : 78 + 97 * (mag - SNEAK) / (1 - SNEAK);
+  if (kx || ky) {
+    mag = keys.ControlLeft || keys.ControlRight || keys.KeyC ? 0.45 : 1; sprint = mag === 1 && !!(keys.ShiftLeft || keys.ShiftRight);
+    const k = Math.hypot(kx, ky); mx = kx / k * mag; my = ky / k * mag;
+  }
+  if (p.tired || !mag) sprint = false;
+  const speed = sprint ? 235 : mag <= SNEAK ? 78 * mag / SNEAK : 78 + 72 * (mag - SNEAK) / (1 - SNEAK);
+  if (sprint && p.speed > 120) { p.stam -= 28 * dt; p.restT = 0.9; if (p.stam <= 0) { p.stam = 0; p.tired = true; } }
+  else if ((p.restT -= dt) <= 0) { p.stam = Math.min(100, p.stam + 18 * dt); if (p.stam >= 30) p.tired = false; }
+  p.sprint = sprint;
   const tvx = mag ? mx / mag * speed : 0, tvy = mag ? my / mag * speed : 0;
   const acc = Math.min(1, dt * 12);
   p.vx += (tvx - p.vx) * acc; p.vy += (tvy - p.vy) * acc;
@@ -862,16 +1284,19 @@ function updatePlayer(dt) {
   if (onStairs && !p.onStairs && maps[1]) { p.z ^= 1; useFloor(p.z); banner(p.z ? 'Primera planta' : 'Planta baja'); sfx('stairs'); }
   p.onStairs = onStairs;
   if (!p.sneak && p.speed > 90 && (p.stepT -= dt) <= 0) {
-    p.stepT = 0.3;
-    noise(p.x, p.y, 50 + p.speed * 0.85, 'step');
+    p.stepT = p.sprint ? 0.24 : 0.34;
+    noise(p.x, p.y, p.sprint ? 280 : 40 + p.speed * 0.6, 'step');
     sfx('step');
   }
-  // Apuntado: stick derecho > ratón > dirección de marcha
-  const R = stickVec(sticks.R);
+  aimAndFire(dt, mx, my, mag, assist);
+}
+// Apuntado: stick derecho > ratón > dirección de marcha; recarga y disparo
+function aimAndFire(dt, mx, my, mag, help) {
+  const p = room.p, R = stickVec(sticks.R);
   let aim = null, firing = false;
   if (R.m > 0) {
     aim = Math.atan2(R.y, R.x); firing = R.m > FIRE;
-    if (firing) aim = assist(aim);
+    if (firing) aim = help(aim);
   } else if (mouse.active && !touchMode) {
     aim = Math.atan2(mouse.y - (vh / 2 + (p.y - cam.y) * zoom), mouse.x - (vw / 2 + (p.x - cam.x) * zoom));
     firing = mouse.down;
@@ -905,7 +1330,11 @@ function shoot() {
   w.ammo--;
   p.fireT = 1 / s.rate;
   const mx = p.x + Math.cos(p.a) * 18, my = p.y + Math.sin(p.a) * 18;
-  for (let i = 0; i < s.pellets; i++) bullet(mx, my, p.a + rnd(-s.spread, s.spread), s.speed * rnd(0.94, 1.06), s.dmg, true, s.bolt);
+  // la dispersión crece al disparar seguido (retroceso) y al esprintar; quieto en sigilo, más precisa
+  const spread = s.spread * (1 + p.bloom * 1.5) * (p.sprint ? 1.8 : 1) * (p.sneak && p.speed < 10 ? 0.7 : 1);
+  for (let i = 0; i < s.pellets; i++) bullet(mx, my, p.a + rnd(-spread, spread), s.speed * rnd(0.94, 1.06), s.dmg, true, s.bolt, { pierce: s.pierce, burn: s.burn });
+  p.bloom = Math.min(1.5, p.bloom + 0.18 * (s.bloom ?? 1) * (s.pellets > 1 ? 0.5 : 1));
+  cam.x -= Math.cos(p.a) * s.kick; cam.y -= Math.sin(p.a) * s.kick; // la cámara retrocede con el disparo
   const quiet = s.silenced || s.bolt;
   noise(p.x, p.y, s.noise, s.noise < 200 ? 'step' : 'shot'); // un disparo silenciado solo despierta sospechas
   if (!quiet) { flash(mx, my, 150, 0.08); p.muzzleT = 0.15; }
@@ -914,7 +1343,7 @@ function shoot() {
     const side = p.a + Math.PI / 2 + rnd(-0.3, 0.3), v = rnd(70, 120);
     room.parts.push({ x: p.x + Math.cos(p.a) * 6, y: p.y + Math.sin(p.a) * 6, z: curZ, vx: Math.cos(side) * v + p.vx, vy: Math.sin(side) * v + p.vy, t: 0.45, c: '#c9a64a', s: 2.5, shell: true });
   }
-  cam.shake = Math.max(cam.shake, s.pellets > 1 ? 7 : quiet ? 1 : 2.5);
+  cam.shake = Math.max(cam.shake, s.kick * (quiet ? 0.5 : 1));
   sfx(s.bolt ? 'bolt' : s.silenced ? 'sil' : s.pellets > 1 ? 'shotgun' : 'shot');
   if (!w.ammo) reload();
 }
@@ -967,7 +1396,7 @@ function throwNade() {
   if (run.nades <= 0 || p.nadeT > 0 || p.dead) return;
   useFloor(p.z);
   run.nades--; p.nadeT = 0.6;
-  room.nades.push({ z: curZ, x: p.x + Math.cos(p.a) * 14, y: p.y + Math.sin(p.a) * 14, vx: Math.cos(p.a) * 470 + p.vx * 0.5, vy: Math.sin(p.a) * 470 + p.vy * 0.5, t: 1.7 });
+  room.nades.push({ z: curZ, x: p.x + Math.cos(p.a) * 14, y: p.y + Math.sin(p.a) * 14, vx: Math.cos(p.a) * 340 + p.vx * 0.5, vy: Math.sin(p.a) * 340 + p.vy * 0.5, t: 1.7, h: 8, vh: 150 });
   sfx('throw');
 }
 // C4: se pega a la pared o caja de enfrente (o se deja en el suelo) casi sin ruido; al volver a pulsar, estalla
@@ -1007,30 +1436,33 @@ function makeNoise() {
 function toggleLight() { run.light = !run.light; sfx('empty'); }
 
 // ================= Daño, balas, explosiones =================
-function bullet(x, y, a, speed, dmg, mine, bolt = false) {
-  room.bullets.push({ x, y, sx: x, sy: y, z: curZ, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, mine, bolt, life: 1.2 });
+function bullet(x, y, a, speed, dmg, mine, bolt = false, extra) {
+  room.bullets.push({ x, y, sx: x, sy: y, z: curZ, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, mine, bolt, life: 1.2, ...extra });
 }
 function hurtEnemy(e, dmg, a) {
   e.hp -= dmg;
-  e.x += Math.cos(a) * 4; e.y += Math.sin(a) * 4;
+  e.x += Math.cos(a) * Math.min(10, 2 + dmg * 0.08); e.y += Math.sin(a) * Math.min(10, 2 + dmg * 0.08);
   blood(e.x, e.y, a, 8);
   if (e.hp > 0) { enterCombat(e); return; }
   const unaware = e.state !== 'combat';
   const reward = Math.round(FOES[e.type].reward * (unaware ? 1.5 : 1));
-  run.money += reward; room.kills++;
+  room.cash += reward; room.kills++;
   if (unaware) room.silent++;
   popup(e.x, e.y - 20, unaware ? `SIGILO +$${reward}` : `+$${reward}`, unaware ? '#62d6ad' : '#ffd98a');
-  room.bodies.push({ x: e.x, y: e.y, z: e.z, a, type: e.type });
+  const slide = Math.min(280, 60 + dmg * 1.5); // el cuerpo sale despedido según el golpe y se desliza hasta pararse
+  room.bodies.push({ x: e.x, y: e.y, z: e.z, a, type: e.type, keycard: e.keycard, vx: Math.cos(a) * slide, vy: Math.sin(a) * slide });
   room.decals.push({ x: e.x + Math.cos(a) * 8, y: e.y + Math.sin(a) * 8, z: e.z, r: 16 });
   room.enemies.splice(room.enemies.indexOf(e), 1);
   if (!FOES[e.type].melee && Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10), z: e.z });
   if (e === room.boss) { room.boss = null; banner('¡Alcaide abatido! La salida está abierta'); cam.shake = 14; }
+  if (e.keycard) popup(e.x, e.y - 34, 'Lleva una tarjeta', '#8fb8ff');
   sfx('gore', e.x, e.y);
 }
-function hurtPlayer(dmg) {
+function hurtPlayer(dmg, a) {
   const p = room.p;
   if (p.dead) return;
   run.hp -= dmg; p.hurtT = 0.35;
+  if (a !== undefined) { p.vx += Math.cos(a) * dmg * 6; p.vy += Math.sin(a) * dmg * 6; } // el impacto te empuja
   cam.shake = Math.max(cam.shake, 5);
   blood(p.x, p.y, Math.random() * 6.3, 5);
   sfx('hit'); buzz(35);
@@ -1060,13 +1492,15 @@ function updateBullets(dt) {
           l.on = false; b.dead = true; sparks(l.hx, l.hy, 12); lampChanged(l);
           noise(l.x, l.y, 160, 'impact'); sfx('glass', l.x, l.y);
         }
-        for (const e of room.enemies) if (e.z === b.z && Math.hypot(e.x - b.x, e.y - b.y) < e.r) {
+        for (const e of room.enemies) if (e.z === b.z && e !== b.hitE && Math.hypot(e.x - b.x, e.y - b.y) < e.r) {
           b.dead = true;
-          if (FOES[e.type].shield && Math.abs(angDiff(e.a, Math.atan2(-b.vy, -b.vx))) < 0.9) { sparks(b.x, b.y, 5); sfx('clank', e.x, e.y); enterCombat(e); }
-          else hurtEnemy(e, b.dmg, Math.atan2(b.vy, b.vx));
+          if (!b.pierce && FOES[e.type].shield && Math.abs(angDiff(e.a, Math.atan2(-b.vy, -b.vx))) < 0.9) { sparks(b.x, b.y, 5); sfx('clank', e.x, e.y); enterCombat(e); break; }
+          if (b.burn) e.burnT = 3;
+          if (b.pierce && !b.hitE) { b.dead = false; b.hitE = e; } // la perforante sigue hasta el siguiente
+          hurtEnemy(e, b.dmg, Math.atan2(b.vy, b.vx));
           break;
         }
-      } else if (p.z === b.z && Math.hypot(p.x - b.x, p.y - b.y) < p.r) { hurtPlayer(b.dmg); b.dead = true; }
+      } else if (p.z === b.z && Math.hypot(p.x - b.x, p.y - b.y) < p.r) { hurtPlayer(b.dmg, Math.atan2(b.vy, b.vx)); b.dead = true; }
     }
     if ((b.life -= dt) <= 0) b.dead = true;
   }
@@ -1075,7 +1509,9 @@ function updateBullets(dt) {
 function updateNades(dt) {
   for (const n of room.nades) {
     useFloor(n.z);
-    const f = Math.exp(-2.4 * dt);
+    n.vh -= 520 * dt; n.h += n.vh * dt; // en el aire apenas frena; en el suelo rueda y se para
+    if (n.h <= 0) { n.h = 0; if (n.vh < -40) { n.vh *= -0.42; sfx('tick', n.x, n.y); } else n.vh = 0; }
+    const f = Math.exp((n.h > 0 ? -0.3 : -4) * dt);
     n.vx *= f; n.vy *= f;
     if (solidPx(n.x + n.vx * dt, n.y)) n.vx *= -0.55; else n.x += n.vx * dt;
     if (solidPx(n.x, n.y + n.vy * dt)) n.vy *= -0.55; else n.y += n.vy * dt;
@@ -1103,7 +1539,12 @@ function destroyTiles(x, y, rad) {
   for (let ty = Math.floor((y - rad) / T); ty <= Math.floor((y + rad) / T); ty++)
     for (let tx = Math.floor((x - rad) / T); tx <= Math.floor((x + rad) / T); tx++) {
       const t = map[ty * W + tx];
-      if (border(tx, ty) || !t || t === VOID || t === STAIRS || Math.hypot(tx * T + T / 2 - x, ty * T + T / 2 - y) > rad) continue;
+      if (border(tx, ty) || !t || t === VOID || t === STAIRS || t === VWALL || Math.hypot(tx * T + T / 2 - x, ty * T + T / 2 - y) > rad) continue;
+      if (t === SECURE) { // la C4 de asalto revienta la puerta de seguridad; en otras misiones no le hace nada
+        const z = curZ, d = room.doors.find(d => d.z === z && d.cells.includes(ty * W + tx));
+        if (room.op === 'asalto' && d && !d.open) { openDoor(d); useFloor(z); }
+        continue;
+      }
       map[ty * W + tx] = FLOOR; any = true;
       room.decals.push({ x: tx * T + T / 2, y: ty * T + T / 2, z: curZ, r: 15, rubble: true });
     }
@@ -1118,7 +1559,7 @@ function explode(x, y, foe, R = 125, breakR = 46) {
     if (d < R && los(x, y, e.x, e.y)) hurtEnemy(e, 170 * (1 - d / R) + 20, Math.atan2(e.y - y, e.x - x));
   }
   const dp = Math.hypot(p.x - x, p.y - y);
-  if (p.z === z && dp < R && los(x, y, p.x, p.y)) hurtPlayer((170 * (1 - dp / R) + 20) * 0.6);
+  if (p.z === z && dp < R && los(x, y, p.x, p.y)) hurtPlayer((170 * (1 - dp / R) + 20) * 0.6, Math.atan2(p.y - y, p.x - x));
   for (const l of room.lamps) if (l.on && l.z === z && Math.hypot(l.x - x, l.y - y) < R) { l.on = false; lampChanged(l); }
   noise(x, y, 800, foe ? 'eshot' : 'boom'); // la granada del jefe no cuenta como ruido tuyo
   flash(x, y, 280, 0.35);
@@ -1149,6 +1590,14 @@ function updateFx(dt) {
   }
   room.parts = room.parts.filter(q => q.t > 0);
   for (const f of room.fx) { f.t += dt; if (f.vx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.97; f.vy *= 0.97; } }
+  for (const b of room.bodies) if (b.vx || b.vy) {
+    useFloor(b.z);
+    if (solidPx(b.x + b.vx * dt, b.y)) b.vx *= -0.3; else b.x += b.vx * dt;
+    if (solidPx(b.x, b.y + b.vy * dt)) b.vy *= -0.3; else b.y += b.vy * dt;
+    const f = Math.exp(-6 * dt); b.vx *= f; b.vy *= f;
+    if (Math.hypot(b.vx, b.vy) < 4) b.vx = b.vy = 0;
+  }
+  useFloor(room.p.z);
   room.fx = room.fx.filter(f => f.t < f.life);
   for (const r of room.rings) r.t += dt;
   room.rings = room.rings.filter(r => r.t < 0.7);
@@ -1163,9 +1612,12 @@ function updateFx(dt) {
 
 // ================= Bucle =================
 function update(dt) {
+  bindRoom();
+  if (room.chase) { updateChase(dt); return; }
+  room.introT = Math.max(0, room.introT - dt);
   const p = room.p;
   room.time += dt;
-  if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ABATIDO', `Caíste en la sala ${run.level}.`); }
+  if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ABATIDO', `Caíste en la misión ${run.level}: ${room.mission.name}.`); }
   else updatePlayer(dt);
   useFloor(p.z);
   room.exposure = exposure();
@@ -1192,17 +1644,25 @@ function update(dt) {
   room.items = room.items.filter(it => !it.got);
   if (room.banner && (room.banner.t -= dt) <= 0) room.banner = null;
   ambience(true);
+  updateUse(dt);
+  room.shownCash += (room.cash - room.shownCash) * Math.min(1, dt * 5);
+  if (room.alarm && !room.boss && room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
+  if (room.loot && room.loot.taken && (room.exhaustT = (room.exhaustT || 0) - dt) <= 0) { // el coche de huida, en marcha
+    room.exhaustT = 0.18; useFloor(0);
+    fx({ k: 'smoke', x: room.exit.x + rnd(-4, 4), y: room.exit.y + CAR_DIM[room.mission.car][1] / 2 + 4, vx: rnd(-8, 8), vy: rnd(15, 30), life: 0.9, r0: 3, r1: 11, g: 95 });
+    useFloor(p.z);
+  }
   if (room.loot && !room.loot.taken && !p.dead && room.loot.z === p.z && dist(p, room.loot) < 24) stealLoot();
   if (!p.dead && room.timer > 0) {
     if (room.alarm && (room.sirenT -= dt) <= 0) { room.sirenT = 1; sfx('siren'); }
     if ((room.timer -= dt) <= 0) {
       room.timer = 0;
-      gameOver('TE HAN ATRAPADO', room.alarm ? `Llegó la policía antes de que escaparas de la sala ${run.level}.` : `Se acabó el tiempo: la policía llegó antes de que dieras el golpe en la sala ${run.level}.`);
+      gameOver('TE HAN ATRAPADO', room.alarm ? `Llegó la policía antes de que escaparas (${room.mission.name}).` : `Se acabó el tiempo: la policía llegó antes de que dieras el golpe (${room.mission.name}).`);
       return;
     }
   }
   const locked = room.boss || (room.loot && !room.loot.taken);
-  if (!p.dead && p.z === 0 && dist(p, room.exit) < 26) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? 'Salida bloqueada: abate al Alcaide' : 'Primero roba el botín'); }
+  if (!p.dead && p.z === 0 && dist(p, room.exit) < 40) { if (!locked) completeRoom(); else if (!room.banner) banner(room.boss ? 'Salida bloqueada: abate al Alcaide' : 'Primero roba el botín'); }
 }
 
 // ================= Horneado del mapa =================
@@ -1212,7 +1672,10 @@ const bakes = [], lampMask = [], sprites = { tree: [], bush: [] };
 const lampQueue = []; // lámparas que cambiaron (rotas o con la sombra recalculada): su zona se rehornea
 let BS = 1;
 const LBS = 0.5; // escala de las capas de luz horneadas
-const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0]; // proyectan oclusión sobre el suelo vecino
+const grainCv = document.createElement('canvas');
+grainCv.width = grainCv.height = 128;
+{ const g = grainCv.getContext('2d'); for (let i = 0; i < 2600; i++) { const v = Math.random() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${(0.03 + Math.random() * 0.05).toFixed(3)})`; g.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random(), 1 + Math.random()); } }
+const TALL = [0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]; // proyectan oclusión sobre el suelo vecino
 function bakeAll() {
   BS = Math.min(touchMode ? 1.25 : 1.5, Math.sqrt((touchMode ? 5e6 : 9e6) / (W * T * H * T)));
   for (let z = 0; z < maps.length; z++) {
@@ -1251,6 +1714,9 @@ function bakeRegion(z, x0, y0, x1, y1) {
   const g = layerCtx(bakes[z], x0, y0, x1, y1), M = maps[z], F = fks[z];
   const X0 = Math.max(0, x0 - 1), Y0 = Math.max(0, y0 - 1), X1 = Math.min(W - 1, x1 + 1), Y1 = Math.min(H - 1, y1 + 1);
   for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) if (M[y * W + x] !== VOID) drawFloor(g, x, y, F[y * W + x], z);
+  g.globalCompositeOperation = 'source-atop'; // grano solo sobre lo pintado: rompe lo plano de cada superficie
+  g.fillStyle = g.createPattern(grainCv, 'repeat'); g.fillRect(X0 * T, Y0 * T, (X1 - X0 + 1) * T, (Y1 - Y0 + 1) * T);
+  g.globalCompositeOperation = 'source-over';
   // sombras: oclusión al pie de muros y estanterías, y sombra proyectada de cada prop
   const ao = [g.createLinearGradient(0, 0, 0, 12), g.createLinearGradient(0, 0, 12, 0)];
   for (const a of ao) { a.addColorStop(0, 'rgba(0,0,0,0.5)'); a.addColorStop(1, 'rgba(0,0,0,0)'); }
@@ -1261,10 +1727,26 @@ function bakeRegion(z, x0, y0, x1, y1) {
       const edge = (n, rot) => { if (!TALL[M[n]]) return; g.save(); g.translate(X + T / 2, Y + T / 2); g.rotate(rot); g.translate(-T / 2, -T / 2); g.fillStyle = ao[0]; g.fillRect(0, 0, T, 12); g.restore(); };
       edge(c - W, 0); edge(c + 1, Math.PI / 2); edge(c + W, Math.PI); edge(c - 1, -Math.PI / 2);
     }
-    if (t === CRATE || t === SHELF || t === METAL || t === LOW || t === BARRIER) { g.fillStyle = 'rgba(0,0,0,0.32)'; g.fillRect(X + 5, Y + 7, T - 2, T - 3); }
-    if (t === TREE && !zone[c] && z === 0) { g.fillStyle = 'rgba(0,0,0,0.38)'; g.beginPath(); g.ellipse(X + T / 2 + 9, Y + T / 2 + 11, 27, 22, 0, 0, 7); g.fill(); }
-    if (t === BUSH) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(X + T / 2 + 5, Y + T / 2 + 6, 20, 16, 0, 0, 7); g.fill(); }
   }
+  // sombras proyectadas, suaves y hacia abajo a la derecha: más largas cuanto más alto es el objeto
+  // (una sola pasada difuminada por tipo: difuminar cada casilla por separado haría muy lento el horneado)
+  const sh = { tall: new Path2D(), mid: new Path2D(), low: new Path2D(), leaf: new Path2D() };
+  const extrude = (P, X, Y, o) => { P.moveTo(X + T, Y); P.lineTo(X + T + o, Y + o); P.lineTo(X + T + o, Y + T + o); P.lineTo(X + o, Y + T + o); P.lineTo(X, Y + T); P.lineTo(X + T, Y + T); P.closePath(); };
+  const disc = (P, x, y, rx, ry = rx) => { P.moveTo(x + rx, y); P.ellipse(x, y, rx, ry, 0, 0, 7); };
+  for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
+    const c = y * W + x, t = M[c], X = x * T, Y = y * T;
+    if (t === SHELF || t === METAL || t === WALL || t === SECURE || t === RACK || t === VWALL) extrude(sh.tall, X, Y, 12);
+    else if (t === CRATE || t === DEPOSIT) extrude(sh.mid, X, Y, 9);
+    else if (t === LOW || t === BARRIER || t === TERMINAL) extrude(sh.low, X, Y, 5);
+    else if (t === TREE && !zone[c] && z === 0) for (const [dx, dy, r] of [[16, 20, 24], [6, 14, 16], [24, 12, 14], [12, 28, 14]]) disc(sh.leaf, X + T / 2 + dx, Y + T / 2 + dy, r); // la copa entera
+    else if (t === BUSH) disc(sh.leaf, X + T / 2 + 8, Y + T / 2 + 10, 20, 15);
+    else if (t === TREE) disc(sh.low, X + T / 2 + 6, Y + T / 2 + 8, 12);
+  }
+  g.save();
+  if ('filter' in g) g.filter = 'blur(4px)';
+  g.fillStyle = 'rgba(0,0,0,0.42)'; g.fill(sh.tall); g.fill(sh.leaf);
+  g.fillStyle = 'rgba(0,0,0,0.34)'; g.fill(sh.mid); g.fill(sh.low);
+  g.restore();
   for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) drawTile(g, M, x, y, z);
   for (const l of room.lamps) if (l.z === z && l.x > (X0 - 1) * T && l.x < (X1 + 2) * T && l.y > (Y0 - 1) * T && l.y < (Y1 + 2) * T) drawFixture(g, l);
   brighten(g, bakes[z], x0, y0, x1, y1, 0.8);
@@ -1303,6 +1785,16 @@ function drawFloor(g, x, y, k, z) {
       g.fillStyle = '#1b140f'; g.fillRect(X, Y + r * 10, T, 1); g.fillRect(X + Math.floor(hash(x, y, r) * T), Y + r * 10, 1, 10);
       g.fillStyle = 'rgba(255,220,170,0.03)'; g.fillRect(X + 3, Y + r * 10 + 4, T - 8, 1);
     }
+  } else if (k === 8) { // mármol con vetas
+    g.fillStyle = (x + y) % 2 ? '#2c2f35' : '#292c32'; g.fillRect(X, Y, T, T);
+    g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X, Y + hash(x, y, 1) * T); g.quadraticCurveTo(X + T / 2, Y + hash(x, y, 2) * T, X + T, Y + hash(x, y, 3) * T); g.stroke();
+    g.fillStyle = '#1c1e22'; g.fillRect(X, Y, T, 1); g.fillRect(X, Y, 1, T);
+  } else if (k === 9) { // suelo técnico: losas con rejilla de ventilación
+    g.fillStyle = '#12161b'; g.fillRect(X, Y, T, T);
+    for (let q = 0; q < 4; q++) { const sx = X + (q & 1) * 20, sy = Y + (q >> 1) * 20; g.fillStyle = '#262c34'; g.fillRect(sx + 1, sy + 1, 18, 18); if (hash(x * 2 + (q & 1), y * 2 + (q >> 1), 4) < 0.3) { g.fillStyle = '#161a20'; for (let i = 3; i < 18; i += 4) for (let j = 3; j < 18; j += 4) g.fillRect(sx + i, sy + j, 1.5, 1.5); } }
+  } else if (k === 10) { // chapa de acero estriada (cámara)
+    g.fillStyle = '#2b3036'; g.fillRect(X, Y, T, T);
+    g.fillStyle = '#383e46'; for (let i = 2; i < T; i += 8) for (let j = (i / 8) % 2 ? 6 : 2; j < T; j += 8) { g.save(); g.translate(X + j, Y + i); g.rotate(((i + j) / 8) % 2 ? 0.7 : -0.7); g.fillRect(-2.5, -0.7, 5, 1.4); g.restore(); }
   } else if (k === 5) { // moqueta
     g.fillStyle = '#1c2130'; g.fillRect(X, Y, T, T); dots(16, '#232a3b', '#171b27', 1);
   } else { // hormigón con manchas y juntas
@@ -1334,23 +1826,76 @@ function drawFixture(g, l) {
     g.fillStyle = '#7d8691'; g.fillRect(x - 12, n ? y - 2 : y, 24, 2);
   }
 }
+const CAR_DIM = { van: [34, 64], sedan: [28, 54], suv: [32, 58], armored: [38, 68] };
+function carPath(c, w, h, r) { c.beginPath(); c.moveTo(-w / 2 + r, -h / 2); c.lineTo(w / 2 - r, -h / 2); c.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); c.lineTo(w / 2, h / 2 - r); c.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); c.lineTo(-w / 2 + r, h / 2); c.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); c.lineTo(-w / 2, -h / 2 + r); c.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); c.closePath(); }
+// Vehículo de huida visto desde arriba, morro hacia arriba: furgoneta, berlina, todoterreno o furgón blindado
+function drawCar(c, kind, x, y, a = 0) {
+  const [w, h] = CAR_DIM[kind], col = { van: '#bdb8aa', sedan: '#2a3a52', suv: '#1f2b23', armored: '#3a3f36' }[kind];
+  c.save(); c.translate(x, y); c.rotate(a);
+  c.fillStyle = 'rgba(0,0,0,0.45)'; carPath(c, w, h, 7); c.save(); c.translate(5, 7); c.fill(); c.restore();
+  c.fillStyle = '#111'; for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) c.fillRect(sx * w / 2 - (sx > 0 ? 2 : 3), sy * h * 0.3 - 6, 5, 12); // ruedas
+  c.fillStyle = col; carPath(c, w, h, kind === 'armored' ? 4 : 8); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(-w / 2 + 2, -h / 2 + 6, 2, h - 12);
+  if (kind === 'van') { c.fillStyle = '#a7a294'; c.fillRect(-w / 2 + 3, -h / 2 + 18, w - 6, h - 22); c.fillStyle = '#8a3a2e'; c.fillRect(-w / 2, 4, w, 3); }
+  else if (kind === 'armored') { c.fillStyle = '#2c3029'; c.fillRect(-w / 2 + 4, -h / 2 + 20, w - 8, h - 26); c.fillStyle = '#4f5548'; for (let i = 0; i < 4; i++) c.fillRect(-w / 2 + 6, -h / 2 + 24 + i * 9, w - 12, 2); c.fillStyle = '#1a1d18'; for (let i = 0; i < 5; i++) c.fillRect(-w / 2 + 6 + i * (w - 12) / 5, -h / 2 + 2, 2, 5); }
+  else { c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(-w / 2 + 4, -h / 2 + 18, w - 8, h * 0.42); if (kind === 'suv') { c.fillStyle = '#3c473f'; for (let i = 0; i < 3; i++) c.fillRect(-w / 2 + 6, -h / 2 + 22 + i * 7, w - 12, 1.5); } }
+  c.fillStyle = '#6f8fae'; c.beginPath(); c.moveTo(-w / 2 + 4, -h / 2 + 16); c.lineTo(w / 2 - 4, -h / 2 + 16); c.lineTo(w / 2 - 6, -h / 2 + 9); c.lineTo(-w / 2 + 6, -h / 2 + 9); c.closePath(); c.fill(); // parabrisas
+  c.fillStyle = 'rgba(111,143,174,0.8)'; c.fillRect(-w / 2 + 6, h / 2 - 9, w - 12, 4); // luna trasera
+  c.fillStyle = col; c.fillRect(-w / 2 - 3, -h / 2 + 15, 3, 4); c.fillRect(w / 2, -h / 2 + 15, 3, 4); // retrovisores
+  c.restore();
+}
+function carLights(c, kind, x, y, on, a = 0) { // faros (con haz) y pilotos
+  const [w, h] = CAR_DIM[kind];
+  c.save(); c.translate(x, y); c.rotate(a);
+  for (const sx of [-1, 1]) {
+    c.fillStyle = on ? 'rgba(255,248,220,0.95)' : 'rgba(120,120,110,0.6)'; c.fillRect(sx * (w / 2 - 6) - 3, -h / 2, 6, 2.5);
+    c.fillStyle = on ? 'rgba(255,40,30,0.9)' : 'rgba(90,20,20,0.6)'; c.fillRect(sx * (w / 2 - 6) - 3, h / 2 - 2.5, 6, 2.5);
+    if (!on) continue;
+    const g = c.createRadialGradient(sx * (w / 2 - 6), -h / 2, 0, sx * (w / 2 - 6), -h / 2 - 90, 100);
+    g.addColorStop(0, 'rgba(255,245,210,0.35)'); g.addColorStop(1, 'rgba(255,245,210,0)');
+    c.fillStyle = g; c.beginPath(); c.moveTo(sx * (w / 2 - 6), -h / 2); c.lineTo(sx * (w / 2 - 6) - 28, -h / 2 - 110); c.lineTo(sx * (w / 2 - 6) + 28, -h / 2 - 110); c.closePath(); c.fill();
+  }
+  c.restore();
+}
+const GUN_SHAPE = { pistol: [9, 4], revolver: [12, 4.5], smg: [14, 5], smgs: [15, 5], shotgun: [19, 6], autosg: [19, 7], crossbow: [15, 4], rifle: [21, 5], dmr: [25, 4.5], lmg: [23, 7.5] }; // [largo, ancho] del arma en la mano
 const CAR_COLORS = ['#3b2a2f', '#2b3848', '#3d3e44', '#43392a', '#24383b', '#4a4d52'];
 function drawTile(g, M, x, y, z) {
   const c = y * W + x, t = M[c], X = x * T, Y = y * T;
-  const tall = v => v === WALL || v === GLASS;
-  if (t === WALL || t === GLASS) {
+  const tall = v => v === WALL || v === GLASS || v === VWALL || v === SECURE;
+  if (t === SECURE) { // puerta de seguridad: placa de acero, bandas de peligro y volante
+    const vert = M[c - W] === SECURE || M[c + W] === SECURE, first = vert ? M[c + W] === SECURE : M[c + 1] === SECURE;
+    g.fillStyle = '#4c545e'; g.fillRect(X, Y, T, T);
+    g.fillStyle = '#5d6672'; g.fillRect(X + 3, Y + 3, T - 6, T - 6);
+    g.save(); g.beginPath(); g.rect(X, Y, T, T); g.clip(); g.fillStyle = 'rgba(214,170,40,0.75)';
+    for (let i = -T; i < T * 2; i += 10) { g.beginPath(); g.moveTo(X + i, Y); g.lineTo(X + i + 5, Y); g.lineTo(X + i + 5 - 6, Y + 6); g.lineTo(X + i - 6, Y + 6); g.closePath(); g.fill(); }
+    g.restore();
+    g.strokeStyle = '#2b3036'; g.lineWidth = 3;
+    const wx = vert ? X + T / 2 : first ? X + T : X, wy = vert ? (first ? Y + T : Y) : Y + T / 2; // el volante, centrado entre las dos hojas
+    g.save(); g.beginPath(); g.rect(X, Y, T, T); g.clip(); g.beginPath(); g.arc(wx, wy, 11, 0, 7); g.stroke(); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; g.beginPath(); g.moveTo(wx, wy); g.lineTo(wx + Math.cos(a) * 15, wy + Math.sin(a) * 15); g.stroke(); } g.restore();
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(X, Y + T - 4, T, 4);
+  } else if (t === WALL || t === GLASS || t === VWALL) {
     const fence = border(x, y);
     const facade = z === 0 && !fence && [c - 1, c + 1, c - W, c + W].some(n => !BLOCK_WALK[M[n]] && !zone[n]);
-    const top = fence ? '#1c2128' : facade ? '#3b3431' : '#2d3745', face = fence ? '#121519' : facade ? '#271f1d' : '#1b222c';
+    const steel = t === VWALL;
+    const top = fence ? '#1c2128' : steel ? '#3a434e' : facade ? '#3b3431' : '#2d3745', face = fence ? '#121519' : steel ? '#232930' : facade ? '#271f1d' : '#1b222c';
     g.fillStyle = top; g.fillRect(X, Y, T, T);
     if (facade && t === WALL) { // ladrillo visto
       g.fillStyle = 'rgba(0,0,0,0.2)';
       for (let r = 0; r < T; r += 8) { g.fillRect(X, Y + r, T, 1); for (let j = (r / 8) % 2 ? 8 : 0; j < T; j += 16) g.fillRect(X + j, Y + r, 1, 8); }
+    } else if (steel) { // muro blindado: placas remachadas
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(X + T / 2, Y, 1, T); g.fillRect(X, Y + T / 2, T, 1);
+      g.fillStyle = '#5a646f'; for (const [dx, dy] of [[4, 4], [T - 6, 4], [4, T - 18], [T - 6, T - 18]]) g.fillRect(X + dx, Y + dy, 2, 2);
     } else if (!fence) { g.fillStyle = 'rgba(255,255,255,0.035)'; g.fillRect(X + 4, Y + 5, T - 8, 1); }
     if (!tall(M[c - W])) { g.fillStyle = 'rgba(255,255,255,0.1)'; g.fillRect(X, Y, T, 2); }
     if (!tall(M[c - 1])) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(X, Y, 2, T); }
     if (!tall(M[c + 1])) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(X + T - 2, Y, 2, T); }
     if (!tall(M[c + W])) { g.fillStyle = face; g.fillRect(X, Y + T - 11, T, 11); g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(X, Y + T - 11, T, 1); } // cara frontal: da altura
+    if (t === WALL && !BLOCK_WALK[M[c + W]] && fks[z][c + W] === 8 && hash(x, y, 21) < 0.45) { // cuadro colgado en la galería
+      const pal = [['#7a2f2a', '#d9a441'], ['#2a4a6a', '#c9d6df'], ['#3d5a3a', '#e0c07a'], ['#5a3a6a', '#e8a0a0']][Math.floor(hash(x, y, 22) * 4)];
+      g.fillStyle = '#b39a52'; g.fillRect(X + 7, Y + T - 18, 26, 16);
+      g.fillStyle = pal[0]; g.fillRect(X + 9, Y + T - 16, 22, 12);
+      g.fillStyle = pal[1]; g.beginPath(); g.arc(X + 14 + hash(x, y, 23) * 12, Y + T - 10, 3 + hash(x, y, 24) * 3, 0, 7); g.fill();
+    }
     if (t === GLASS) { // ventana: marco, cristal con reflejos y parteluz
       const horiz = BLOCK_WALK[M[c - 1]] && BLOCK_WALK[M[c + 1]];
       g.save(); g.translate(X + T / 2, Y + T / 2); if (!horiz) g.rotate(Math.PI / 2);
@@ -1367,6 +1912,27 @@ function drawTile(g, M, x, y, z) {
     g.strokeStyle = '#6f553a'; g.lineWidth = 3; g.strokeRect(X + 3.5, Y + 3.5, T - 7, T - 7);
     g.strokeStyle = '#3d2e1d'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X + 6, Y + 6); g.lineTo(X + T - 6, Y + T - 6); g.stroke();
     g.fillStyle = '#a89a80'; for (const [dx, dy] of [[5, 5], [T - 6, 5], [5, T - 6], [T - 6, T - 6]]) g.fillRect(X + dx, Y + dy, 1.5, 1.5);
+  } else if (t === LOW && fks[z][c] === 8 && M[c - 1] !== LOW && M[c + 1] !== LOW) { // peana con una obra: busto, jarrón o escultura
+    g.fillStyle = '#d8d3c8'; g.fillRect(X + 9, Y + 9, 22, 22); g.fillStyle = '#b3ada0'; g.fillRect(X + 9, Y + 27, 22, 4);
+    const art = Math.floor(hash(x, y, 31) * 3);
+    if (art === 0) { g.fillStyle = '#8f8a80'; g.beginPath(); g.arc(X + 20, Y + 16, 6, 0, 7); g.fill(); g.fillRect(X + 15, Y + 20, 10, 6); }
+    else if (art === 1) { g.fillStyle = '#2f5d7a'; g.beginPath(); g.ellipse(X + 20, Y + 19, 6, 8, 0, 0, 7); g.fill(); g.fillStyle = '#e0c07a'; g.fillRect(X + 15, Y + 18, 10, 2); }
+    else { g.fillStyle = '#a0632f'; g.beginPath(); g.moveTo(X + 20, Y + 10); g.lineTo(X + 27, Y + 25); g.lineTo(X + 13, Y + 25); g.closePath(); g.fill(); }
+  } else if (t === LOW && fks[z][c] === 8) { // mostrador del banco: frente de madera, encimera de mármol y alguna caja registradora
+    g.fillStyle = '#3b2b20'; g.fillRect(X, Y + 6, T, T - 12); g.fillStyle = '#c9c4b8'; g.fillRect(X, Y + 4, T, 7);
+    if (hash(x, y, 33) < 0.4) { g.fillStyle = '#20242a'; g.fillRect(X + 12, Y + 12, 16, 11); g.fillStyle = '#4a8a5a'; g.fillRect(X + 14, Y + 14, 12, 4); }
+  } else if (t === TERMINAL) { // terminal de seguridad: mesa, monitor grande y teclado
+    g.fillStyle = '#3a3024'; g.fillRect(X + 2, Y + 6, T - 4, T - 12);
+    g.fillStyle = '#15181d'; g.fillRect(X + 8, Y + 4, 24, 15); g.fillStyle = '#204a66'; g.fillRect(X + 10, Y + 6, 20, 11);
+    g.fillStyle = '#2a2f37'; g.fillRect(X + 10, Y + 22, 20, 6);
+  } else if (t === RACK) { // rack de servidores: armario oscuro con bandejas y rejilla
+    g.fillStyle = '#171b22'; g.fillRect(X + 1, Y + 2, T - 2, T - 4);
+    g.fillStyle = '#262c36'; for (let i = 5; i < T - 6; i += 6) g.fillRect(X + 4, Y + i, T - 8, 3);
+    g.fillStyle = '#0d1014'; for (let i = 0; i < 4; i++) g.fillRect(X + 7 + i * 7, Y + 29, 4, 4);
+  } else if (t === DEPOSIT) { // pared de cajas de seguridad (abiertas si ya las has forzado)
+    const open = room && room.searched && room.searched.has(z + ':' + c);
+    g.fillStyle = '#59616b'; g.fillRect(X, Y, T, T);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { g.fillStyle = open && (i + j) % 2 === 0 ? '#14171b' : '#6b747f'; g.fillRect(X + 2 + i * 12.5, Y + 2 + j * 12.5, 11, 11); if (!open) { g.fillStyle = '#2b3036'; g.fillRect(X + 7 + i * 12.5, Y + 7 + j * 12.5, 2, 2); } }
   } else if (t === LOW && (zone[c] || z === 1)) { // mesa: superficie continua si es grande; con silla y cosas encima si es de despacho
     const l = M[c - 1] === LOW, r = M[c + 1] === LOW, u = M[c - W] === LOW, d = M[c + W] === LOW, table = u || d;
     const x0 = X + (l ? 0 : 3), x1 = X + T - (r ? 0 : 3), y0 = Y + (u ? 0 : 3), y1 = Y + T - (d ? 0 : table ? 3 : 13);
@@ -1502,6 +2068,30 @@ function drawLoot(L) {
     for (let i = 0; i < 7; i++) { const a = hash(i, 4, 1) * 6.3, d = 6 + hash(i, 5, 1) * 18, sx = x + Math.cos(a) * d, sy = y + Math.sin(a) * d; c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 3, sy + 1); c.lineTo(sx + 1, sy + 3); c.closePath(); c.fill(); }
     return;
   }
+  if (L.type === 'maletin') { // maletín con cierres dorados y billetes asomando
+    c.fillStyle = '#d6e6c8'; c.fillRect(x - 8, y - 9, 14, 3);
+    c.fillStyle = '#3a2618'; c.fillRect(x - 11, y - 7, 22, 15); c.fillStyle = '#4e3322'; c.fillRect(x - 11, y - 7, 22, 3);
+    c.strokeStyle = '#2a1a10'; c.lineWidth = 2; c.strokeRect(x - 4, y - 11, 8, 4);
+    c.fillStyle = '#e0c06a'; c.fillRect(x - 8, y - 2, 3, 3); c.fillRect(x + 5, y - 2, 3, 3);
+    return;
+  }
+  if (L.type === 'carga') { // sacos de dinero atados
+    for (const [bx, by] of [[-7, 3], [6, 4], [0, -5]]) {
+      c.fillStyle = '#7a6a48'; c.beginPath(); c.ellipse(x + bx, y + by, 7, 6, 0, 0, 7); c.fill();
+      c.fillStyle = '#5a4c32'; c.fillRect(x + bx - 2, y + by - 8, 4, 3);
+      c.fillStyle = '#e8d07a'; c.font = '700 8px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('$', x + bx, y + by + 1);
+    }
+    return;
+  }
+  if (L.type === 'diamante') { // diamante tallado sobre un cojín rojo
+    c.fillStyle = '#7a1a24'; c.fillRect(x - 10, y - 8, 20, 16); c.fillStyle = '#9a2a34'; c.fillRect(x - 10, y - 8, 20, 3);
+    const dg = c.createLinearGradient(x - 7, y - 7, x + 7, y + 7); dg.addColorStop(0, '#ffffff'); dg.addColorStop(0.5, '#a8d8ff'); dg.addColorStop(1, '#5a9ad0');
+    c.fillStyle = dg; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x - 4, y - 7); c.lineTo(x + 4, y - 7); c.lineTo(x + 7, y - 3); c.lineTo(x, y + 7); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(x - 7, y - 3); c.lineTo(x + 7, y - 3); c.moveTo(x - 4, y - 7); c.lineTo(x, y + 7); c.lineTo(x + 4, y - 7); c.stroke();
+  } else if (L.type === 'disco') { // disco cifrado con su tira de LED
+    c.fillStyle = '#121418'; c.fillRect(x - 9, y - 6, 18, 12); c.fillStyle = '#2a2f37'; c.fillRect(x - 9, y - 6, 18, 2);
+    c.fillStyle = `rgba(90,200,255,${(0.6 + 0.4 * Math.sin(t * 6)).toFixed(3)})`; c.fillRect(x - 6, y + 2, 12, 1.5);
+  } else {
   const bar = (bx, by) => { // lingote: base, cara superior clara y bisel
     const g = c.createLinearGradient(bx, by - 3, bx, by + 4); g.addColorStop(0, '#f6d27a'); g.addColorStop(1, '#a8761e');
     c.fillStyle = g; c.beginPath(); c.moveTo(bx - 5, by + 3); c.lineTo(bx + 5, by + 3); c.lineTo(bx + 4, by - 3); c.lineTo(bx - 4, by - 3); c.closePath(); c.fill();
@@ -1509,6 +2099,7 @@ function drawLoot(L) {
     c.strokeStyle = '#6e4c12'; c.lineWidth = 0.6; c.stroke();
   };
   for (const [bx, by] of [[-6, 4], [0, 4], [6, 4], [-3, -1], [3, -1], [0, -6]]) bar(x + bx, y + by);
+  }
   c.save(); c.beginPath(); c.rect(x - 11, y - 10, 22, 18); c.clip(); // brillo que recorre los lingotes
   const sw = x - 30 + ((t * 40) % 90), sg = c.createLinearGradient(sw - 8, y - 10, sw + 8, y + 8);
   sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,240,0.55)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
@@ -1517,8 +2108,61 @@ function drawLoot(L) {
   c.strokeStyle = 'rgba(170,215,245,0.55)'; c.lineWidth = 1.2; c.strokeRect(x - 12, y - 12, 24, 22); // vitrina
   c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x - 9, y + 6); c.lineTo(x - 3, y - 9); c.moveTo(x + 2, y + 7); c.lineTo(x + 6, y - 2); c.stroke();
 }
+// Partículas, humo y polvo (se ven solo con luz)
+function drawFxUnder(here) {
+  for (const q of room.parts) if (here(q) && !q.glow) { ctx.fillStyle = q.c; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
+  for (const f of room.fx) { // humo y polvo: solo se ven donde hay luz
+    if (!here(f) || (f.k !== 'smoke' && f.k !== 'puff')) continue;
+    const k = f.t / f.life, r = f.k === 'smoke' ? f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6) : f.r * (0.5 + k);
+    ctx.fillStyle = f.k === 'smoke' ? glow(ctx, f.x, f.y, r, `${f.g},${f.g},${f.g + 4}`, 0.6 * (1 - k)) : glow(ctx, f.x, f.y, r, '120,124,130', 0.45 * (1 - k));
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
+  }
+}
+// Lo que emite luz (en modo aditivo): trazadoras, fogonazos, fuego, onda expansiva y brasas
+function drawFxGlow(here) {
+  ctx.lineCap = 'round';
+  for (const b of room.bullets) {
+    if (!here(b)) continue;
+    const sp = Math.hypot(b.vx, b.vy), tl = Math.min(Math.hypot(b.x - (b.sx ?? b.x), b.y - (b.sy ?? b.y)), sp * 0.035), ux = b.vx / sp, uy = b.vy / sp;
+    if (!sp || !(tl > 0.5)) continue; // recién salida (o sin origen): aún no tiene estela
+    const col = b.mine ? (b.bolt ? '200,225,255' : b.burn ? '255,150,60' : b.pierce ? '190,235,255' : '255,225,150') : '255,130,80', tx = b.x - ux * tl, ty = b.y - uy * tl;
+    const gr = ctx.createLinearGradient(tx, ty, b.x, b.y); gr.addColorStop(0, `rgba(${col},0)`); gr.addColorStop(1, `rgba(${col},0.95)`);
+    ctx.strokeStyle = gr; ctx.lineWidth = b.bolt ? 2.5 : 1.8; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.strokeStyle = `rgba(${col},0.16)`; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(b.x - ux * tl * 0.4, b.y - uy * tl * 0.4); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,250,235,0.95)'; ctx.beginPath(); ctx.arc(b.x, b.y, 1.4, 0, 7); ctx.fill();
+  }
+  for (const f of room.fx) {
+    if (!here(f)) continue;
+    const k = f.t / f.life;
+    if (f.k === 'muzzle') { // estrella de fogonazo en la boca del cañón
+      const r = f.s * 14, a = 0.9 * (1 - k);
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a);
+      ctx.fillStyle = glow(ctx, 0, 0, r, '255,210,140', a); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(255,245,215,${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.moveTo(0, -3 * f.s); ctx.lineTo(r * 1.5, 0); ctx.lineTo(0, 3 * f.s); ctx.closePath(); ctx.fill();
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(r * 0.55, d * r * 0.75); ctx.lineTo(r * 0.4, 0); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+    } else if (f.k === 'fire') { // crece rápido y se apaga de blanco a rojo
+      const r = f.r * (0.35 + 0.65 * Math.sqrt(k)), g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+      g.addColorStop(0, `rgba(255,250,220,${(0.95 * (1 - k)).toFixed(3)})`); g.addColorStop(0.35, `rgba(255,170,60,${(0.8 * (1 - k)).toFixed(3)})`);
+      g.addColorStop(0.75, `rgba(200,50,20,${(0.45 * (1 - k)).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
+    } else if (f.k === 'smoke' && f.t < 0.5) { // el fuego ilumina el humo recién salido
+      const r = f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6);
+      ctx.fillStyle = glow(ctx, f.x, f.y, r, '255,140,50', 0.3 * (1 - f.t / 0.5)); ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
+    } else if (f.k === 'ring') {
+      ctx.strokeStyle = `rgba(255,240,220,${(0.6 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 1 + 4 * (1 - k);
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, 7); ctx.stroke();
+    }
+  }
+  for (const q of room.parts) if (here(q) && q.glow) { ctx.fillStyle = `rgba(255,${Math.floor(120 + 100 * Math.min(1, q.t * 2))},60,${Math.min(1, q.t * 2).toFixed(3)})`; ctx.fillRect(q.x - 1, q.y - 1, 2, 2); }
+}
+function bindRoom() { if (room.maps !== maps) { maps = room.maps; fks = room.fks; zone = room.zone; W = room.W; H = room.H; } }
 function render() {
-  const S = zoom * dpr, p = room.p, up = p.z === 1;
+  bindRoom();
+  if (room.chase) { renderChase(); return; }
+  const zi = room.introT > 0 ? 1 - 0.5 * Math.pow(room.introT / 1.6, 2) : 1; // zoom de entrada
+  const S = zoom * dpr * zi, p = room.p, up = p.z === 1;
   useFloor(p.z);
   if (lampsDirty) bakeLamps();
   const cx = cam.x + rnd(-cam.shake, cam.shake), cy = cam.y + rnd(-cam.shake, cam.shake);
@@ -1556,6 +2200,7 @@ function render() {
     else { ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); }
   }
   if (room.loot && here(room.loot)) drawLoot(room.loot);
+  if (!up) drawCar(ctx, room.mission.car, room.exit.x, room.exit.y);
   for (const e of room.enemies) {
     const rr = visionRange(e);
     if (!here(e) || !onScreen(e.x, e.y, rr)) continue;
@@ -1568,10 +2213,24 @@ function render() {
     ctx.fillStyle = '#3a1716'; ctx.beginPath(); ctx.ellipse(4, 0, FOES[b.type].r + 3, FOES[b.type].r - 3, 0, 0, 7); ctx.fill();
     ctx.restore();
   }
-  for (const it of room.items) if (here(it)) { ctx.fillStyle = '#5d5b2c'; ctx.fillRect(it.x - 8, it.y - 6, 16, 12); ctx.fillStyle = '#ffd98a'; ctx.fillRect(it.x - 8, it.y - 1, 16, 2); }
+  for (const it of room.items) if (here(it)) { // lata de munición militar: asa, cierre, franja y cartuchos asomando
+    const x = it.x, y = it.y;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x - 7, y - 3, 19, 13);
+    ctx.fillStyle = '#4f5a33'; ctx.fillRect(x - 10, y - 7, 20, 13);
+    ctx.fillStyle = '#3c4527'; ctx.fillRect(x - 10, y + 2, 20, 4);
+    ctx.fillStyle = '#6a7744'; ctx.fillRect(x - 10, y - 7, 20, 1.5);
+    ctx.fillStyle = '#d8c05a'; ctx.fillRect(x - 8, y - 3, 13, 2);
+    ctx.fillStyle = '#c9a64a'; for (let i = 0; i < 4; i++) ctx.fillRect(x - 7 + i * 3, y - 9, 1.6, 3);
+    ctx.fillStyle = '#262b18'; ctx.fillRect(x - 4, y - 10, 8, 1.5); ctx.fillRect(x + 6, y - 6, 2.5, 3.5);
+  }
   for (const c of room.charges) if (here(c)) { ctx.fillStyle = '#3b3f2a'; ctx.fillRect(c.x - 5, c.y - 4, 10, 8); ctx.fillStyle = '#c9b48a'; ctx.fillRect(c.x - 5, c.y - 1, 10, 2); }
   // granadas
-  for (const n of room.nades) if (here(n)) { ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(n.x, n.y, 5, 0, 7); ctx.fill(); }
+  for (const n of room.nades) if (here(n)) { // sombra en el suelo y la granada a su altura
+    const h = n.h || 0, k = 1 + h / 260;
+    ctx.fillStyle = `rgba(0,0,0,${(0.4 - Math.min(0.25, h / 300)).toFixed(3)})`; ctx.beginPath(); ctx.ellipse(n.x + 2, n.y + 2, 5, 3.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(n.x, n.y - h * 0.6, 5 * k, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6f7f52'; ctx.beginPath(); ctx.arc(n.x - 1.5, n.y - h * 0.6 - 1.5, 1.8 * k, 0, 7); ctx.fill();
+  }
   // enemigos
   for (const e of room.enemies) {
     if (!here(e) || !onScreen(e.x, e.y, 30)) continue;
@@ -1600,7 +2259,11 @@ function render() {
   if (!p.dead) {
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(3, 4, p.r, 0, 7); ctx.fill();
-    ctx.fillStyle = '#20262e'; ctx.fillRect(8, -3, 16, 6);
+    const gw = GUN_SHAPE[curW().id] || [16, 6];
+    ctx.fillStyle = '#20262e'; ctx.fillRect(8, -gw[1] / 2, gw[0], gw[1]);
+    ctx.fillStyle = '#3a414c'; ctx.fillRect(8, -gw[1] / 2, gw[0], 1.2);
+    if (curW().id === 'crossbow') { ctx.fillStyle = '#20262e'; ctx.fillRect(16, -8, 2.5, 16); }
+    if (wstats(curW()).silenced) { ctx.fillStyle = '#15191e'; ctx.fillRect(8 + gw[0], -gw[1] / 2 + 0.5, 6, gw[1] - 1); }
     ctx.fillStyle = p.hurtT > 0 ? '#ff8f80' : '#62d6ad'; ctx.strokeStyle = '#0b2a22'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(0, 0, p.r, 0, 7); ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(-3, 0, 6, 0, 7); ctx.fill();
@@ -1615,13 +2278,7 @@ function render() {
     if (maps[1]) { ctx.globalAlpha = 0.14; blit(ctx, bakes[1]); }
     ctx.globalAlpha = 1;
   }
-  for (const q of room.parts) if (here(q) && !q.glow) { ctx.fillStyle = q.c; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
-  for (const f of room.fx) { // humo y polvo: solo se ven donde hay luz
-    if (!here(f) || (f.k !== 'smoke' && f.k !== 'puff')) continue;
-    const k = f.t / f.life, r = f.k === 'smoke' ? f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6) : f.r * (0.5 + k);
-    ctx.fillStyle = f.k === 'smoke' ? glow(ctx, f.x, f.y, r, `${f.g},${f.g},${f.g + 4}`, 0.6 * (1 - k)) : glow(ctx, f.x, f.y, r, '120,124,130', 0.45 * (1 - k));
-    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
-  }
+  drawFxUnder(here);
 
   // ---- Oscuridad: luz horneada de las lámparas + linterna, halo y fogonazos ----
   lctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1657,6 +2314,17 @@ function render() {
   if (cone) { ctx.fillStyle = glow(ctx, p.x, p.y, BEAM, '255,217,138', 0.06); fillPoly(ctx, cone); }
   if (L && !L.taken && here(L)) { ctx.fillStyle = glow(ctx, L.x, L.y, 80, '255,200,90', 0.14); fillPoly(ctx, L.poly); }
   // lo que emite luz, en modo aditivo: luminarias encendidas, trazadoras, fogonazos, fuego, onda y brasas
+  if (!up) carLights(ctx, room.mission.car, room.exit.x, room.exit.y, !(room.boss || (room.loot && !room.loot.taken)));
+  for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) { // LED de los racks y pantallas de las terminales
+    const t = maps[p.z][y * W + x], X = x * T, Y = y * T;
+    if (t === RACK) for (let i = 0; i < 4; i++) { if (Math.sin(room.time * (2 + hash(x, y, i) * 6) + i * 3) > 0.2) { ctx.fillStyle = hash(x, y, i + 5) < 0.75 ? 'rgba(80,220,140,0.9)' : 'rgba(255,170,60,0.9)'; ctx.fillRect(X + 8 + i * 7, Y + 30, 2, 2); } }
+    else if (t === TERMINAL) { const on = !room.hasCode; ctx.fillStyle = glow(ctx, X + T / 2, Y + 12, 16, on ? '90,200,255' : '90,255,150', 0.4); ctx.beginPath(); ctx.arc(X + T / 2, Y + 12, 16, 0, 7); ctx.fill(); }
+  }
+  for (const d of room.doors) if (here(d) && !d.open) { ctx.fillStyle = Math.sin(room.time * 5) > 0 ? 'rgba(255,60,50,0.95)' : 'rgba(255,60,50,0.4)'; ctx.fillRect(d.x + (d.v ? 8 : -3), d.y + (d.v ? -3 : 8), 4, 4); }
+  if (room.act) { // progreso de lo que estás haciendo
+    const A = room.act;
+    ctx.strokeStyle = 'rgba(143,184,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A.x, A.y, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, A.t / A.time)); ctx.stroke();
+  }
   for (const l of room.lamps) if (l.on && here(l)) {
     const wallLamp = l.kind === 'wallN' || l.kind === 'wallS';
     ctx.fillStyle = glow(ctx, l.hx, l.hy, wallLamp ? 18 : 14, l.rgb, 0.55); ctx.beginPath(); ctx.arc(l.hx, l.hy, wallLamp ? 18 : 14, 0, 7); ctx.fill();
@@ -1665,42 +2333,7 @@ function render() {
     else if (l.kind === 'floor') ctx.fillRect(l.x - 6, l.y - 18, 12, 2);
     else ctx.fillRect(l.x - 12, l.kind === 'wallN' ? l.y - 2 : l.y, 24, 2);
   }
-  ctx.lineCap = 'round';
-  for (const b of room.bullets) {
-    if (!here(b)) continue;
-    const sp = Math.hypot(b.vx, b.vy), tl = Math.min(Math.hypot(b.x - (b.sx ?? b.x), b.y - (b.sy ?? b.y)), sp * 0.035), ux = b.vx / sp, uy = b.vy / sp;
-    if (!sp || !(tl > 0.5)) continue; // recién salida (o sin origen): aún no tiene estela
-    const col = b.mine ? (b.bolt ? '200,225,255' : '255,225,150') : '255,130,80', tx = b.x - ux * tl, ty = b.y - uy * tl;
-    const gr = ctx.createLinearGradient(tx, ty, b.x, b.y); gr.addColorStop(0, `rgba(${col},0)`); gr.addColorStop(1, `rgba(${col},0.95)`);
-    ctx.strokeStyle = gr; ctx.lineWidth = b.bolt ? 2.5 : 1.8; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
-    ctx.strokeStyle = `rgba(${col},0.16)`; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(b.x - ux * tl * 0.4, b.y - uy * tl * 0.4); ctx.lineTo(b.x, b.y); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,250,235,0.95)'; ctx.beginPath(); ctx.arc(b.x, b.y, 1.4, 0, 7); ctx.fill();
-  }
-  for (const f of room.fx) {
-    if (!here(f)) continue;
-    const k = f.t / f.life;
-    if (f.k === 'muzzle') { // estrella de fogonazo en la boca del cañón
-      const r = f.s * 14, a = 0.9 * (1 - k);
-      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a);
-      ctx.fillStyle = glow(ctx, 0, 0, r, '255,210,140', a); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgba(255,245,215,${a.toFixed(3)})`;
-      ctx.beginPath(); ctx.moveTo(0, -3 * f.s); ctx.lineTo(r * 1.5, 0); ctx.lineTo(0, 3 * f.s); ctx.closePath(); ctx.fill();
-      for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(r * 0.55, d * r * 0.75); ctx.lineTo(r * 0.4, 0); ctx.closePath(); ctx.fill(); }
-      ctx.restore();
-    } else if (f.k === 'fire') { // crece rápido y se apaga de blanco a rojo
-      const r = f.r * (0.35 + 0.65 * Math.sqrt(k)), g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
-      g.addColorStop(0, `rgba(255,250,220,${(0.95 * (1 - k)).toFixed(3)})`); g.addColorStop(0.35, `rgba(255,170,60,${(0.8 * (1 - k)).toFixed(3)})`);
-      g.addColorStop(0.75, `rgba(200,50,20,${(0.45 * (1 - k)).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
-    } else if (f.k === 'smoke' && f.t < 0.5) { // el fuego ilumina el humo recién salido
-      const r = f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6);
-      ctx.fillStyle = glow(ctx, f.x, f.y, r, '255,140,50', 0.3 * (1 - f.t / 0.5)); ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
-    } else if (f.k === 'ring') {
-      ctx.strokeStyle = `rgba(255,240,220,${(0.6 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 1 + 4 * (1 - k);
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, 7); ctx.stroke();
-    }
-  }
-  for (const q of room.parts) if (here(q) && q.glow) { ctx.fillStyle = `rgba(255,${Math.floor(120 + 100 * Math.min(1, q.t * 2))},60,${Math.min(1, q.t * 2).toFixed(3)})`; ctx.fillRect(q.x - 1, q.y - 1, 2, 2); }
+  drawFxGlow(here);
   if (L && !L.taken && here(L)) for (let i = 0; i < 4; i++) { // destellos sobre los lingotes
     const a = Math.max(0, Math.sin(room.time * 3 + i * 1.7)), sx = L.x - 8 + hash(i, 1, 3) * 16, sy = L.y - 8 + hash(i, 2, 3) * 12, r = 1 + 3 * a;
     ctx.fillStyle = `rgba(255,248,220,${(0.9 * a).toFixed(3)})`;
@@ -1711,15 +2344,18 @@ function render() {
   // ---- Lo que brilla por encima de la oscuridad ----
   const pulse = 0.6 + 0.4 * Math.sin(room.time * 4);
   ctx.font = '700 10px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  if (!up) {
-    const locked = room.boss || (room.loot && !room.loot.taken), ec = !locked ? '70,230,140' : room.boss ? '255,84,68' : '125,140,160';
-    ctx.fillStyle = `rgba(${ec},${(0.18 + 0.12 * pulse).toFixed(3)})`; ctx.fillRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
-    ctx.strokeStyle = ctx.fillStyle = `rgb(${ec})`; ctx.lineWidth = 2; ctx.strokeRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
-    ctx.fillText(room.boss ? 'BLOQUEADA' : 'SALIDA', room.exit.x, room.exit.y);
-  }
+  if (!up && !(room.boss || (room.loot && !room.loot.taken))) { ctx.fillStyle = `rgba(70,230,140,${(0.6 + 0.4 * pulse).toFixed(3)})`; ctx.fillText('HUIDA', room.exit.x, room.exit.y - CAR_DIM[room.mission.car][1] / 2 - 12); }
   for (const c of room.charges) if (here(c) && Math.sin(room.time * 6) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(c.x, c.y, 2.5, 0, 7); ctx.fill(); } // C4 armada
-  for (const n of room.nades) if (here(n) && Math.sin(n.t * (n.t < 0.6 ? 40 : 14)) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(n.x, n.y, 2.5, 0, 7); ctx.fill(); }
-  const s = wstats(curW());
+  for (const n of room.nades) if (here(n) && Math.sin(n.t * (n.t < 0.6 ? 40 : 14)) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(n.x, n.y - (n.h || 0) * 0.6, 2.5, 0, 7); ctx.fill(); }
+  const s = run && !room.demo ? wstats(curW()) : {}; // en el menú no hay jugador
+  if (s.thermal && !p.dead) for (const e of room.enemies) { // mira térmica: silueta de calor de los guardias en la línea de tiro
+    const d = dist(p, e);
+    if (!here(e) || d > 420 || Math.abs(angDiff(p.a, ang(p, e))) > 0.32 || !los(p.x, p.y, e.x, e.y)) continue;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = glow(ctx, e.x, e.y, e.r + 10, '255,90,40', 0.5); ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 10, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(255,170,90,0.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, 7); ctx.stroke();
+  }
   if (s.laser && !p.dead) {
     const d = castRay(p.x, p.y, Math.cos(p.a), Math.sin(p.a), 600);
     ctx.strokeStyle = 'rgba(255,60,60,0.55)'; ctx.lineWidth = 1;
@@ -1758,6 +2394,16 @@ function render() {
 
 function drawHud() {
   const p = room.p;
+  if (room.demo) return;
+  if (room.introT > 0) { // franjas de cine y nombre de la misión al entrar
+    const k = room.introT / 1.6, bar = 70 * Math.min(1, k * 1.6);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, vw, bar); ctx.fillRect(0, vh - bar, vw, bar);
+    ctx.globalAlpha = Math.min(1, k * 2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '400 34px "Saira Stencil One", Impact, sans-serif'; ctx.fillStyle = '#ffd98a'; ctx.fillText(room.mission.name.toUpperCase(), vw / 2, vh / 2 - 8);
+    ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#d9e2ec'; ctx.fillText(`MISIÓN ${run.level} · ${(SCENES[room.mission.scene] || '').toUpperCase()}`, vw / 2, vh / 2 + 20);
+    ctx.globalAlpha = 1;
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (p.hurtT > 0 || run.hp < 30 || room.alarm) {
     const a = Math.max(p.hurtT / 0.35 * 0.5, run.hp < 30 ? 0.2 + 0.1 * Math.sin(room.time * 5) : 0, room.alarm ? 0.13 + 0.1 * Math.sin(room.time * 7) : 0);
@@ -1765,7 +2411,7 @@ function drawHud() {
     g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(200,20,20,${a.toFixed(3)})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
   }
-  let goal = room.loot && !room.loot.taken ? [room.loot, '#ffd98a'] : !room.boss ? [{ ...room.exit, z: 0 }, '#46e68c'] : null;
+  let goal = room.chase ? null : room.loot && !room.loot.taken ? [room.loot, '#ffd98a'] : !room.boss ? [{ ...room.exit, z: 0 }, '#46e68c'] : null;
   if (goal && goal[0].z !== p.z && room.stairs.length) {
     const st = room.stairs.map(c => ({ x: (c % W + 1) * T, y: (((c / W) | 0) + 1) * T })).reduce((a, b) => dist(a, p) < dist(b, p) ? a : b);
     goal = [st, '#8fb8ff'];
@@ -1788,7 +2434,8 @@ function drawHud() {
     if (sticks.L && (p.speed > 8)) {
       ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center';
       ctx.fillStyle = p.sneak ? '#62d6ad' : '#ffb547';
-      ctx.fillText(p.sneak ? 'SIGILO' : 'CORRIENDO', sticks.L.ox, sticks.L.oy - STICK_R - 18);
+      ctx.fillStyle = p.sprint ? '#ff8a5c' : p.sneak ? '#62d6ad' : '#ffb547';
+      ctx.fillText(p.sprint ? 'ESPRINT' : p.sneak ? 'SIGILO' : 'ANDANDO', sticks.L.ox, sticks.L.oy - STICK_R * 1.3 - 14);
     }
     if (run.level === 1 && room.time < 14) {
       ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
@@ -1804,8 +2451,13 @@ function drawHud() {
   ctx.fillStyle = run.hp < 30 ? '#ff5444' : '#62d6ad'; ctx.fillRect(x, y + 14, bw * Math.min(1, run.hp / run.maxHp), 9);
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
   ctx.fillText(`VIDA ${Math.ceil(run.hp)}`, x, y);
+  if (p.stam < 100) { // resistencia del esprint
+    ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 25, bw, 3);
+    ctx.fillStyle = p.tired ? '#ff5444' : '#e8d07a'; ctx.fillRect(x, y + 25, bw * p.stam / 100, 3);
+  }
   ctx.font = '700 18px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a';
   ctx.fillText(`$${run.money}`, x, y + 28);
+  if (room.shownCash > 0.5) { ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7fe0a8'; ctx.fillText(`+$${Math.round(room.shownCash)} en la bolsa`, x + ctx.measureText(`$${run.money}`).width * 1.6 + 10, y + 32); }
   // medidor de visibilidad (cuánto te expones)
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
   ctx.fillText('VISIBILIDAD', x, y + 52);
@@ -1813,12 +2465,26 @@ function drawHud() {
   ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 66, 90, 6);
   ctx.fillStyle = vis < 0.3 ? '#62d6ad' : vis < 0.6 ? '#ffb547' : '#ff5444'; ctx.fillRect(x, y + 66, 90 * vis, 6);
 
+  if (room.chase) { // distancia que queda para despistarlos y coches derribados
+    const C = room.chase, k = Math.min(1, C.t / C.len), bw2 = Math.min(320, uw - 300);
+    ctx.textAlign = 'center';
+    ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
+    ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · PERSECUCIÓN`, uw / 2, y);
+    ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ff8a5c';
+    ctx.fillText(`${C.foes.filter(f => !f.dead).length} PERSEGUIDORES · ${C.killed} DERRIBADOS`, uw / 2, y + 14);
+    ctx.fillStyle = 'rgba(14,19,26,0.7)'; ctx.fillRect(uw / 2 - bw2 / 2, y + 38, bw2, 7);
+    ctx.fillStyle = '#62d6ad'; ctx.fillRect(uw / 2 - bw2 / 2, y + 38, bw2 * k, 7);
+    ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0'; ctx.fillText('HASTA LA GUARIDA', uw / 2, y + 50);
+    if (room.banner) { ctx.globalAlpha = Math.min(1, room.banner.t * 2); ctx.font = '700 15px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a'; ctx.fillText(room.banner.text, uw / 2, y + 70); ctx.globalAlpha = 1; }
+    syncHud(); syncUse();
+    return;
+  }
   let worst = 0;
   for (const e of room.enemies) worst = Math.max(worst, e.state === 'combat' ? 2 : e.state === 'patrol' ? 0 : 1);
   const label = ['OCULTO', 'ALERTA', 'DETECTADO'][worst], col = ['#62d6ad', '#ffb547', '#ff5444'][worst];
   ctx.textAlign = 'center';
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
-  ctx.fillText(`SALA ${run.level} · ${room.enemies.length} HOSTILES`, uw / 2, y);
+  ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.length} HOSTILES`, uw / 2, y);
   ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = col;
   ctx.fillText(label, uw / 2, y + 14);
   if (room.boss) {
@@ -1839,7 +2505,8 @@ function drawHud() {
     ctx.fillStyle = ts <= 10 && Math.sin(room.time * 8) > 0 ? '#ff5444' : ts <= 30 ? '#ffb547' : '#ffd98a';
     ctx.fillText(`TIEMPO ${clock}`, uw / 2, y + 34);
     ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a';
-    ctx.fillText('ROBA EL BOTÍN Y ESCAPA', uw / 2, y + 56);
+    const shut = room.doors.some(d => !d.open);
+    ctx.fillText(room.loot && room.loot.taken ? 'ESCAPA EN EL VEHÍCULO' : shut ? (room.hasCode ? `CÓDIGO ${room.code}: ABRE LA CÁMARA` : 'LA CÁMARA ESTÁ CERRADA: CONSIGUE EL CÓDIGO O HACKÉALA') : `ROBA EL BOTÍN (${(LOOTS[room.loot.type] || ['botín'])[0].toUpperCase()}) Y ESCAPA`, uw / 2, y + 56);
     by = y + 74;
   } else if (room.boss) {
     ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = ts <= 30 ? '#ff5444' : '#7d8ca0';
@@ -1854,9 +2521,10 @@ function drawHud() {
 
   if (!touchMode && run.level === 1 && room.time < 16) {
     ctx.font = '600 13px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = 'rgba(217,226,236,0.6)';
-    ctx.fillText('WASD mover · Mayús sigilo · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
+    ctx.fillText('WASD mover · Mayús correr · Ctrl sigilo · Espacio usar · ratón apunta y dispara · E cuchillo · G granada · B C4 · Q ruido · F linterna · R recargar · 1-5 arma', uw / 2, uh - 86);
   }
   syncHud();
+  syncUse();
 }
 function drawStick(s, gx, gy, aim) {
   const ox = s ? s.ox : gx, oy = s ? s.oy : gy;
@@ -1865,7 +2533,9 @@ function drawStick(s, gx, gy, aim) {
   ctx.beginPath(); ctx.arc(ox, oy, STICK_R, 0, 7); ctx.stroke();
   ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(ox, oy, STICK_R * (0.12 + 0.88 * (aim ? FIRE : SNEAK)), 0, 7); ctx.stroke(); ctx.setLineDash([]);
   if (!s) return;
+  if (!aim) { ctx.setLineDash([2, 6]); ctx.beginPath(); ctx.arc(ox, oy, STICK_R * 1.3, 0, 7); ctx.stroke(); ctx.setLineDash([]); } // más allá: esprint
   const v = stickVec(s);
+  if (!aim && v.over) { const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), k = Math.min(d, STICK_R * 1.45) / d; ctx.fillStyle = 'rgba(255,138,92,0.7)'; ctx.beginPath(); ctx.arc(ox + dx * k, oy + dy * k, 22, 0, 7); ctx.fill(); return; }
   ctx.fillStyle = aim && v.m > FIRE ? 'rgba(255,84,68,0.7)' : 'rgba(217,226,236,0.45)';
   ctx.beginPath(); ctx.arc(ox + v.x * STICK_R, oy + v.y * STICK_R, 22, 0, 7); ctx.fill();
 }
@@ -1886,6 +2556,12 @@ function syncHud() {
   $('bBreach').classList.toggle('off', !run.charges && !room.charges.length);
   $('bBreach').querySelector('small').textContent = room.charges.length ? 'Detonar' : 'C4';
   $('bLight').classList.toggle('off', !run.light);
+}
+function syncUse() { // botón contextual: qué puedes hacer aquí
+  const A = room.act, u = A ? null : nearUse(), b = $('bUse');
+  const label = A ? `${A.label}… ${Math.floor(100 * Math.min(1, A.t / A.time))} %` : u ? u.label + (touchMode ? '' : ' [Espacio]') : '';
+  if (b.textContent !== label) b.textContent = label;
+  b.hidden = !label;
 }
 
 // ================= Tienda =================
@@ -1915,6 +2591,11 @@ function renderShop() {
       const m = MODS[id], has = w.mods.includes(id);
       html += item(m.name, m.desc, `mod:${id}`, has ? 'Instalada' : `$${m.price}`, has || run.money < m.price, has);
     }
+    html += `<span style="font-size:12px;letter-spacing:.14em;color:var(--beam);margin-top:6px">MUNICIÓN</span>`;
+    for (const id in AMMO) {
+      const a = AMMO[id], has = w.ats.includes(id), on = w.at === id;
+      html += item(a.name, a.desc, `ammoT:${id}`, on ? 'En uso' : has ? 'Usar' : `$${a.price}`, on || (!has && run.money < a.price), has);
+    }
   } else {
     html += item('Caja de munición', `+50 % de reserva en todas tus armas${ammoFull() ? ' (ya están llenas)' : ''}`, 'ammo', '$45', run.money < 45 || ammoFull());
     html += item('C4', `Se planta casi sin ruido y estalla cuando la detonas: abre paredes y cajas, o sirve de trampa. Tienes ${run.charges} (máx. 4)`, 'charge', '$70', run.money < 70 || run.charges >= 4);
@@ -1922,15 +2603,16 @@ function renderShop() {
     html += item('Placas de blindaje', `+25 de vida máxima, con la que empiezas cada sala (${run.maxHp}, tope 200)`, 'maxhp', '$220', run.money < 220 || run.maxHp >= 200);
   }
   $('shopList').innerHTML = html;
-  $('bNext').textContent = `Entrar en la sala ${run.level}`;
+  $('bNext').textContent = `Siguiente: ${mission(run.level).name}`;
 }
 function shopAct(act) {
   const [k, v] = act.split(':');
   const pay = n => { run.money -= n; sfx('buy'); };
-  if (k === 'buyW') { pay(WEAPONS[v].price); run.weapons.push({ id: v, mods: [], ammo: WEAPONS[v].mag, reserve: Math.ceil(WEAPONS[v].reserve / 2) }); run.cur = run.weapons.length - 1; }
+  if (k === 'buyW') { pay(WEAPONS[v].price); run.weapons.push({ id: v, mods: [], ammo: WEAPONS[v].mag, reserve: Math.ceil(WEAPONS[v].reserve / 2), at: 'normal', ats: ['normal'] }); run.cur = run.weapons.length - 1; }
   else if (k === 'equip') run.cur = +v;
   else if (k === 'sel') modSel = +v;
   else if (k === 'mod') { pay(MODS[v].price); run.weapons[modSel].mods.push(v); }
+  else if (k === 'ammoT') { const w = run.weapons[modSel]; if (!w.ats.includes(v)) { pay(AMMO[v].price); w.ats.push(v); } w.at = v; }
   else if (k === 'ammo') { pay(45); addAmmo(0.5); }
   else if (k === 'nade') { pay(60); run.nades++; }
   else if (k === 'charge') { pay(70); run.charges++; }
@@ -2041,6 +2723,9 @@ function sfx(k, x, y) {
     case 'hit': tone(200, 60, 0.15, 0.35, 'sawtooth'); burst(0.08, 0.3, 500); break;
     case 'reload': burst(0.04, 0.3, 2200, 'bandpass', 4); burst(0.05, 0.4, 1600, 'bandpass', 4, 0.35); burst(0.08, 0.3, 3000, 'bandpass', 2, 0.55); break;
     case 'empty': tone(1200, 1100, 0.03, 0.1); break;
+    case 'tick': burst(0.03, 0.15 * v, 2200, 'bandpass', 3); break;
+    case 'cash': tone(1800, 1800, 0.04, 0.08, 'triangle'); tone(2400, 2400, 0.06, 0.07, 'triangle', 0.05); break;
+    case 'vault': burst(0.6, 0.5 * v, 220); tone(90, 60, 0.8, 0.4 * v, 'sawtooth'); clatter(3, 0.2 * v, 0.5); tone(1500, 1500, 0.05, 0.1 * v, 'square', 0.9); break;
     case 'buy': tone(660, 990, 0.12, 0.15, 'triangle'); tone(990, 1320, 0.15, 0.12, 'triangle', 0.1); break;
     case 'throw': burst(0.15, 0.25, 700, 'bandpass', 1.2, 0, 2400); break;
     case 'gore': burst(0.12, 0.3 * v, 400); tone(90, 50, 0.1, 0.2 * v, 'sine'); break;
@@ -2058,7 +2743,7 @@ function sfx(k, x, y) {
 // ================= Entrada =================
 function show(id) {
   ambience(id === null);
-  for (const o of ['menu', 'shop', 'pause', 'over', 'win']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -2095,7 +2780,7 @@ addEventListener('pointermove', e => {
     const s = sticks[k];
     if (!s || s.id !== e.pointerId) continue;
     s.x = e.clientX; s.y = e.clientY;
-    const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), m = STICK_R * 1.1;
+    const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), m = STICK_R * 1.6;
     if (d > m) { s.ox = s.x - dx / d * m; s.oy = s.y - dy / d * m; } // la base sigue al dedo
   }
 });
@@ -2117,6 +2802,7 @@ press('bKnife', melee);
 press('bNade', throwNade);
 press('bNoise', makeNoise);
 press('bBreach', breach);
+press('bUse', use);
 press('bReload', reload);
 press('bLight', toggleLight);
 press('bWeapon', cycleWeapon);
@@ -2125,15 +2811,15 @@ $('bPause').addEventListener('click', () => pause());
 function pause() {
   if (state !== 'play') return;
   state = 'pause';
-  $('pauseInfo').textContent = `Sala ${run.level} · $${run.money} · vida ${Math.ceil(run.hp)}`;
+  $('pauseInfo').textContent = `Misión ${run.level}: ${room.mission.name} · $${run.money} (+$${room.cash} en la bolsa) · vida ${Math.ceil(run.hp)}`;
   show('pause');
 }
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Tab') e.preventDefault();
+  if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') { state = 'play'; show(null); } }
   if (state !== 'play' || e.repeat) return;
-  const act = { KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
+  const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
   else if (/^Digit[1-5]$/.test(e.code) && run.weapons[e.code[5] - 1]) selectWeapon(e.code[5] - 1);
 });
@@ -2154,24 +2840,26 @@ function begin() {
 $('bPlay').addEventListener('click', () => {
   const b = $('bPlay');
   if (loadSave() && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = '¿Borrar la partida guardada?'; return; }
-  begin(); newRun(); startRoom();
+  begin(); newRun(); brief(startRoom);
 });
+$('bGo').addEventListener('click', () => { initAudio(); const f = goAfter; goAfter = null; clearInterval(typeT); if (f) f(); });
 $('bCont').addEventListener('click', () => {
   const d = loadSave();
   if (!d) { refreshMenu(); return; }
   begin();
   run = { charges: 2, ...d.run, snap: null }; // las partidas de antes de las cargas empiezan con 2
-  if (d.shop) openShop('Partida guardada. Prepárate para la siguiente sala.'); else startRoom();
+  for (const w of run.weapons) { w.at = w.at || 'normal'; w.ats = w.ats || ['normal']; }
+  if (d.shop) openShop('Partida guardada. Prepárate para la siguiente misión.'); else brief(startRoom);
 });
-refreshMenu();
+showMenu();
 $('bResume').addEventListener('click', () => { state = 'play'; show(null); });
 $('bRestart').addEventListener('click', retryRoom);
-$('bQuit').addEventListener('click', () => { state = 'menu'; room = null; refreshMenu(); show('menu'); });
+$('bQuit').addEventListener('click', showMenu);
 $('bRetry').addEventListener('click', () => { initAudio(); retryRoom(); });
-$('bNew').addEventListener('click', () => { initAudio(); newRun(); startRoom(); });
-$('bNext').addEventListener('click', () => { initAudio(); startRoom(); });
+$('bNew').addEventListener('click', () => { initAudio(); newRun(); brief(startRoom); });
+$('bNext').addEventListener('click', () => { initAudio(); brief(startRoom); });
 $('bWinGo').addEventListener('click', () => openShop(winStats));
-$('bWinNew').addEventListener('click', () => { begin(); newRun(); startRoom(); });
+$('bWinNew').addEventListener('click', () => { begin(); newRun(); brief(startRoom); });
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { shopTab = b.dataset.tab; modSel = run.cur; renderShop(); } });
 $('shopList').addEventListener('click', e => { const b = e.target.closest('button[data-act]'); if (b && !b.disabled) shopAct(b.dataset.act); });
 
@@ -2181,11 +2869,15 @@ function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
   if (state === 'play') update(dt);
+  else if (room && room.demo) { // menú: la cámara recorre el mapa de fondo
+    room.time += dt; cam.shake = 0;
+    cam.x = room.W * T * (0.5 + 0.28 * Math.sin(room.time * 0.06)); cam.y = room.H * T * (0.5 + 0.25 * Math.sin(room.time * 0.09 + 1));
+  }
   if (room) render();
   else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, cw, ch); }
 }
 requestAnimationFrame(frame);
 
 // Gancho para las pruebas automáticas (test/smoke.js)
-window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, get view() { return { cam, S: zoom * dpr, cw, ch }; } };
+window.__apagon = { get run() { return run; }, get room() { return room; }, get state() { return state; }, buildRoom, castRay, bfs, findPath, cellOf, noise, hurtPlayer, hurtEnemy, startRoom, breach, useFloor, lit, use, nearUse, shoot, zoneAt: c => zone[c], get view() { return { cam, S: zoom * dpr, cw, ch }; } };
 })();

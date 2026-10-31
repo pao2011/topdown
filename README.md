@@ -1,6 +1,6 @@
 # Apagón
 
-Shooter táctico top-down para el navegador, en móvil o PC. Cada sala es un golpe: te cuelas en un edificio a oscuras con una linterna de haz cónico, robas el botín y escapas antes de que llegue la policía. Puedes ir en sigilo, a tiros o abriendo paredes, y entre salas compras y mejoras armas.
+Shooter táctico top-down para el navegador, en móvil o PC. Una campaña de 16 golpes con nombre propio: te cuelas de noche en oficinas, almacenes, galerías, bancos y centros de datos con una linterna de haz cónico, robas el botín, saqueas lo que encuentras y escapas en el vehículo antes de que llegue la policía (a veces con una persecución por carretera). Puedes ir en sigilo, a tiros o abriendo paredes, y entre misiones compras y mejoras armas.
 
 Sin dependencias ni compilación: `index.html` + `game.js`.
 
@@ -13,13 +13,15 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 
 | Táctil | Teclado / ratón | Acción |
 |---|---|---|
-| Stick izquierdo (poco recorrido) | `WASD` + `Mayús` | Moverte en sigilo, sin ruido |
-| Stick izquierdo (a fondo) | `WASD` | Correr: los pasos se oyen |
+| Stick izquierdo (poco recorrido) | `WASD` + `Ctrl` o `C` | Moverte en sigilo, sin ruido |
+| Stick izquierdo (a fondo) | `WASD` | Caminar: los pasos se oyen |
+| Stick izquierdo (más allá del borde) | `WASD` + `Mayús` | Correr: más rápido, mucho ruido y gasta aguante |
 | Stick derecho | Ratón | Apuntar la linterna |
 | Stick derecho hasta el borde | Clic izquierdo | Disparar |
+| Usar (aparece al acercarte) | `Espacio` | Registrar cajones, estanterías, cuerpos, cajas de seguridad y racks; hackear la terminal o la puerta de la cámara. Volver a pulsar cancela |
 | Cuchillo | `E` / clic derecho | Ataque cuerpo a cuerpo casi silencioso |
-| Granada | `G` | Explosión de área que también abre paredes; se oye en todo el edificio |
-| C4 | `B` | Primera pulsación: la plantas (en la pared o caja de enfrente, o en el suelo) casi sin ruido. Segunda: la detonas |
+| Granada | `G` | Se lanza en arco, rebota y estalla: abre paredes y se oye en todo el edificio |
+| C4 | `B` | Primera pulsación: la plantas casi sin ruido. Segunda: la detonas |
 | Ruido | `Q` | Atrae a los guardias hacia ti |
 | Linterna | `F` | Apagarla reduce tu visibilidad y lo que ves |
 | Recargar | `R` | Recarga (también es automática) |
@@ -28,28 +30,51 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 
 ## Mecánicas
 
-- **El golpe y el tiempo:** la cuenta atrás corre desde que entras (TIEMPO, unos 5 minutos en la primera sala y más en las grandes). El botín (lingotes de oro en una vitrina sobre un pedestal, con cordón de terciopelo y su propio brillo dorado) está en la sala más profunda del edificio, a veces en la primera planta, y una flecha en el borde de la pantalla te guía (hacia la escalera si está en otra planta). La salida (la furgoneta, al otro lado) está cerrada hasta que lo coges. Al cogerlo saltan las sirenas y empieza otra cuenta atrás más corta para escapar (ALARMA). Si cualquiera de las dos llega a cero, te atrapa la policía. Con la alarma, la mitad de los guardias corre a la cámara del botín y la otra mitad a cortarte la salida. La sala del jefe también tiene cuenta atrás.
-- **Destrucción:** la C4 (empiezas con 2, se compran) se planta casi sin ruido y estalla cuando la detonas: abre paredes interiores y fachadas para atajar, o sirve de trampa para un guardia. Las granadas también abren paredes. La valla del mapa no se rompe. Las balas y el cuchillo rompen cajas y ventanas. Todo hace ruido, así que atajar tiene precio.
-- **Plantas:** algunos edificios tienen primera planta sobre parte de la planta baja, con dos escaleras. Desde abajo apenas se intuye; al pisar la escalera subes, la primera planta se ve entera y la baja queda apagada debajo. Cada planta tiene sus guardias, que ven y disparan solo en la suya; los ruidos de la otra planta les llegan muy amortiguados.
-- **Mapas:** un patio exterior rodea el edificio: acera, césped, aparcamiento con plazas pintadas y coches, garita con su bombilla, contenedores, barreras de hormigón, árboles, setos y farolas. El edificio tiene fachada de ladrillo y ventanas, y salas amuebladas según su uso: oficinas con moqueta y mesas (con monitores y papeles), almacenes de hormigón con estanterías y cajas, salas de parqué con mesa grande y plantas. Unas salas están iluminadas de lleno y otras a oscuras. Las mesas y los coches cortan el paso pero no la vista ni las balas; las barreras paran las balas pero se ve por encima; las ventanas dejan ver y se rompen; en los setos no te ven.
-- **Gráficos:** el mapa se dibuja una vez por sala con detalle (texturas de suelo, muros con altura, sombras al pie de muros y bajo los props) y la luz de las lámparas va horneada con sombras suaves y su color (sodio en la calle, fluorescente o cálida dentro). Las lámparas tienen soporte, en perspectiva: farolas con poste y brazo en la acera, lámparas de pie en las esquinas y tubos fluorescentes atornillados a la pared; se les dispara a la luminaria. Las balas son trazadoras con estela, cada disparo deja fogonazo y casquillo en el suelo, los impactos dejan agujero y polvo, y las explosiones tienen bola de fuego, onda expansiva, brasas, cascotes y humo que se queda.
-- **Sonido:** sintetizado, con reverberación (más dentro que fuera) y panorama según de dónde venga. Oyes los pasos de los guardias cercanos en la oscuridad, ladridos, la radio de los que te descubren, la C4, cristales, muros que se derrumban, la sirena, y de fondo viento fuera y zumbido eléctrico dentro.
-- **Visión cónica:** fuera de tu linterna (con oclusión por muros), de un pequeño halo a tu alrededor y de las lámparas todo está a oscuras, y una niebla que deriva enturbia lo iluminado. Los guardias que no alumbras no se ven, ni sus avisos (`?`, `!`) ni sus ruidos; solo te delatan sus fogonazos al disparar.
-- **Cono de los guardias:** su campo de visión está pintado en el suelo (azul patrulla, ámbar sospecha, rojo combate), pero solo se ve donde llega tu luz. Se encoge cuando te mueves en sigilo y a oscuras, porque así te ven desde menos lejos.
-- **Aviso de dirección:** cuando un guardia te oye (ámbar) o te detecta (rojo), aparece una flecha junto a ti hacia donde está. Marca la dirección de ese momento, no lo sigue.
-- **Visibilidad:** el medidor sube con la linterna encendida, bajo una lámpara, al disparar sin silenciador y al correr. Dispara a las lámparas para crear sombras.
-- **Ruido:** pasos al correr, disparos, impactos de bala, cristales, el botón de ruido y las explosiones generan ondas visibles. Los guardias que las oyen (las paredes amortiguan) se vuelven a mirar (`?`) o acuden corriendo.
-- **IA de patrulla:** cada guardia recorre su ruta con esperas, miradas y cambios de sentido aleatorios. Al oír o ver algo pasa a *sospecha → investigar → registrar la zona* y luego vuelve con una patrulla nueva y más alerta. Si te detecta (`!`) avisa a los demás. Los cadáveres que encuentran también los alertan.
-- **Sigilo cuerpo a cuerpo:** el cuchillo elimina al instante a un guardia que no te ha detectado o que está de espaldas. Las bajas silenciosas pagan +50 %, y cruzar una sala sin ser detectado da un bonus *fantasma*.
+- **Campaña:** 16 misiones con nombre (Polilla, Marea Baja, Cristal, Hierro Fundido, Bóveda Norte, Silicio…), cada una más difícil: más guardias, de tipos más duros y en edificios más grandes. Las misiones 8 (*El Alcaide*) y 16 (*Ajuste de Cuentas*) son de jefe. Después sigue el modo infinito con contratos generados y un jefe más duro cada 8. El menú tiene de fondo un edificio de verdad con sus luces, la lista de la campaña con lo hecho y lo que sigue, y antes de cada misión aparece un briefing animado (nombre, escenario, operación, vehículo, objetivos). Al entrar, la cámara se acerca con franjas de cine y el nombre de la misión.
+- **Operaciones:**
+  - *Sigilo:* si te detectan llaman a la policía (alarma y refuerzos). Sin que te vean, el botín vale el doble.
+  - *Asalto:* la alarma suena desde el principio, hay más guardias y más duros, pero entras con una granada y una C4 de más y la C4 revienta las puertas de seguridad.
+  - *Mixta:* tú decides.
+  Con la alarma sonando llegan refuerzos de la policía cada pocos segundos.
+- **Escenarios:** oficinas (mesas con cajones, moqueta), almacén del puerto (estanterías y cajas), galería de arte (mármol, cuadros, peanas con piezas), banco (vestíbulo con mostrador y columnas, cámara con cajas de seguridad) y centro de datos (suelo técnico, filas de racks con LEDs, sala blindada). Cada uno tiene su botín: maletín, sacos de dinero, diamante, lingotes de oro o disco cifrado, que valen distinto.
+- **La cámara blindada:** en bancos y centros de datos (y a veces en galerías) el botín está tras muros que no se rompen y una puerta de seguridad. Se abre de tres maneras:
+  - con el código, que está en una nota en algún cajón, en la tarjeta de un supervisor (registra su cuerpo; al abatirlo verás «Lleva una tarjeta») o en la terminal de seguridad (6 s de hackeo);
+  - hackeándola (18 s; si lo dejas, el progreso se guarda);
+  - en asalto, con C4.
+  Hackear pita y los guardias cercanos pueden oírlo.
+- **Saqueo y bolsa:** cajones, estanterías, cuerpos, cajas de seguridad y racks dan dinero o munición. Todo va a la bolsa (el contador «$» del HUD), junto con lo que pagan las bajas, y se cobra al escapar: botín, saqueo, bonus de sala y bonus fantasma si nadie te vio.
+- **El golpe y el tiempo:** la cuenta atrás corre desde que entras (entre 5 y 8 minutos según el tamaño, y uno más si hay cámara). Una flecha te guía al botín (o a la escalera si está en otra planta). Al cogerlo saltan las sirenas y empieza otra cuenta atrás para escapar. Si cualquiera de las dos llega a cero, te atrapa la policía.
+- **Huida:** el vehículo te espera al otro lado del mapa, con faros y humo de escape. Según la misión es una furgoneta, una berlina, un todoterreno o un furgón blindado. Súbete con el botín.
+- **Persecución:** en algunas misiones, al huir te persiguen coches (patrullas con sirena, todoterrenos y, más adelante, blindados) que intentan recuperar el botín: se ponen a tu lado, disparan y embisten. Mueves el coche de lado a lado con el stick izquierdo (o `A`/`D`), disparas con el derecho (con ayuda de apuntado) y las granadas caen a la carretera y se quedan atrás, hacia ellos. Aguanta hasta perderlos o derríbalos: cada coche paga.
+- **Armas:** 10 armas: pistola, revólver, subfusil, escopeta, ballesta (casi muda), subfusil silenciado, fusil, escopeta automática, rifle de tirador y ametralladora ligera. Cada una tiene su retroceso: la dispersión crece al disparar seguido y al correr, y baja quieto y en sigilo.
+- **Mejoras:** 8 por arma: silenciador, cargador ampliado, mira láser, cañón pesado, gatillo ligero, compensador, tambor y mira térmica (ves la silueta de los guardias hacia los que apuntas aunque estén a oscuras).
+- **Munición:** 4 tipos por arma, que se compran una vez y se eligen en la tienda:
+  - normal;
+  - perforante: atraviesa escudos y un enemigo;
+  - expansiva: +35 % de daño;
+  - incendiaria: prende fuego.
+  Es limitada: cada arma tiene cargador y reserva, y las cajas (metálicas, con su asa y cartuchos) la reponen.
+- **Correr y aguante:** correr es mucho más rápido pero hace mucho ruido y gasta la barra de aguante. Si la vacías, vas cansado hasta recuperar un tercio.
+- **Física:** los disparos y golpes empujan, los cuerpos salen despedidos y se deslizan, y las granadas vuelan en arco y rebotan en el suelo y las paredes.
+- **Destrucción:** la C4 (empiezas con 2, se compran) se planta casi sin ruido y estalla cuando la detonas. Las granadas también abren paredes interiores y fachadas, no los muros de la cámara ni la valla. Las balas y el cuchillo rompen cajas y ventanas. Todo hace ruido.
+- **Plantas:** algunos edificios tienen primera planta. Desde abajo apenas se intuye; al pisar la escalera subes y la planta baja queda apagada debajo. Cada planta tiene sus guardias, y los ruidos de la otra les llegan muy amortiguados.
+- **Gráficos:**
+  - El mapa se dibuja una vez por misión con texturas de suelo (moqueta, hormigón, parqué, mármol, suelo técnico, chapa de acero) y grano.
+  - Muros con altura y sombras suaves proyectadas por árboles, estanterías, racks, columnas, coches y muros.
+  - La luz de las lámparas va horneada con sombras y su color, en farolas, lámparas de pie y tubos fluorescentes.
+  - Balas trazadoras, fogonazos, casquillos, impactos, explosiones con bola de fuego, onda, brasas, cascotes y humo.
+- **Sonido:** sintetizado, con reverberación (más dentro que fuera) y panorama: pasos, ladridos, radios, la C4, cristales, muros que caen, sirenas, pitidos de hackeo, monedas al saquear y ambiente.
+- **Visión cónica:** fuera de tu linterna, de un pequeño halo y de las lámparas todo está a oscuras y con niebla. Los guardias que no alumbras no se ven; solo te delatan sus fogonazos. Su cono de visión está pintado en el suelo (azul, ámbar, rojo), pero solo donde llega tu luz.
+- **Aviso de dirección:** cuando un guardia te oye (ámbar) o te detecta (rojo), aparece una flecha junto a ti hacia donde está.
+- **IA:** patrullas con esperas y cambios aleatorios. Al oír o ver algo pasan a *sospecha → investigar → registrar la zona* y vuelven más alerta. Avisan a los demás y los cadáveres que encuentran también los alertan.
 - **Enemigos:**
-  - *Guardia, pesado (escopeta) y élite (ráfagas):* la base.
-  - *Perro* (desde la sala 2): te huele de cerca aunque vayas en sigilo y a oscuras, oye el doble, corre más que tú y muerde. No suelta munición.
-  - *Francotirador* (desde la sala 3): no deja su puesto; cono largo y estrecho. Al detectarte apunta un segundo (flecha roja, láser visible solo con luz) y dispara un tiro pesado; si corres en perpendicular, falla.
-  - *Escudo* (desde la sala 3): para las balas que le llegan de frente y gira despacio; rodéalo, lánzale una granada o apuñálalo por la espalda.
-- **Jefe final: el Alcaide** (sala 8): una arena con columnas y lámparas, con la salida bloqueada hasta que cae. Lanza ráfagas de ametralladora y granadas, y a media vida pide refuerzos. El cuchillo por la espalda le quita mucho, pero no lo remata. Al vencerlo, pantalla de victoria; puedes seguir en modo infinito con un jefe más duro cada 8 salas.
-- **Munición limitada:** cada arma tiene cargador y reserva. Las cajas de munición (algunas repartidas por el mapa y otras que sueltan los guardias) reponen la reserva de todas tus armas, y en la tienda también se compra.
-- **Guardado:** la partida se guarda sola en el navegador al entrar en cada sala y en la tienda. En el menú, «Continuar» la retoma; «Nueva partida» pide confirmación antes de borrarla.
-- **Progresión:** cada sala se genera al azar y es más grande y con más enemigos que la anterior, y siempre empiezas con la vida llena (también al reintentar). Entre salas hay tienda: 5 armas, 5 mejoras por arma (silenciador, cargador, láser, cañón, gatillo), munición, C4, granadas y placas de blindaje (más vida máxima). Si mueres reintentas la sala con el equipo con el que entraste.
+  - guardia, pesado (escopeta) y élite (ráfagas);
+  - perro: te huele a oscuras y corre más que tú;
+  - francotirador: puesto fijo, apunta un segundo con láser;
+  - escudo: para las balas de frente, salvo las perforantes;
+  - el Alcaide: ametralladora, granadas y refuerzos a media vida.
+- **Sigilo cuerpo a cuerpo:** el cuchillo elimina al instante a un guardia que no te ha detectado o está de espaldas, y las bajas silenciosas pagan +50 %.
+- **Guardado:** la partida se guarda sola al entrar en cada misión y en la tienda. «Continuar» la retoma; «Nueva partida» pide confirmación. Siempre empiezas una misión con la vida llena, y si mueres la reintentas con el equipo con el que entraste.
 
 ## Pruebas
 
@@ -58,4 +83,23 @@ node test/smoke.js            # requiere Playwright con Chromium
 SHOTS=capturas node test/smoke.js   # además guarda capturas
 ```
 
-Comprueba que cada sala empieza con la vida llena, que los mapas generados son recorribles en las dos plantas (también el botín, que nunca queda sobre una escalera), que la cuenta atrás corre desde el principio y que agotarla antes del golpe te hace perder, que la escalera sube y baja, que la C4 no estalla sola y al detonarla abre una pared, que la salida está cerrada sin botín, que al cogerlo salta la alarma y que si se acaba el tiempo te atrapan, que una bala rompe una ventana, que aparecen los 6 tipos de enemigo y el jefe en la sala 8, que el escudo para las balas de frente, que el perro te huele a oscuras, que la salida sigue bloqueada mientras vive el jefe, que oír un ruido tuyo genera el aviso de dirección, que dibujar un fogonazo casi apagado no falla (congelaba el juego), que un guardia fuera de tu luz queda negro, los sticks táctiles, la munición limitada, la reacción de la IA al ruido y a la vista, la eliminación por la espalda, la tienda, el reintento, el guardado y continuar, y el modo PC con ratón.
+La prueba de humo comprueba:
+
+- **Mapas:** en las 17 primeras misiones son recorribles en las dos plantas. El botín de una cámara solo se alcanza con la puerta abierta, y la salida nunca exige pasar por ella.
+- **Menú y misiones:** menú → briefing → misión. Cada misión empieza con la vida llena y la cuenta atrás corre desde el principio.
+- **Golpe y alarma:**
+  - La salida está cerrada sin botín.
+  - Al cogerlo salta la alarma, y si se acaba cualquiera de las dos cuentas te atrapan.
+  - Lo saqueado se cobra al escapar.
+- **Cámara del banco:** hackear la puerta y cancelar guarda el progreso. El código sale de la tarjeta del supervisor (registrando su cuerpo) o de la terminal, y con él se abre la puerta.
+- **Persecución:** en la misión 4 te persiguen al huir. Las balas dañan sus coches y, al perderlos, pasas a la tienda.
+- **Mundo y enemigos:**
+  - Escalera, C4 (no estalla sola y abre la pared) y ventanas que se rompen.
+  - Los 6 tipos de enemigo y el jefe.
+  - El escudo para las balas de frente y el perro te huele a oscuras.
+  - El aviso de dirección y la oscuridad fuera de tu luz.
+  - La IA reacciona al ruido y a la vista, y el cuchillo elimina por la espalda.
+- **Partida:**
+  - Sticks táctiles y munición limitada.
+  - Tienda, reintento, guardado y continuar.
+  - Modo PC con ratón.
