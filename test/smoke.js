@@ -444,6 +444,9 @@ const path = require('path');
   // Una granada que toca un coche perseguidor estalla al momento
   const nade = await ev(async () => { const A = __apagon, C = A.room.chase, f = C.foes.find(f => !f.dead), hp = f.hp; A.room.nades.push({ z: 0, x: f.x, y: f.y, vx: 0, vy: 0, t: 1.5, h: 5, vh: 0 }); await new Promise(r => setTimeout(r, 120)); return [A.room.nades.length, f.dead || f.hp < hp]; });
   assert.deepStrictEqual(nade, [0, true], 'la granada estalla al tocar un coche');
+  // El vehículo tiene su propia vida: pasar por encima de unos pinchos lo daña
+  const spikes = await ev(async () => { const C = __apagon.room.chase, hp = C.car.hp; C.obst.push({ kind: 'spikes', y: C.car.y, x0: C.car.x - 60, x1: C.car.x + 60 }); await new Promise(r => setTimeout(r, 250)); return [C.car.maxHp > 0, C.car.hp < hp]; });
+  assert.deepStrictEqual(spikes, [true, true], 'los pinchos dañan el vehículo');
   await ev(() => { const C = __apagon.room.chase; C.t = C.len; for (const f of C.foes) Object.assign(f, { dead: true, spin: 0, vx: 0 }); });
   await page.waitForTimeout(2000);
   assert.strictEqual(await ev(() => __apagon.state), 'results');

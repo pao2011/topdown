@@ -868,7 +868,7 @@ function applyPlan(r) { // entrada elegida y herramientas: en un sitio de dentro
   r.entryHatch = { x: q.x, y: q.y, z };
 }
 function useItem() { // usa lo que haga falta: botiquín si estás muy herido, vendas si poco, bebida si vas sin aguante, analgésicos en combate
-  if (state !== 'play' || !room || room.chase || room.p.dead || room.heal) return;
+  if (state !== 'play' || !room || room.p.dead || room.heal) return;
   const I = run.items || {}, miss = run.maxHp - run.hp, p = room.p;
   const k = miss >= 45 && I.botiquin ? 'botiquin' : miss > 0 && I.vendas ? 'vendas' : miss > 0 && I.botiquin ? 'botiquin' : p.stam < 60 && I.energia ? 'energia' : I.analgesico && room.enemies.some(e => e.state === 'combat') ? 'analgesico' : null;
   if (!k) { banner('Ahora no te hace falta nada'); return; }
@@ -876,6 +876,10 @@ function useItem() { // usa lo que haga falta: botiquín si estás muy herido, v
   if (k === 'vendas') room.heal = { amt: 25, t: 2, T: 2 }; else if (k === 'botiquin') room.heal = { amt: 60, t: 3, T: 3 };
   else if (k === 'energia') room.energyT = 20; else room.painT = 25;
   popup(p.x, p.y - 22, ITEMS[k][0].toUpperCase(), '#7fe0a8'); sfx('heal');
+}
+function tickItems(dt) { // curación poco a poco y efectos que duran (también en la persecución)
+  if (room.heal) { const H = room.heal, k = Math.min(dt, H.t); run.hp = Math.min(run.maxHp, run.hp + H.amt * k / H.T); if ((H.t -= dt) <= 0) room.heal = null; }
+  if (room.energyT > 0) room.energyT -= dt; if (room.painT > 0) room.painT -= dt;
 }
 function giveItem(k, x, y) { run.items = run.items || {}; if ((run.items[k] || 0) >= 5) return false; run.items[k] = (run.items[k] || 0) + 1; popup(x, y - 16, `+${ITEMS[k][0].toUpperCase()}`, '#7fe0a8'); sfx('reload'); return true; }
 function useJammer() {
@@ -929,13 +933,16 @@ const PURSUERS = {
   pickup:  { w: 32, h: 60, tall: 28, hp: 165, col: '#5a3b2a', burst: [5, 8], gunner: true, from: 4 },
   swat:    { w: 38, h: 66, tall: 38, hp: 270, col: '#1d2638', police: true, ram: 0.85, from: 6 },
   armored: { w: 38, h: 68, tall: 34, hp: 330, col: '#3a3f36', from: 9 },
+  rhino:   { w: 46, h: 92, tall: 46, hp: 900, col: '#2a2e33', gunner: true, burst: [6, 9], ram: 0.9, from: 999 }, // jefe de persecución: el Rinoceronte
 };
+const CAR_HP = { van: 240, sedan: 200, suv: 280, armored: 420 }; // vida de tu vehículo en la persecución
 const CIVIL = { sedan: { w: 28, h: 54, tall: 24 }, van: { w: 34, h: 64, tall: 36 }, truck: { w: 40, h: 92, tall: 48 } };
 function startChase() {
   const lv = run.level;
   if (!room.chaseSnap) { const { snap, ...rest } = run; room.chaseSnap = { cash: room.cash, run: JSON.stringify(rest) }; }
   room.chase = { t: 0, len: Math.min(95, 55 + lv * 2.5), speed: 520, roadW: 560, scroll: 0, car: { x: 0, y: 0, vx: 0, vy: 0 }, foes: [], traffic: [], spawnT: 1.5, trafT: 0.5, killed: 0, crashT: 0, done: false, doneT: 0,
-    aim: { x: cw / 2, y: ch * 0.62 }, heli: null, heliT: lv >= 5 ? 14 : 1e9, shots: [] };
+    aim: { x: cw / 2, y: ch * 0.62 }, heli: null, heliT: lv >= 5 ? 14 : 1e9, shots: [], bend: 0, bendTo: 0, bendT: 4, sections: [], nextSec: 700, obst: [], obT: 10, bossDone: lv < 12 };
+  room.chase.car.hp = room.chase.car.maxHp = CAR_HP[room.mission.car] || 240;
   Object.assign(room, { bullets: [], nades: [], fx: [], parts: [], flashes: [], texts: [], rings: [], warns: [], enemies: [], act: null, introT: 0 });
   document.body.classList.add('chase'); // en la carretera sobran C4, ruido, cuchillo y sigilo
   Object.assign(room.p, { x: 0, y: 0, z: 0, vx: 0, vy: 0, a: Math.PI / 2, dead: false });
@@ -944,8 +951,8 @@ function startChase() {
   sfx('vault');
 }
 // Cámara en tu techo mirando hacia atrás: proyecta un punto del mundo (x lateral, y longitudinal, h altura) a la pantalla
-function chaseCam() { const C = room.chase; return { x: C.car.x, y: C.car.y - 10, h: 62, F: ch * 0.95, yH: ch * 0.36, cx: cw / 2 }; }
-function proj(K, x, y, h) { const z = y - K.y; if (z < 30) return null; const s = K.F / z; return { x: K.cx + (x - K.x) * s, y: K.yH + (K.h - h) * s, s, z }; }
+function chaseCam() { const C = room.chase; return { x: C.car.x, y: C.car.y - 10, h: 62, F: ch * 0.95, yH: ch * 0.36, cx: cw / 2, bend: C.bend }; }
+function proj(K, x, y, h) { const z = y - K.y; if (z < 30) return null; const s = K.F / z; return { x: K.cx + (x - K.x + K.bend * z * z) * s, y: K.yH + (K.h - h) * s, s, z }; }
 function chaseTargets() {
   const C = room.chase, H = C.heli;
   return [...C.traffic.map(o => ({ o, civ: true })), ...C.foes.filter(f => !f.dead).map(o => ({ o })), ...(H && !H.dead ? [{ o: H, heli: true }] : [])];
@@ -959,6 +966,12 @@ function pickAt(sx, sy) { // el blanco más cercano bajo la mira: el tráfico ta
   }
   return best;
 }
+function carDamage(n, msg) { // daño a tu vehículo; a cero, avería y os atrapan
+  const C = room.chase, car = C.car;
+  car.hp -= n * CAR_TOUGH[room.mission.car];
+  if (msg) popup(car.x, car.y - 40, msg, '#ff8a5c');
+  if (car.hp <= 0 && !room.p.dead) { car.hp = 0; room.p.dead = true; room.deathT = 1.4; C.wrecked = true; chaseBoom(car.x, car.y + 40); banner('¡El coche ha quedado destrozado!'); }
+}
 function chaseBoom(x, y) {
   const C = room.chase, R = 125;
   fx({ k: 'fire', x, y, life: 0.42, r: R * 0.85 }); fx({ k: 'ring', x, y, life: 0.3, r: R * 1.3 });
@@ -967,7 +980,7 @@ function chaseBoom(x, y) {
   for (const f of C.foes) { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && d < R) { hitCar(f, 260 * (1 - d / R) + 60); f.vx += Math.sign(f.x - x || 1) * 160; } }
   for (const t of C.traffic) if (!t.wreck && Math.hypot(t.x - x, t.y - y) < R * 0.6) wreck(t);
   const p = room.p, dp = Math.hypot(p.x - x, p.y - y);
-  if (dp < R) hurtPlayer((150 * (1 - dp / R) + 15) * 0.5 * CAR_TOUGH[room.mission.car], Math.atan2(p.y - y, p.x - x));
+  if (dp < R && !room.p.dead) { carDamage(45 * (1 - dp / R) + 8); hurtPlayer((12 * (1 - dp / R) + 3) * CAR_TOUGH[room.mission.car], Math.atan2(p.y - y, p.x - x)); } // la carrocería se lleva casi todo
   cam.shake = 14; buzz(80); sfx('boom', x, y);
 }
 function hitCar(f, dmg, why) {
@@ -975,7 +988,7 @@ function hitCar(f, dmg, why) {
   f.hp -= dmg; f.hitT = 0.1;
   if (f.hp > 0 || f.dead) return;
   f.dead = true; f.spin = rnd(-4, 4); f.vx = rnd(-120, 120); C.killed++;
-  const reward = Math.round((70 + run.level * 6) * (why ? 1.5 : 1)); // derribarlos con el coche paga más
+  const reward = f.kind === 'rhino' ? 600 + run.level * 20 : Math.round((70 + run.level * 6) * (why ? 1.5 : 1)); // derribarlos con el coche paga más
   room.cash += reward; popup(f.x, f.y - f.h / 2, `${why ? why + ' ' : ''}+$${reward}`, '#7fe0a8');
   chaseBoom(f.x, f.y);
 }
@@ -1002,7 +1015,7 @@ function updateChase(dt) {
   const C = room.chase, p = room.p, lv = run.level, rw = C.roadW, car = C.car, kind = room.mission.car, tough = CAR_TOUGH[kind], U = ch / 390;
   [car.w, car.h] = CAR_DIM[kind];
   room.time += dt; C.t += dt; C.scroll += C.speed * dt; C.crashT -= dt;
-  if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ATRAPADO', `Te alcanzaron en la persecución de ${room.mission.name}.`); }
+  if (p.dead) { if ((room.deathT -= dt) <= 0) gameOver('TE HAN ATRAPADO', C.wrecked ? `El coche quedó destrozado en la persecución de ${room.mission.name}.` : `Te alcanzaron en la persecución de ${room.mission.name}.`); }
   else {
     for (const k of ['fireT', 'meleeT', 'nadeT', 'noiseT', 'breachT', 'swingT', 'hurtT', 'muzzleT']) p[k] -= dt;
     p.bloom = Math.max(0, p.bloom - dt * 1.6);
@@ -1010,6 +1023,10 @@ function updateChase(dt) {
     const L = stickVec(sticks.L), kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0), ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
     let steer = kx || L.x;
     if (Math.abs(steer) < 0.5) for (const t of C.traffic) if (!t.wreck && t.y < car.y && car.y - t.y < 280 && Math.abs(t.x - car.x) < (t.w + car.w) / 2 + 14) steer = Math.sign(car.x - t.x || -car.x || 1) * (Math.abs(car.x) > rw / 2 - 70 ? -1 : 1);
+    for (const o of C.obst) if (o.y < car.y && car.y - o.y < 480 && car.x + car.w / 2 + 16 > o.x0 && car.x - car.w / 2 - 16 < o.x1) { // control o pinchos delante: el conductor se aparta sí o sí
+      const free = LANES.filter(x => x + 40 < o.x0 || x - 40 > o.x1);
+      if (free.length) { const tx = free.reduce((a, b) => Math.abs(b - car.x) < Math.abs(a - car.x) ? b : a); steer = clamp((tx - car.x) / 40, -1, 1); }
+    }
     car.vx += (steer * 260 - car.vx) * Math.min(1, dt * 6);
     car.vy += ((ky || L.y) * 210 - car.vy) * Math.min(1, dt * 4);
     car.x += car.vx * dt; car.y = clamp(car.y + car.vy * dt, -120, 160);
@@ -1047,6 +1064,32 @@ function updateChase(dt) {
   }
   for (const q of C.shots) q.t -= dt;
   C.shots = C.shots.filter(q => q.t > 0);
+  // Curvas, túneles y puentes (por coordenada de carretera: lo que ya has pasado se va quedando atrás)
+  if ((C.bendT -= dt) <= 0) { C.bendT = rnd(5, 10); C.bendTo = [-0.00022, -0.0001, 0, 0, 0.0001, 0.00022][Math.floor(Math.random() * 6)]; }
+  C.bend += (C.bendTo - C.bend) * Math.min(1, dt * 0.6);
+  const Rc = C.scroll - car.y + 10;
+  if (Rc > C.nextSec) { const kind = C.sections.length % 2 ? 'bridge' : 'tunnel', len = kind === 'tunnel' ? rnd(1400, 2400) : rnd(900, 1500); C.sections.push({ kind, R0: Rc + 40, R1: Rc + 40 + len }); C.nextSec = Rc + 40 + len + rnd(1600, 3000); }
+  C.sections = C.sections.filter(sc => Rc - sc.R1 < 2400);
+  // Controles policiales y pinchos: vienen de delante (no los ves) y el conductor los esquiva; a los perseguidores les cuesta más
+  if (C.t > 8 && C.t < C.len && (C.obT -= dt) <= 0) {
+    C.obT = rnd(13, 22);
+    const kind = Math.random() < 0.55 ? 'block' : 'spikes', i = Math.floor(Math.random() * 3), x0 = LANES[i] - 60, x1 = LANES[i + (kind === 'block' ? 1 : 0)] + 60;
+    C.obst.push({ kind, y: car.y - 900, x0, x1 });
+    banner(kind === 'block' ? '¡Control policial más adelante! El conductor intenta esquivarlo' : '¡Pinchos en la carretera!');
+  }
+  for (const o of C.obst) {
+    o.y += C.speed * dt;
+    const box = { x: (o.x0 + o.x1) / 2, y: o.y, w: o.x1 - o.x0, h: o.kind === 'block' ? 36 : 14 };
+    if (!o.hit && overlap(car, box)) { o.hit = true; carDamage(o.kind === 'block' ? 45 : 30, o.kind === 'block' ? '¡Os habéis comido el control!' : '¡Pinchazo!'); if (o.kind === 'block') { car.vy = 260; cam.shake = 12; } sfx('clank', car.x, car.y); }
+    for (const f of C.foes) if (!f.dead && !f.spiked && overlap(f, box)) { if (o.kind === 'block') hitCar(f, 9999, '¡Contra el control!'); else { f.spiked = true; hitCar(f, 90, '¡Pinchazo!'); } }
+  }
+  C.obst = C.obst.filter(o => o.y < car.y + 2400);
+  if (!C.bossDone && C.t > C.len * 0.5) { // el Rinoceronte: un camión blindado con torreta que embiste
+    C.bossDone = true; const P = PURSUERS.rhino, hp = P.hp + lv * 30;
+    C.foes.push({ kind: 'rhino', w: P.w, h: P.h, tall: P.tall, x: 0, y: car.y + 1100, vx: 0, rot: 0, hp, maxHp: hp, side: 1, off: 0, dy: 260, mode: 'follow', modeT: 4, skill: 0.95, shootT: 1.5, gunT: 0, burst: 0, police: false, ph: 0 });
+    banner('¡El Rinoceronte! Un camión blindado viene a por vosotros');
+  }
+  if (car.hp < car.maxHp * 0.5 && Math.random() < dt * (car.hp < car.maxHp * 0.25 ? 16 : 6)) fx({ k: 'smoke', x: car.x + rnd(-10, 10), y: car.y + car.h / 2 + 6, h: 30, vx: rnd(-10, 10), vy: 260, life: 1, r0: 5, r1: 22, g: car.hp < car.maxHp * 0.25 ? 30 : 75 }); // el coche echa humo
   // Tráfico: más lento que tú, cada carril a su velocidad; lo adelantas y se va quedando atrás
   if ((C.trafT -= dt) <= 0) {
     C.trafT = rnd(0.8, 1.7);
@@ -1061,14 +1104,14 @@ function updateChase(dt) {
     else { t.y += (C.speed - t.v) * dt; t.x += (LANES[t.lane] - t.x) * Math.min(1, dt * 0.8) + t.vx * dt; t.vx *= Math.exp(-3 * dt); t.rot = t.vx * 0.002; }
     if (!p.dead && overlap(car, t) && C.crashT <= 0) { // os coméis un coche: daño, frenazo y volantazo
       C.crashT = 0.6; car.vy = 260; car.vx = Math.sign(car.x - t.x || 1) * 200; t.vx -= Math.sign(car.x - t.x || 1) * 120;
-      hurtPlayer(12 * tough, -Math.PI / 2); sfx('clank', t.x, t.y); cam.shake = 9; buzz(40);
+      carDamage(18); hurtPlayer(3 * tough, -Math.PI / 2); sfx('clank', t.x, t.y); cam.shake = 9; buzz(40);
       if (!t.wreck && tough < 0.7) wreck(t); // el blindado se los lleva por delante
     }
   }
   C.traffic = C.traffic.filter(t => t.y < car.y + 1800);
   // Perseguidores: llegan desde lejos, se abren por la calzada y disparan; de vez en cuando se lanzan a embestirte
   const alive = C.foes.filter(f => !f.dead);
-  if (C.t < C.len && alive.length < 2 + (lv >> 2) && (C.spawnT -= dt) <= 0) {
+  if (C.t < C.len && alive.length < Math.min(5, 2 + (lv >> 2)) && (C.spawnT -= dt) <= 0) {
     C.spawnT = rnd(2.2, 4.2);
     const pool = Object.keys(PURSUERS).filter(k => lv >= PURSUERS[k].from), fk = pool[Math.floor(Math.random() * pool.length)], P = PURSUERS[fk], hp = P.hp + lv * 8;
     C.foes.push({ kind: fk, w: P.w, h: P.h, tall: P.tall, x: rnd(-rw / 2 + 40, rw / 2 - 40), y: car.y + 1100, vx: 0, rot: 0, hp, maxHp: hp, side: Math.random() < 0.5 ? -1 : 1, off: 0, dy: rnd(150, 420), mode: 'follow', modeT: rnd(3, 6), skill: rnd(0.45, 0.95), shootT: rnd(1, 2), gunT: 0, burst: 0, police: !!P.police, ph: rnd(0, 6.3) });
@@ -1113,7 +1156,7 @@ function updateChase(dt) {
       f.vx = push * (mine ? 260 / tough : 160); car.vx = -push * (mine ? 80 : 200 * tough);
       if (Math.abs(f.y - car.y) > (f.h + car.h) / 2 - 10) { car.vy -= 140; f.y += 30; } // por detrás: os empuja hacia delante
       hitCar(f, (12 + rel * 0.12) / tough, mine ? '¡Embestido!' : null);
-      if (!mine || f.mode === 'ram') hurtPlayer((f.mode === 'ram' ? 10 : 5) * tough, 0);
+      if (!mine || f.mode === 'ram') { carDamage(f.kind === 'rhino' ? 30 : f.mode === 'ram' ? 14 : 6); hurtPlayer((f.mode === 'ram' ? 3 : 1) * tough, 0); }
       sfx('clank', f.x, f.y); cam.shake = 8; buzz(30);
       if (f.mode === 'ram') { f.mode = 'follow'; f.modeT = rnd(2, 4); f.dy = rnd(200, 400); }
     }
@@ -1121,7 +1164,7 @@ function updateChase(dt) {
     if (f.burst > 0 && (f.gunT -= dt) <= 0) {
       f.gunT = P.gunner ? 0.09 : 0.13; f.burst--;
       const my = f.y - f.h / 2, a = Math.atan2(p.y - my, p.x - f.x);
-      bullet(f.x, my, a + rnd(-0.08, 0.08), 680, 5 + lv * 0.4, false);
+      bullet(f.x, my, a + rnd(-0.15, 0.15), 680, 5 + lv * 0.3, false); // disparan desde un coche en marcha: fallan bastante
       Object.assign(room.bullets[room.bullets.length - 1], { life: 2.5, hh: f.tall * 0.8, d0: Math.hypot(p.x - f.x, p.y - my) });
       fx({ k: 'muzzle', x: f.x, y: my, h: f.tall * 0.8, life: 0.06, s: 1 });
       sfx('eshot', f.x, f.y);
@@ -1144,7 +1187,7 @@ function updateChase(dt) {
       if (!p.dead && H.y - car.y < 800 && (H.shootT -= dt) <= 0) { H.shootT = rnd(2.4, 3.6); H.burst = 9; }
       if (H.burst > 0 && (H.gunT -= dt) <= 0) {
         H.gunT = 0.08; H.burst--;
-        bullet(H.x, H.y, Math.atan2(p.y - H.y, p.x - H.x) + rnd(-0.05, 0.05), 700, 4 + lv * 0.3, false);
+        bullet(H.x, H.y, Math.atan2(p.y - H.y, p.x - H.x) + rnd(-0.1, 0.1), 700, 4 + lv * 0.3, false);
         Object.assign(room.bullets[room.bullets.length - 1], { life: 2.5, hh: H.h - 20, d0: Math.hypot(p.x - H.x, p.y - H.y) });
         fx({ k: 'muzzle', x: H.x, y: H.y, h: H.h - 20, life: 0.05, s: 1.2 });
         sfx('eshot', H.x, H.y);
@@ -1156,7 +1199,7 @@ function updateChase(dt) {
     for (let i = 0; i < n && !b.dead; i++) {
       b.x += b.vx * dt / n; b.y += b.vy * dt / n;
       if (!b.hh || b.hh < 60) for (const t of C.traffic) if (Math.abs(b.x - t.x) < t.w / 2 && Math.abs(b.y - t.y) < t.h / 2) { b.dead = true; break; }
-      if (!b.dead && !p.dead && Math.abs(b.x - car.x) < car.w / 2 && Math.abs(b.y - car.y) < car.h / 2) { b.dead = true; hurtPlayer(b.dmg * tough, Math.atan2(b.vy, b.vx)); }
+      if (!b.dead && !p.dead && Math.abs(b.x - car.x) < car.w / 2 && Math.abs(b.y - car.y) < car.h / 2) { b.dead = true; carDamage(b.dmg * 0.4); hurtPlayer(b.dmg * 0.12 * tough, Math.atan2(b.vy, b.vx)); }
     }
     if ((b.life -= dt) <= 0 || Math.abs(b.x) > 900 || Math.abs(b.y - car.y) > 1900) b.dead = true;
   }
@@ -1174,6 +1217,7 @@ function updateChase(dt) {
   updateFx(dt);
   if (room.banner && (room.banner.t -= dt) <= 0) room.banner = null;
   room.shownCash += (room.cash - room.shownCash) * Math.min(1, dt * 5);
+  tickItems(dt);
   ambience(true);
   if (!C.done && C.t >= C.len && C.foes.every(f => f.dead) && !C.heli) { C.done = true; C.doneT = 1.6; banner('¡Los has perdido! Rumbo a la guarida'); }
   if (C.done && (C.doneT -= dt) <= 0) { room.chaseWon = true; completeRoom(); }
@@ -1194,24 +1238,34 @@ function drawFront(c, kind, x, y, s, col, o = {}) { // (x, y) = suelo bajo el pa
     if (o.hit) { c.fillStyle = 'rgba(255,255,255,0.4)'; c.fillRect(-w / 2, -h, w, h); }
     c.restore(); return;
   }
-  const tall = kind === 'swat' || kind === 'truck' || kind === 'van', cab = tall ? 0.94 : kind === 'armored' ? 0.86 : 0.74;
+  const tall = kind === 'swat' || kind === 'truck' || kind === 'van' || kind === 'rhino', cab = tall ? 0.94 : kind === 'armored' ? 0.86 : 0.74;
   c.fillStyle = '#0b0c0e'; c.fillRect(-w * 0.5, -h * 0.2, w * 0.17, h * 0.22); c.fillRect(w * 0.33, -h * 0.2, w * 0.17, h * 0.22); // ruedas
   c.fillStyle = col; rrect(c, -w / 2, -h * 0.58, w, h * 0.45, Math.max(1, h * 0.07)); c.fill(); // carrocería
   c.beginPath(); c.moveTo(-w * cab / 2, -h * 0.56); c.lineTo(w * cab / 2, -h * 0.56); c.lineTo(w * cab * 0.43, -h); c.lineTo(-w * cab * 0.43, -h); c.closePath(); c.fill(); // cabina
   c.fillStyle = 'rgba(255,255,255,0.1)'; c.fillRect(-w / 2, -h * 0.58, w, h * 0.04); // brillo del capó
-  c.fillStyle = kind === 'armored' ? '#0a0d10' : '#1a2838';
-  if (kind === 'armored') c.fillRect(-w * cab * 0.36, -h * 0.82, w * cab * 0.72, h * 0.07); // tronera
+  c.fillStyle = kind === 'armored' || kind === 'rhino' ? '#0a0d10' : '#1a2838';
+  if (kind === 'armored' || kind === 'rhino') c.fillRect(-w * cab * 0.36, -h * 0.82, w * cab * 0.72, h * 0.07); // tronera
   else { c.beginPath(); c.moveTo(-w * cab * 0.45, -h * 0.6); c.lineTo(w * cab * 0.45, -h * 0.6); c.lineTo(w * cab * 0.37, -h * 0.95); c.lineTo(-w * cab * 0.37, -h * 0.95); c.closePath(); c.fill();
     c.strokeStyle = 'rgba(170,200,230,0.22)'; c.lineWidth = Math.max(1, w * 0.04); c.beginPath(); c.moveTo(-w * cab * 0.25, -h * 0.62); c.lineTo(-w * cab * 0.05, -h * 0.92); c.stroke(); } // reflejo
   if (o.police && kind === 'sedan') { c.fillStyle = '#15171b'; c.fillRect(-w / 2, -h * 0.34, w, h * 0.13); }
   c.fillStyle = '#0e0f11'; c.fillRect(-w * 0.22, -h * 0.4, w * 0.44, h * 0.12); // rejilla
-  if (kind === 'armored' || kind === 'swat') { c.fillStyle = '#2a2d31'; c.fillRect(-w * 0.52, -h * 0.26, w * 1.04, h * 0.08); } // defensa
+  if (kind === 'armored' || kind === 'swat' || kind === 'rhino') { c.fillStyle = kind === 'rhino' ? '#8a6a1a' : '#2a2d31'; c.fillRect(-w * 0.52, -h * 0.26, w * 1.04, h * 0.08); } // defensa
   c.fillStyle = 'rgba(255,255,255,0.16)'; c.fillRect(-w / 2, -h * 0.16, w, h * 0.04); // parachoques
   c.fillStyle = o.lights === false ? '#333' : '#fff6d8'; c.fillRect(-w * 0.46, -h * 0.48, w * 0.17, h * 0.08); c.fillRect(w * 0.29, -h * 0.48, w * 0.17, h * 0.08); // faros
   if (o.police) { const on = Math.sin(room.time * 14 + (o.ph || 0)) > 0; c.fillStyle = on ? '#ff3a3a' : '#4a1010'; c.fillRect(-w * 0.32, -h * 1.08, w * 0.3, h * 0.08); c.fillStyle = on ? '#1a2a55' : '#4a7aff'; c.fillRect(w * 0.02, -h * 1.08, w * 0.3, h * 0.08); }
   if (o.gunner) { c.fillStyle = '#2b2f26'; c.beginPath(); c.moveTo(-w * 0.18, -h * 1.0); c.lineTo(w * 0.18, -h * 1.0); c.lineTo(w * 0.13, -h * 1.22); c.lineTo(-w * 0.13, -h * 1.22); c.fill(); c.fillStyle = '#16181b'; c.beginPath(); c.arc(0, -h * 1.3, w * 0.1, 0, 7); c.fill(); c.fillStyle = '#0d0e10'; c.fillRect(-w * 0.03, -h * 1.2, w * 0.06, h * 0.16); } // tirador en la caja
   if (o.hit) { c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(-w / 2, -h, w, h); }
   c.restore();
+}
+function drawSideCar(c, x, y, s) { // patrulla cruzada en la calzada (control policial), vista de lado
+  const w = 54 * s, h = 24 * s;
+  c.fillStyle = 'rgba(0,0,0,0.5)'; c.beginPath(); c.ellipse(x, y, w * 0.55, Math.max(1, h * 0.12), 0, 0, 7); c.fill();
+  c.fillStyle = '#0b0c0e'; for (const k of [-0.3, 0.3]) { c.beginPath(); c.arc(x + k * w, y - h * 0.12, h * 0.2, 0, 7); c.fill(); }
+  c.fillStyle = '#e4e6ea'; rrect(c, x - w / 2, y - h * 0.62, w, h * 0.45, Math.max(1, h * 0.1)); c.fill();
+  c.fillStyle = '#15171b'; c.fillRect(x - w / 2, y - h * 0.36, w, h * 0.1);
+  c.fillStyle = '#e4e6ea'; c.beginPath(); c.moveTo(x - w * 0.3, y - h * 0.6); c.lineTo(x + w * 0.22, y - h * 0.6); c.lineTo(x + w * 0.12, y - h); c.lineTo(x - w * 0.22, y - h); c.closePath(); c.fill();
+  c.fillStyle = '#1a2838'; c.fillRect(x - w * 0.2, y - h * 0.92, w * 0.3, h * 0.26);
+  const on = Math.sin(room.time * 14) > 0; c.fillStyle = on ? '#ff3a3a' : '#2a4aff'; c.fillRect(x - w * 0.12, y - h * 1.08, w * 0.24, h * 0.08);
 }
 function drawHeli(c, x, y, s, H) { // (x, y) = centro del fuselaje
   const w = 64 * s;
@@ -1251,7 +1305,7 @@ function renderChase() {
     g.fillStyle = 'rgba(220,230,255,0.6)'; for (let i = 0; i < 40; i++) g.fillRect(hash(i, 1, 5) * skyCv.width, hash(i, 2, 5) * K.yH * 0.7, 1.5 * U, 1.5 * U);
     const skw = skyCv.width * 1.3, skh = skw / 10; g.drawImage(skyline(), skyCv.width / 2 - skw / 2, K.yH + 20 - skh + 1, skw, skh);
   }
-  ctx.drawImage(skyCv, -40 - clamp(K.x * U * 0.12, -40, 40), -20);
+  ctx.drawImage(skyCv, -40 - clamp(K.x * U * 0.12 + C.bend * 120000, -40, 40), -20); // el cielo gira al revés en las curvas
   // suelo, arcén, asfalto y líneas (la carretera es recta: un trapecio)
   ctx.fillStyle = '#0d140f'; ctx.fillRect(-20, K.yH, cw + 40, ch - K.yH + 20);
   const zN = 40, zF = 2200, phase = ((C.scroll - K.y) % 4000 + 4000) % 4000;
@@ -1267,14 +1321,49 @@ function renderChase() {
   // farolas: poste, brazo sobre la calzada y luminaria
   const posts = [];
   for (let z = zN + ((-phase % 420) + 420) % 420; z < zF; z += 420) for (const sd of [-1, 1]) posts.push({ x: sd * (rw / 2 + 34), z: z + (sd > 0 ? 210 : 0), sd });
+  const Rc = C.scroll - K.y, inTunnel = z => C.sections.some(sc => sc.kind === 'tunnel' && z > Rc - sc.R1 - 40 && z < Rc - sc.R0 + 40);
+  for (let i = posts.length - 1; i >= 0; i--) if (inTunnel(posts[i].z)) posts.splice(i, 1); // en el túnel no hay farolas
   posts.sort((a, b) => b.z - a.z);
   for (const L of posts) {
     const g0 = proj(K, L.x, K.y + L.z, 0), g1 = proj(K, L.x, K.y + L.z, 110), g2 = proj(K, L.x - L.sd * 60, K.y + L.z, 112);
     if (!g0) continue;
     ctx.strokeStyle = '#2c3037'; ctx.lineWidth = Math.max(1, 5 * g0.s); ctx.beginPath(); ctx.moveTo(g0.x, g0.y); ctx.lineTo(g1.x, g1.y); ctx.lineTo(g2.x, g2.y); ctx.stroke();
   }
-  // objetos de lejos a cerca: tráfico, perseguidores, helicóptero, granadas
+  // túneles (boca, paredes, techo) y puentes (agua y barandillas)
+  const poly = pts => { const q = pts.map(([x, z, h]) => proj(K, x, K.y + z, h)); if (q.some(v => !v)) return; ctx.beginPath(); q.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)); ctx.closePath(); ctx.fill(); };
+  let portal = null; const tunnelLights = [], TH = 150, wx = rw / 2 + 44;
+  for (const sc of C.sections) {
+    const za = Rc - sc.R1, zb = Rc - sc.R0, zA = Math.max(za, zN), zB = Math.min(zb, zF);
+    if (zA >= zB) continue;
+    if (sc.kind === 'bridge') {
+      ctx.fillStyle = '#081420'; quad(-rw / 2 - 1600, -rw / 2 - 40, zA, zB); quad(rw / 2 + 40, rw / 2 + 1600, zA, zB);
+      ctx.fillStyle = 'rgba(120,170,210,0.1)'; for (let z = zA - (zA % 70) + 70; z < zB; z += 70) { quad(-rw / 2 - 600, -rw / 2 - 200, z, z + 8); quad(rw / 2 + 260, rw / 2 + 700, z + 30, z + 36); }
+      ctx.fillStyle = '#6a7078'; quad(-rw / 2 - 38, -rw / 2 - 32, zA, zB, 24); quad(rw / 2 + 32, rw / 2 + 38, zA, zB, 24);
+      ctx.fillStyle = '#4a5058'; for (let z = zA - (zA % 50) + 50; z < zB; z += 50) for (const sx of [-1, 1]) poly([[sx * (rw / 2 + 35) - 2, z, 0], [sx * (rw / 2 + 35) + 2, z, 0], [sx * (rw / 2 + 35) + 2, z, 24], [sx * (rw / 2 + 35) - 2, z, 24]]);
+      continue;
+    }
+    const face = (z, inside) => { // boca del túnel: el monte alrededor y, por el hueco, lo de detrás
+      const a = proj(K, -wx, K.y + z, TH), b = proj(K, wx, K.y + z, 0); if (!a || !b) return;
+      ctx.fillStyle = '#2e3136'; ctx.beginPath(); ctx.rect(-20, -20, cw + 40, b.y + 20); ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y); ctx.fill('evenodd');
+      ctx.strokeStyle = '#4a4e55'; ctx.lineWidth = Math.max(2, 8 * a.s); ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      if (!inside) { ctx.fillStyle = '#060708'; ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y); }
+      portal = { z, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
+    };
+    if (za > zN) face(za, false); // ya fuera: la boca se aleja
+    else { // dentro: la entrada queda atrás; paredes, techo y luces
+      face(zB, true);
+      ctx.fillStyle = '#24272c'; poly([[-wx, zA, 0], [-wx, zB, 0], [-wx, zB, TH], [-wx, zA, TH]]); poly([[wx, zA, 0], [wx, zB, 0], [wx, zB, TH], [wx, zA, TH]]);
+      ctx.fillStyle = '#16181b'; poly([[-wx, zA, TH], [wx, zA, TH], [wx, zB, TH], [-wx, zB, TH]]);
+      for (let z = zA - (zA % 140) + 140; z < zB; z += 140) for (const sx of [-1, 1]) tunnelLights.push([sx * (wx - 4), z]);
+    }
+  }
+  // objetos de lejos a cerca: tráfico, perseguidores, helicóptero, granadas, controles
   const items = [];
+  for (const o of C.obst) items.push({ z: o.y - K.y, d: () => {
+    const q0 = proj(K, o.x0, o.y, 0), q1 = proj(K, o.x1, o.y, 0); if (!q0 || !q1) return;
+    if (o.kind === 'spikes') { ctx.fillStyle = '#15171a'; ctx.fillRect(q0.x, q0.y - 3 * q0.s, q1.x - q0.x, 4 * q0.s); ctx.fillStyle = '#a0a6ae'; for (let x = q0.x; x < q1.x; x += 9 * q0.s) { ctx.beginPath(); ctx.moveTo(x, q0.y - 3 * q0.s); ctx.lineTo(x + 3 * q0.s, q0.y - 9 * q0.s); ctx.lineTo(x + 6 * q0.s, q0.y - 3 * q0.s); ctx.fill(); } return; }
+    for (const k of [0.25, 0.75]) { const q = proj(K, o.x0 + (o.x1 - o.x0) * k, o.y, 0); if (q) drawSideCar(ctx, q.x, q.y, q.s); }
+  } });
   for (const t of C.traffic) items.push({ z: t.y - t.h / 2 - K.y, d: () => { const q = proj(K, t.x, t.y - t.h / 2, 0); if (q) drawFront(ctx, t.kind, q.x, q.y, q.s, t.col, { rot: t.wreck ? t.rot : 0, lights: !t.wreck }); } });
   for (const f of C.foes) items.push({ z: f.y - f.h / 2 - K.y, d: () => {
     const q = proj(K, f.x, f.y - f.h / 2, 0); if (!q) return;
@@ -1285,7 +1374,9 @@ function renderChase() {
   for (const n of room.nades) items.push({ z: n.y - K.y, d: () => { const q = proj(K, n.x, n.y, n.h), g = proj(K, n.x, n.y, 0); if (!q) return; ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.ellipse(g.x, g.y, 5 * g.s, 2 * g.s, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4b5a3a'; ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.5, 5 * q.s), 0, 7); ctx.fill(); } });
   for (const f of room.fx) if (f.k === 'smoke') items.push({ z: f.y - K.y - 1, d: () => { const k = f.t / f.life, q = proj(K, f.x, f.y, (f.h || 15) + k * 50); if (!q) return; ctx.fillStyle = `rgba(${f.g},${f.g},${f.g + 6},${(0.5 * (1 - k)).toFixed(3)})`; ctx.beginPath(); ctx.arc(q.x, q.y, (f.r0 + (f.r1 - f.r0) * k) * q.s, 0, 7); ctx.fill(); } });
   items.sort((a, b) => b.z - a.z);
-  for (const it of items) if (it.z > 30) it.d();
+  for (const it of items) if (it.z > 30) { // lo que queda tras la boca del túnel solo se ve por el hueco
+    if (portal && it.z > portal.z) { ctx.save(); ctx.beginPath(); ctx.rect(portal.x0, portal.y0, portal.x1 - portal.x0, portal.y1 - portal.y0); ctx.clip(); it.d(); ctx.restore(); } else it.d();
+  }
   // niebla en el horizonte
   const fog = ctx.createLinearGradient(0, K.yH - 30 * U, 0, K.yH + 70 * U); fog.addColorStop(0, 'rgba(22,30,42,0)'); fog.addColorStop(0.35, 'rgba(22,30,42,0.85)'); fog.addColorStop(1, 'rgba(22,30,42,0)');
   ctx.fillStyle = fog; ctx.fillRect(-20, K.yH - 30 * U, cw + 40, 100 * U);
@@ -1298,7 +1389,9 @@ function renderChase() {
   }
   // luces (aditivas): farolas, faros con su haz sobre el asfalto, sirenas, fuego y chispas
   ctx.globalCompositeOperation = 'lighter';
+  for (const [x, z] of tunnelLights) { const q = proj(K, x, K.y + z, TH - 12); if (q) { const r = Math.min(70 * U, 30 * q.s); ctx.fillStyle = glow(ctx, q.x, q.y, r, '255,170,80', 0.7); ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, 7); ctx.fill(); } }
   for (const L of posts) {
+    if (portal && L.z > portal.z) continue; // tapadas por el monte
     const g2 = proj(K, L.x - L.sd * 60, K.y + L.z, 112), pool = proj(K, L.x - L.sd * 90, K.y + L.z, 0);
     if (!g2 || !pool || L.z < 120 || L.z > 1500) continue; // las de encima de la cámara llenarían la pantalla entera de degradado (caro)
     const lr = Math.min(26 * g2.s, 70 * U), pr = Math.min(170 * pool.s, cw * 0.45);
@@ -2214,7 +2307,7 @@ function throwNade() {
   useFloor(p.z);
   run.nades--; p.nadeT = 0.6;
   if (room.chase) { // la lanzas hacia atrás, en arco, al punto de la carretera bajo la mira
-    const C = room.chase, K = chaseCam(), sy = Math.max(C.aim.y, K.yH + 8), z = clamp(K.h * K.F / (sy - K.yH), 90, 700), tx = K.x + (C.aim.x - K.cx) * z / K.F, ty = K.y + z, T = 0.8;
+    const C = room.chase, K = chaseCam(), sy = Math.max(C.aim.y, K.yH + 8), z = clamp(K.h * K.F / (sy - K.yH), 90, 700), tx = K.x + (C.aim.x - K.cx) * z / K.F - K.bend * z * z, ty = K.y + z, T = 0.8;
     room.nades.push({ z: 0, x: p.x, y: p.y, vx: (tx - p.x) / T, vy: (ty - p.y) / T, t: 1.7, h: 40, vh: 260 * T - 40 / T });
     sfx('throw'); return;
   }
@@ -2516,8 +2609,7 @@ function update(dt) {
     else if (room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
   }
   updateDoors(dt); updateCams(dt); updateCoins(dt); updateStreet(dt);
-  if (room.heal) { const H = room.heal, k = Math.min(dt, H.t); run.hp = Math.min(run.maxHp, run.hp + H.amt * k / H.T); if ((H.t -= dt) <= 0) room.heal = null; } // curación poco a poco
-  if (room.energyT > 0) room.energyT -= dt; if (room.painT > 0) room.painT -= dt;
+  tickItems(dt);
   if (room.drag) { // el cuerpo que arrastras va detrás de ti y deja un rastro de sangre
     const b = room.drag, tx = p.x - Math.cos(p.a) * 22, ty = p.y - Math.sin(p.a) * 22;
     useFloor(b.z);
@@ -3564,10 +3656,13 @@ function drawHud() {
   if (room.shownCash > 0.5) { ctx.font = '600 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7fe0a8'; ctx.fillText(`+$${Math.round(room.shownCash)} en la bolsa`, x + ctx.measureText(`$${run.money}`).width * 1.6 + 10, y + 32); }
   // medidor de visibilidad (cuánto te expones)
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
+  if (room.chase) { const car = room.chase.car, k = Math.max(0, car.hp / car.maxHp); ctx.fillText('VEHÍCULO', x, y + 52); ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 66, bw, 6); ctx.fillStyle = k > 0.5 ? '#8fb8ff' : k > 0.25 ? '#ffb547' : '#ff5444'; ctx.fillRect(x, y + 66, bw * k, 6); }
+  else {
   ctx.fillText('VISIBILIDAD', x, y + 52);
   const vis = clamp(room.exposure / 2.2, 0, 1);
   ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 66, 90, 6);
   ctx.fillStyle = vis < 0.3 ? '#62d6ad' : vis < 0.6 ? '#ffb547' : '#ff5444'; ctx.fillRect(x, y + 66, 90 * vis, 6);
+  }
 
   if (room.chase) { // distancia que queda para despistarlos y coches derribados
     const C = room.chase, k = Math.min(1, C.t / C.len), bw2 = Math.min(320, uw - 300);
@@ -3663,7 +3758,7 @@ function syncObjs() { // lista desplegable de objetivos (se abre sola unos segun
 }
 function syncHud() {
   if (room.obj) syncObjs();
-  const it = run.items || {}, nIt = room.chase ? 0 : Object.values(it).reduce((a, b) => a + b, 0), ib = $('bItem');
+  const it = run.items || {}, nIt = Object.values(it).reduce((a, b) => a + b, 0), ib = $('bItem');
   if (ib.hidden !== !nIt) ib.hidden = !nIt; if ($('itemN').textContent !== String(nIt)) $('itemN').textContent = nIt;
   const tb = $('bTool'), jn = room.chase ? 0 : room.jams; if (tb.hidden !== !(jn > 0 || room.jamT > 0)) tb.hidden = !(jn > 0 || room.jamT > 0); if ($('toolN').textContent !== String(jn)) $('toolN').textContent = jn;
   const p = room.p, w = curW(), s = wstats(w);
