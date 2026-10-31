@@ -1544,14 +1544,48 @@ function showResults(R, next) { // rango, estrellas, objetivos y desglose; luego
   state = 'results';
   $('rsName').textContent = R.M.name.toUpperCase();
   $('rsRank').textContent = R.rank; $('rsRank').className = 'rank r' + R.rank;
-  $('rsStars').textContent = '★'.repeat(R.stars) + '☆'.repeat(3 - R.stars);
-  $('rsObj').innerHTML = room.obj.map(o => `<li class="${o.state > 0 ? 'ok' : 'ko'}">${o.state > 0 ? '✓' : '✗'} ${o.text}${o.primary ? '' : ` <em>+$${o.reward}</em>`}</li>`).join('');
-  $('rsRows').innerHTML = R.rows.map(([k, v]) => `<div><span>${k}</span><b class="${v < 0 ? 'bad' : ''}">${v < 0 ? '−' : '+'}$${Math.abs(v)}</b></div>`).join('') + `<div class="tot"><span>Total</span><b>+$${R.total}</b></div>`;
+  $('rsStars').innerHTML = [0, 1, 2].map(() => '<i>★</i>').join('');
+  $('rsObj').innerHTML = room.obj.map(o => `<li class="rv ${o.state > 0 ? 'ok' : 'ko'}">${o.state > 0 ? '✓' : '✗'} ${o.text}${o.primary ? '' : ` <em>+$${o.reward}</em>`}</li>`).join('');
+  $('rsRows').innerHTML = R.rows.map(([k, v]) => `<div class="rv"><span>${k}</span><b class="${v < 0 ? 'bad' : ''}" data-v="${v}">${v < 0 ? '−' : '+'}$${Math.abs(v)}</b></div>`).join('') + `<div class="tot rv"><span>Total</span><b data-v="${R.total}">+$${R.total}</b></div>`;
+  $('rsScore').className = 'rs-score rv';
   $('rsScore').innerHTML = `Puntuación <b>${R.score}</b>` + (R.score > R.prev ? (R.prev ? ` · <span class="rec">¡nuevo récord! (antes ${R.prev})</span>` : '') : ` · mejor marca ${R.prev}`);
   resultsNext = next;
   show('results');
+  playResults(R);
 }
-let resultsNext = null;
+let resultsNext = null, rsTimers = [], rsSkip = null;
+// Coreografía de los resultados: la escena se oscurece, entran los objetivos y las cifras (contando), las estrellas una a una
+// y al final se estampa el rango. Tocar la ficha lo adelanta todo.
+function playResults(R) {
+  const ov = $('results'), card = ov.querySelector('.results'), rank = $('rsRank'), go = $('bRsGo');
+  rsTimers.forEach(clearTimeout); rsTimers = [];
+  ov.classList.remove('anim'); card.classList.remove('shake'); void ov.offsetWidth; ov.classList.add('anim');
+  go.disabled = true;
+  const at = (t, f) => rsTimers.push(setTimeout(f, t));
+  const count = b => { const v = +b.dataset.v, sign = v < 0 ? '−' : '+', t0 = performance.now(), dur = Math.min(700, 250 + Math.abs(v) / 4);
+    const step = () => { const k = Math.min(1, (performance.now() - t0) / dur), n = Math.round(Math.abs(v) * (1 - (1 - k) ** 3)); b.textContent = `${sign}$${n}`; if (k < 1 && !rsDone) requestAnimationFrame(step); else b.textContent = `${sign}$${Math.abs(v)}`; };
+    step(); };
+  let rsDone = false, t = 1150;
+  const objs = [...$('rsObj').children], rows = [...$('rsRows').children], stars = [...$('rsStars').children];
+  for (const li of objs) { at(t, () => { li.classList.add('in'); sfx(li.classList.contains('ok') ? 'tick' : 'tickBad'); }); t += 200; }
+  t += 150;
+  for (const row of rows) { const tot = row.classList.contains('tot'); at(t, () => { row.classList.add('in'); count(row.querySelector('b')); sfx(tot ? 'buy' : 'tick'); }); t += tot ? 750 : 190; }
+  for (let i = 0; i < R.stars; i++) { at(t, () => { stars[i].classList.add('on'); sfx('star' + i); }); t += 330; }
+  at(t, () => $('rsScore').classList.add('in')); t += 450;
+  const stamp = quiet => { rank.classList.add('stamp'); if (!quiet) at(330, () => { card.classList.add('shake'); sfx('stamp'); buzz(40); }); };
+  const finish = () => { rsDone = true; go.disabled = false; rsSkip = null; };
+  at(t, () => stamp(false)); at(t + 700, finish);
+  rank.classList.remove('stamp');
+  rsSkip = () => { // todo de golpe: lo que faltaba aparece y el sello cae ya
+    rsTimers.forEach(clearTimeout); rsTimers = []; rsDone = true;
+    ov.classList.remove('anim');
+    for (const el of [...objs, ...rows, $('rsScore')]) el.classList.add('in');
+    for (const b of $('rsRows').querySelectorAll('b')) b.textContent = `${+b.dataset.v < 0 ? '−' : '+'}$${Math.abs(+b.dataset.v)}`;
+    stars.slice(0, R.stars).forEach(s => s.classList.add('on'));
+    if (!rank.classList.contains('stamp')) { stamp(true); sfx('stamp'); }
+    finish();
+  };
+}
 function winScreen(stats) {
   winStats = stats;
   state = 'win';
@@ -4190,6 +4224,10 @@ function sfx(k, x, y) {
     case 'scream': tone(700, 1150, 0.35, 0.11 * v, 'sawtooth'); tone(1000, 640, 0.32, 0.08 * v, 'sawtooth', 0.28); break;
     case 'radio': burst(0.22, 0.12, 1700, 'bandpass', 3); tone(1250, 1250, 0.05, 0.05, 'square', 0.24); break;
     case 'phone': tone(1400, 1400, 0.07, 0.05 * v, 'sine'); tone(1400, 1400, 0.07, 0.05 * v, 'sine', 0.14); break;
+    case 'tick': tone(1500, 1400, 0.03, 0.05, 'triangle'); break;
+    case 'tickBad': tone(320, 220, 0.08, 0.06, 'square'); break;
+    case 'star0': case 'star1': case 'star2': tone(880 * 2 ** (k[4] / 4), 1760 * 2 ** (k[4] / 4), 0.18, 0.1, 'triangle'); tone(2640, 2640, 0.12, 0.03, 'sine', 0.05); break;
+    case 'stamp': burst(0.18, 0.9, 260); tone(120, 45, 0.25, 0.7, 'sine'); burst(0.05, 0.3, 2000, 'highpass'); break;
     case 'objective': tone(880, 1320, 0.14, 0.13, 'triangle'); tone(1320, 1760, 0.16, 0.11, 'triangle', 0.12); break;
     case 'fail': tone(420, 240, 0.3, 0.13, 'triangle'); break;
     case 'siren':
@@ -4272,6 +4310,7 @@ press('bSneak', toggleSneak);
 $('bPause').addEventListener('click', () => pause());
 $('bObjs').addEventListener('click', e => { e.stopPropagation(); objsOpen = !objsOpen; objsKey = ''; if (room) room.objSeen = true; });
 $('bStGo').addEventListener('click', () => { initAudio(); const f = storyNext; storyNext = null; if (f) f(); });
+$('results').addEventListener('pointerdown', e => { if (rsSkip && e.target.id !== 'bRsGo') rsSkip(); });
 $('bRsGo').addEventListener('click', () => { const f = resultsNext; resultsNext = null; if (f) f(); });
 
 function pause() {
@@ -4384,6 +4423,23 @@ $('bOverShop').addEventListener('click', () => { // vuelves al equipo con el que
   prepShop('Cambia de arma, mejóralas o repón munición, C4 y granadas antes de reintentar.');
 });
 showMenu();
+// Pantalla de carga: el nombre se enciende, la barra avanza con mensajes y se funde con el menú cuando las fuentes están listas
+(function boot() {
+  const el = $('boot'), bar = $('bootBar'), msg = $('bootMsg'), t0 = performance.now(), MIN = matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 2100;
+  const msgs = ['Cortando la luz…', 'Repasando los planos…', 'Cargando el equipo…', 'Esperando a la noche…'];
+  let ready = false, gone = false;
+  const done = () => { if (gone) return; gone = true; bar.style.width = '100%'; setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 800); }, 220); };
+  const tick = () => {
+    if (gone) return;
+    const k = Math.min(1, (performance.now() - t0) / MIN);
+    bar.style.width = `${Math.round((ready ? k : Math.min(k, 0.85)) * 100)}%`;
+    msg.textContent = msgs[Math.min(msgs.length - 1, Math.floor(k * msgs.length))];
+    if (ready && k >= 1) done(); else setTimeout(tick, 120);
+  };
+  Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 4000))]).then(() => { ready = true; });
+  el.addEventListener('pointerdown', () => { if (ready) done(); }); // con todo cargado, un toque lo salta
+  tick();
+})();
 $('bResume').addEventListener('click', () => { state = 'play'; show(null); });
 $('bRestart').addEventListener('click', retryRoom);
 $('bQuit').addEventListener('click', showMenu);

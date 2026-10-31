@@ -15,6 +15,9 @@ const path = require('path');
   const story = async pg => { if (await pg.isVisible('#bStGo')) await pg.click('#bStGo'); }; // escena de historia antes de algunas misiones
   const url = 'file://' + path.resolve(__dirname, '../index.html');
   await page.goto(url);
+  assert(await page.isVisible('#boot'), 'al abrir sale la pantalla de carga');
+  await page.waitForSelector('#boot', { state: 'detached', timeout: 8000 });
+  assert.strictEqual(await page.evaluate(() => { const p = document.querySelector('#menu .panel'); return p.scrollHeight - p.clientHeight; }), 0, 'el menú cabe en la pantalla del móvil sin desplazarse');
   await shot('menu');
 
   // Generación: la salida, los enemigos y el botín son alcanzables desde la entrada (el botín de una cámara, solo con la puerta abierta)
@@ -302,6 +305,9 @@ const path = require('path');
   assert.strictEqual(await ev(() => __apagon.state), 'results');
   assert.match(await page.textContent('#rsRank'), /^[SABC]$/);
   assert((await page.textContent('#rsObj')).includes('Escapa en el vehículo de extracción'), 'los objetivos salen en los resultados');
+  assert(await ev(() => document.getElementById('bRsGo').disabled && !document.getElementById('rsRank').classList.contains('stamp')), 'los resultados se van mostrando: el sello aún no ha caído');
+  await page.waitForSelector('#rsRank.stamp', { timeout: 10000 });
+  await page.waitForSelector('#bRsGo:not([disabled])', { timeout: 3000 });
   await page.click('#bRsGo');
   assert.strictEqual(await ev(() => __apagon.state), 'shop');
   await ev(() => { __apagon.run.money = 1000; });

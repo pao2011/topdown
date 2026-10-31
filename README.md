@@ -8,6 +8,7 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 
 - **En local:** abre `index.html` en el navegador o sirve la carpeta (`python3 -m http.server`) y entra desde el móvil con la IP del ordenador.
 - **Publicado:** en GitHub, *Settings → Pages → Deploy from a branch* y elige la rama con el código y la carpeta `/`. En móvil se juega en horizontal; en PC con teclado y ratón, y la vista y el HUD se adaptan al tamaño de la pantalla.
+- **Pantallas:** al abrir hay una pantalla de carga (el nombre se enciende como un fluorescente). En móvil en horizontal, el menú, el briefing y los resultados se reparten en dos columnas para caber sin desplazarse.
 - **Primera vez:** el botón «Tutorial» del menú enseña lo básico en un mapa pequeño, en diez pasos guiados.
 
 ## Android (APK)
@@ -55,7 +56,7 @@ Guarda el keystore y su contraseña. Para instalar una versión nueva encima de 
   - *Entrada:* puerta principal (gratis), alcantarilla (sales por una arqueta dentro del edificio) o tejado (bajas a la primera planta o por un tragaluz).
   - *Herramientas:* inhibidor de cámaras (2 usos), ganzúa electrónica (hackeas el doble de rápido y sin pitidos) y disfraz de guardia (te detectan mucho más despacio si no haces nada raro).
   - Lo pagado se descuenta del dinero y, si mueres, no se cobra otra vez al reintentar.
-- **Resultados:** al escapar sale una pantalla con:
+- **Resultados:** al escapar, la escena se oscurece y la ficha va apareciendo: objetivos uno a uno, cifras que cuentan, estrellas, y al final se estampa el rango con un golpe (tocar la ficha lo adelanta). Muestra:
   - rango (S, A, B, C) y estrellas (una por la misión y una por cada objetivo secundario);
   - el desglose del dinero;
   - la puntuación, que guarda tu mejor marca por misión.
@@ -207,12 +208,13 @@ La prueba de humo comprueba:
 
 - **Mapas:** las primeras misiones son recorribles en todas sus plantas. El botín de una cámara solo se alcanza con la puerta abierta, y la salida nunca exige pasar por ella.
 - **Menú y misiones:**
+  - La pantalla de carga y el menú, que cabe sin desplazarse en un móvil en horizontal.
   - La escena de historia sale antes de la primera misión.
   - El briefing.
   - La vida llena al empezar y la cuenta atrás desde que entras.
 - **Golpe:**
   - Sin botín no hay salida, y con él viene el coche de extracción.
-  - Los objetivos salen en los resultados.
+  - Los objetivos salen en los resultados, que se van mostrando hasta que cae el sello.
   - Lo saqueado se cobra al escapar.
 - **Sigilo y civiles:**
   - Puertas, cámaras, cuerpos que alertan y la moneda.
