@@ -534,6 +534,19 @@ const path = require('path');
   assert(await dp.evaluate(() => __apagon.run.weapons[0].ammo < 12), 'el clic debe disparar');
   assert(await dp.evaluate(() => Math.abs(__apagon.room.p.a) < 0.3), 'debe apuntar hacia el ratón');
   if (process.env.SHOTS) await dp.screenshot({ path: path.join(process.env.SHOTS, 'desktop.png') });
+  // Consumibles: con vendas y herido, H cura poco a poco
+  await dp.evaluate(() => { const A = __apagon; A.room.enemies.length = 0; A.run.items = { vendas: 1 }; A.run.hp = 50; });
+  await dp.keyboard.press('KeyH');
+  await dp.waitForFunction(() => __apagon.run.hp >= 74, null, { timeout: 6000 }).catch(() => {});
+  assert.deepStrictEqual(await dp.evaluate(() => [Math.round(__apagon.run.hp), __apagon.run.items.vendas]), [75, 0], 'las vendas curan 25');
+  // Ajustes desde la pausa (se guardan) y una partida nueva en la ranura 2 que no pisa la 1
+  await dp.keyboard.press('Escape'); await dp.click('#bPauseSet');
+  await dp.fill('#sMusic', '30'); await dp.dispatchEvent('#sMusic', 'input');
+  assert.strictEqual(await dp.evaluate(() => JSON.parse(localStorage.getItem('apagon-ajustes')).music), 0.3);
+  await dp.click('#bSetBack'); await dp.click('#bQuit'); await dp.click('#bSlots');
+  assert.match(await dp.textContent('#slotList'), /Ranura 1 · actual.*Misión 1/);
+  await dp.click('[data-slot="new:2"]'); await dp.click('#bGo');
+  assert.deepStrictEqual(await dp.evaluate(() => [!!localStorage.getItem('apagon-ranura-1'), !!localStorage.getItem('apagon-ranura-2'), localStorage.getItem('apagon-ranura-actual')]), [true, true, '2']);
   await desk.close();
 
   assert.deepStrictEqual(errors, [], 'errores en consola');

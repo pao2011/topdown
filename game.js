@@ -85,6 +85,33 @@ const OPS = {
   asalto: { name: 'Asalto', desc: 'La alarma suena desde el principio, la policía llega pronto y hay más guardias, pero llevas granadas y C4 de más, y la C4 revienta las puertas de seguridad.' },
   mixta:  { name: 'Mixta',  desc: 'Tú decides: entrar en silencio o a tiros. Si dan el aviso, la policía tarda algo más en llegar.' },
 };
+// Habilidades permanentes (3 niveles cada una), consumibles reales y estilo del personaje
+const SKILLS = {
+  hands: ['Manos rápidas', 'Registras y hackeas un 18 % más rápido por nivel'], feet: ['Pies ligeros', 'Tus pasos hacen un 20 % menos de ruido por nivel'],
+  lungs: ['Fondo físico', 'Corres más tiempo: +30 % de aguante por nivel'], steady: ['Pulso firme', 'Un 10 % menos de dispersión por nivel'],
+  tough: ['Piel dura', 'Recibes un 8 % menos de daño por nivel'], contacts: ['Contactos', 'La policía tarda un 15 % más en llegar por nivel'],
+};
+const SKILL_COST = [350, 700, 1200];
+const ITEMS = {
+  vendas: ['Vendas', 'Recuperas 25 de vida poco a poco (2 s)', 40], botiquin: ['Botiquín', 'Recuperas 60 de vida (3 s)', 120],
+  energia: ['Bebida energética', 'Aguante lleno y no te cansas durante 20 s', 60], analgesico: ['Analgésicos', 'Recibes un 30 % menos de daño durante 25 s', 90],
+};
+const OUTFITS = { tactico: ['Táctico', 0, '#24473f', '#173029', '#18211f'], urbano: ['Urbano', 150, '#4a4f57', '#2e3238', '#1d2025'], bosque: ['Bosque', 150, '#3f5233', '#2a3822', '#20281a'], noche: ['Noche', 200, '#1c1f26', '#101216', '#0c0e11'], rojo: ['Rojo', 250, '#7a2a2a', '#4a1818', '#1e1416'] };
+const MASKS = { ninguna: ['Sin máscara', 0], pasamontanas: ['Pasamontañas', 100], hockey: ['Máscara de hockey', 200], calavera: ['Calavera', 300], payaso: ['Payaso', 350] };
+const CAMOS = { negro: ['Negro', 0, '#1b1f24'], desierto: ['Desierto', 150, '#8a7550'], bosque: ['Bosque', 150, '#4a5a3a'], urbano: ['Urbano', 150, '#6a6f78'], oro: ['Oro', 800, '#c9a23a'] };
+const sk = k => (run && run.skills && run.skills[k]) || 0;
+const style = () => ({ outfit: 'tactico', mask: 'ninguna', camo: 'negro', owned: [], ...(run && run.style) });
+function playerLook() { // con disfraz, uniforme de guardia; si no, tu ropa y tu máscara
+  if (room && room.disguise) return LOOK.guard;
+  const st = style(), o = OUTFITS[st.outfit] || OUTFITS.tactico;
+  return { ...LOOK.player, body: o[2], trim: o[3], legs: o[4], mask: st.mask };
+}
+const gunColor = () => (CAMOS[style().camo] || CAMOS.negro)[2];
+// Ajustes (se guardan aparte de la partida): volúmenes, vibración, sensibilidad de la mira y láser
+const SETTINGS_KEY = 'apagon-ajustes';
+const settings = { music: 0.7, sfx: 0.9, vib: true, sens: 1, laser: true };
+try { const q = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; for (const k in settings) if (typeof q[k] === typeof settings[k]) settings[k] = q[k]; } catch (e) { /* sin ajustes guardados */ }
+const lim = (v, a, b) => Math.min(b, Math.max(a, v)); settings.music = lim(settings.music, 0, 1); settings.sfx = lim(settings.sfx, 0, 1); settings.sens = lim(settings.sens, 0.5, 2);
 const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3] };
 const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco' };
 const CARS = { van: 'Furgoneta', sedan: 'Berlina', suv: 'Todoterreno', armored: 'Furgón blindado' };
@@ -141,7 +168,7 @@ function updateObjectives() { // lo cumplido o fallido ya no cambia
   }
 }
 function policeDelay() {
-  return Math.max(12, (room.boss ? 25 : POLICE_DELAY[room.op] || 40) - run.level * 0.7 - room.civKilled * 6);
+  return Math.max(12, (room.boss ? 25 : POLICE_DELAY[room.op] || 40) - run.level * 0.7 - room.civKilled * 6) * (1 + 0.15 * sk('contacts'));
 }
 function pickFoe(level, roll) {
   const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite'] : [])];
@@ -167,7 +194,7 @@ function angDiff(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= 
 function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 1442695041) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function mulberry32(a) { return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const $ = id => document.getElementById(id);
-const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* sin vibración */ } };
+const buzz = ms => { if (typeof settings !== 'undefined' && !settings.vib) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* sin vibración */ } };
 
 // ================= Estado =================
 const cv = $('c'), ctx = cv.getContext('2d');
@@ -764,6 +791,17 @@ function applyPlan(r) { // entrada elegida y herramientas: en un sitio de dentro
   const g = r.loot || r.exit; r.p.a = Math.atan2(g.y - q.y, g.x - q.x);
   r.entryHatch = { x: q.x, y: q.y, z };
 }
+function useItem() { // usa lo que haga falta: botiquín si estás muy herido, vendas si poco, bebida si vas sin aguante, analgésicos en combate
+  if (state !== 'play' || !room || room.chase || room.p.dead || room.heal) return;
+  const I = run.items || {}, miss = run.maxHp - run.hp, p = room.p;
+  const k = miss >= 45 && I.botiquin ? 'botiquin' : miss > 0 && I.vendas ? 'vendas' : miss > 0 && I.botiquin ? 'botiquin' : p.stam < 60 && I.energia ? 'energia' : I.analgesico && room.enemies.some(e => e.state === 'combat') ? 'analgesico' : null;
+  if (!k) { banner('Ahora no te hace falta nada'); return; }
+  I[k]--;
+  if (k === 'vendas') room.heal = { amt: 25, t: 2, T: 2 }; else if (k === 'botiquin') room.heal = { amt: 60, t: 3, T: 3 };
+  else if (k === 'energia') room.energyT = 20; else room.painT = 25;
+  popup(p.x, p.y - 22, ITEMS[k][0].toUpperCase(), '#7fe0a8'); sfx('heal');
+}
+function giveItem(k, x, y) { run.items = run.items || {}; if ((run.items[k] || 0) >= 5) return false; run.items[k] = (run.items[k] || 0) + 1; popup(x, y - 16, `+${ITEMS[k][0].toUpperCase()}`, '#7fe0a8'); sfx('reload'); return true; }
 function useJammer() {
   if (state !== 'play' || !room || room.chase || room.jams <= 0 || room.jamT > 0) return;
   room.jams--; room.jamT = 20; room.jamX = room.p.x; room.jamY = room.p.y;
@@ -905,7 +943,7 @@ function updateChase(dt) {
     // mira: el stick derecho la desplaza (y dispara sola sobre un perseguidor); en PC va con el ratón
     const R = stickVec(sticks.R);
     let firing = false;
-    if (sticks.R) { C.aim.x += R.x * 1150 * U * dt; C.aim.y += R.y * 1150 * U * dt; firing = R.m > FIRE; }
+    if (sticks.R) { C.aim.x += R.x * 1150 * settings.sens * U * dt; C.aim.y += R.y * 1150 * settings.sens * U * dt; firing = R.m > FIRE; }
     else if (mouse.active && !touchMode) { C.aim.x = mouse.x * cw / vw; C.aim.y = mouse.y * ch / vh; firing = mouse.down; }
     C.aim.x = clamp(C.aim.x, 0, cw); C.aim.y = clamp(C.aim.y, ch * 0.06, ch * 0.92);
     const tgt = pickAt(C.aim.x, C.aim.y);
@@ -1242,13 +1280,13 @@ function renderChase() {
   const gw = Math.max(6 * U, ch * 0.03 * gs[1] / 5);
   ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-gl * 0.05, -gw * 0.9 + gw, gl * 1.0, gw * 1.8); // sombra
   ctx.fillStyle = '#3d444d'; rrect(ctx, -gl * 0.12, -gw * 1.2, gl * 0.34, gw * 2.4, gw * 0.5); ctx.fill(); // culata
-  ctx.fillStyle = '#4a525c'; ctx.fillRect(gl * 0.18, -gw * 1.0, gl * 0.36, gw * 2.0); // cajón
+  ctx.fillStyle = gunColor() === '#1b1f24' ? '#4a525c' : gunColor(); ctx.fillRect(gl * 0.18, -gw * 1.0, gl * 0.36, gw * 2.0); // cajón (con su camuflaje)
   ctx.fillStyle = '#2a2f36'; ctx.fillRect(gl * 0.3, gw * 0.9, gl * 0.1, gw * 1.4); // cargador
   ctx.fillStyle = '#353b43'; ctx.fillRect(gl * 0.52, -gw * 0.45, gl * 0.48, gw * 0.9); // cañón
   ctx.fillStyle = '#20252b'; ctx.fillRect(gl * 0.95, -gw * 0.6, gl * 0.05, gw * 1.2); // bocacha
   ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(-gl * 0.12, -gw * 1.2, gl * 1.1, gw * 0.3); // brillo de arriba
   if (wstats(curW()).silenced) { ctx.fillStyle = '#1b1f24'; ctx.fillRect(gl, -gw * 0.55, gl * 0.18, gw * 1.1); }
-  ctx.fillStyle = LOOK.player.body; ctx.beginPath(); ctx.arc(gl * 0.05, gw * 2.2, gw * 1.6, 0, 7); ctx.arc(gl * 0.5, -gw * 2.0, gw * 1.3, 0, 7); ctx.fill(); // mangas
+  ctx.fillStyle = playerLook().body; ctx.beginPath(); ctx.arc(gl * 0.05, gw * 2.2, gw * 1.6, 0, 7); ctx.arc(gl * 0.5, -gw * 2.0, gw * 1.3, 0, 7); ctx.fill(); // mangas
   ctx.fillStyle = SKIN[0]; ctx.beginPath(); ctx.arc(gl * 0.24, gw * 1.0, gw * 0.95, 0, 7); ctx.arc(gl * 0.58, -gw * 0.9, gw * 0.9, 0, 7); ctx.fill(); // manos
   ctx.restore();
   // mira: roja cuando hay un perseguidor debajo
@@ -1308,25 +1346,35 @@ function openShop(stats, title) {
   save();
 }
 // Guardado automático al entrar en cada sala y en la tienda
-const SAVE = 'apagon-partida-v1';
+const SLOT_KEY = n => `apagon-ranura-${n}`;
+let slot = 1;
+try {
+  slot = Math.min(3, Math.max(1, +localStorage.getItem('apagon-ranura-actual') || 1));
+  const old = localStorage.getItem('apagon-partida-v1'); // la partida de versiones anteriores pasa a la ranura 1
+  if (old && !localStorage.getItem(SLOT_KEY(1))) localStorage.setItem(SLOT_KEY(1), old);
+} catch (e) { /* sin almacenamiento */ }
+function setSlot(n) { slot = n; try { localStorage.setItem('apagon-ranura-actual', n); } catch (e) { /* sin almacenamiento */ } }
 function save() {
-  try { const { snap, ...rest } = run; localStorage.setItem(SAVE, JSON.stringify({ run: rest, shop: state === 'shop' || state === 'win' })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
+  try { const { snap, ...rest } = run; localStorage.setItem(SLOT_KEY(slot), JSON.stringify({ run: rest, shop: state === 'shop' || state === 'win', t: Date.now() })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
 }
-function loadSave() {
+function loadSave(n = slot) {
   try {
-    const d = JSON.parse(localStorage.getItem(SAVE)), r = d && d.run;
+    const d = JSON.parse(localStorage.getItem(SLOT_KEY(n))), r = d && d.run;
     // lo guardado puede estar corrupto o venir de otra versión: solo se acepta si encaja
     if (r && Number.isInteger(r.level) && r.level > 0 && r.hp > 0 && [r.money, r.nades, r.maxHp, r.seed].every(Number.isFinite) &&
         Array.isArray(r.weapons) && r.weapons.length && Number.isInteger(r.cur) && r.weapons[r.cur] &&
         r.weapons.every(w => WEAPONS[w.id] && Array.isArray(w.mods) && w.mods.every(m => MODS[m]) && Number.isFinite(w.ammo) && Number.isFinite(w.reserve) &&
-          (!w.ats || (Array.isArray(w.ats) && w.ats.every(a => AMMO[a]))) && (!w.at || AMMO[w.at]))) return d;
+          (!w.ats || (Array.isArray(w.ats) && w.ats.every(a => AMMO[a]))) && (!w.at || AMMO[w.at])) &&
+        (!r.skills || Object.entries(r.skills).every(([k, v]) => SKILLS[k] && Number.isInteger(v) && v >= 0 && v <= 3)) &&
+        (!r.items || Object.entries(r.items).every(([k, v]) => ITEMS[k] && Number.isInteger(v) && v >= 0)) &&
+        (!r.style || (OUTFITS[r.style.outfit] && MASKS[r.style.mask] && CAMOS[r.style.camo] && Array.isArray(r.style.owned)))) return d;
   } catch (e) { /* partida ilegible: se ignora */ }
   return null;
 }
 function refreshMenu() {
   const d = loadSave(), b = $('bPlay');
   $('bCont').hidden = $('bShop').hidden = !d;
-  if (d) $('bCont').textContent = `Continuar · misión ${d.run.level}: ${mission(d.run.level).name}`;
+  if (d) $('bCont').textContent = `Continuar · ranura ${slot} · misión ${d.run.level}: ${mission(d.run.level).name}`;
   const lv = d ? d.run.level : 1;
   $('camp').innerHTML = MISSIONS.map((m, i) => `<span class="${i + 1 < lv ? 'done' : i + 1 === lv ? 'next' : ''}">${String(i + 1).padStart(2, '0')} ${m.name}</span>`).join('') +
     (lv > MISSIONS.length ? `<span class="next">${String(lv).padStart(2, '0')} ${mission(lv).name}</span>` : '');
@@ -1403,7 +1451,7 @@ function updateUse(dt) {
   const A = room.act, p = room.p;
   if (!A) return;
   if (p.dead || Math.hypot(A.x - p.x, A.y - p.y) > 62 || (A.kind === 'body' && A.ref.looted)) { if (A.kind === 'door') A.ref.hack = A.t; room.act = null; return; }
-  A.t += dt;
+  A.t += dt * (1 + 0.18 * sk('hands')); // manos rápidas
   const hacking = ((A.kind === 'door' && !room.hasCode) || A.tt === TERMINAL) && !room.pick; // con la ganzúa electrónica no pita
   if (hacking && (A.beep -= dt) <= 0) { A.beep = 2.5; useFloor(p.z); noise(A.x, A.y, 150, 'step'); sfx('beep', A.x, A.y); } // el aparato pita: algún guardia puede oírlo
   if (A.t >= A.time) { room.act = null; finishUse(A); }
@@ -1415,6 +1463,7 @@ function finishUse(A) {
     A.ref.looted = true;
     gainCash(Math.round(rnd(12, 40) * k), A.x, A.y);
     if (Math.random() < 0.5) addAmmo(0.15);
+    if (Math.random() < 0.18) giveItem(Math.random() < 0.6 ? 'vendas' : 'analgesico', A.x, A.y - 14); // los guardias llevan algo de botiquín
     if (A.ref.keycard) gotCode('la tarjeta del supervisor');
   } else if (A.kind === 'door') { room.vaultBy = room.vaultBy || (room.hasCode ? 'code' : 'hack'); openDoor(A.ref); }
   else if (A.kind === 'drag') { room.drag = A.ref; popup(A.x, A.y - 16, 'ARRASTRANDO', '#d9e2ec'); }
@@ -1422,8 +1471,8 @@ function finishUse(A) {
   else {
     room.searched.add(p.z + ':' + A.ref);
     const nothing = () => popup(A.x, A.y - 16, 'Nada', '#7d8ca0'), ammo = () => { addAmmo(0.14); popup(A.x, A.y - 16, '+MUNICIÓN', '#ffd98a'); sfx('reload'); };
-    if (A.tt === LOW) { if (p.z === 0 && A.ref === room.codeDrawer) gotCode('una nota en un cajón'); else if (Math.random() < 0.6) gainCash(Math.round(rnd(8, 35) * k), A.x, A.y); else if (Math.random() < 0.5) ammo(); else nothing(); }
-    else if (A.tt === SHELF) { const r = Math.random(); r < 0.35 ? ammo() : r < 0.65 ? gainCash(Math.round(rnd(5, 20) * k), A.x, A.y) : nothing(); }
+    if (A.tt === LOW) { if (p.z === 0 && A.ref === room.codeDrawer) gotCode('una nota en un cajón'); else if (Math.random() < 0.12 && giveItem(Math.random() < 0.7 ? 'vendas' : 'energia', A.x, A.y)) { /* botiquín de oficina */ } else if (Math.random() < 0.6) gainCash(Math.round(rnd(8, 35) * k), A.x, A.y); else if (Math.random() < 0.5) ammo(); else nothing(); }
+    else if (A.tt === SHELF) { const r = Math.random(); if (r < 0.1 && giveItem('botiquin', A.x, A.y)) return; r < 0.35 ? ammo() : r < 0.65 ? gainCash(Math.round(rnd(5, 20) * k), A.x, A.y) : nothing(); }
     else if (A.tt === DEPOSIT) { gainCash(Math.round(rnd(40, 110) * k), A.x, A.y); bakeDirty(A.x, A.y); }
     else if (A.tt === RACK) gainCash(Math.round(rnd(25, 70) * k), A.x, A.y);
     else if (A.tt === TERMINAL) { if (room.doors.length) gotCode('la terminal de seguridad'); room.camsOff = true; banner('Cámaras de seguridad apagadas'); }
@@ -1928,7 +1977,8 @@ function updatePlayer(dt) {
   }
   if (p.tired || !mag || room.drag) sprint = false;
   const speed = (room.drag ? 0.55 : 1) * (sprint ? 235 : mag <= SNEAK ? 78 * mag / SNEAK : 78 + 72 * (mag - SNEAK) / (1 - SNEAK));
-  if (sprint && p.speed > 120) { p.stam -= 28 * dt; p.restT = 0.9; if (p.stam <= 0) { p.stam = 0; p.tired = true; } }
+  if (room.energyT > 0) { p.stam = 100; p.tired = false; } // bebida energética
+  if (sprint && p.speed > 120) { p.stam -= 28 * dt / (1 + 0.3 * sk('lungs')); p.restT = 0.9; if (p.stam <= 0) { p.stam = 0; p.tired = true; } }
   else if ((p.restT -= dt) <= 0) { p.stam = Math.min(100, p.stam + 18 * dt); if (p.stam >= 30) p.tired = false; }
   p.sprint = sprint;
   const tvx = mag ? mx / mag * speed : 0, tvy = mag ? my / mag * speed : 0;
@@ -1943,7 +1993,7 @@ function updatePlayer(dt) {
   p.onStairs = onStairs;
   if (!p.sneak && p.speed > 90 && (p.stepT -= dt) <= 0) {
     p.stepT = p.sprint ? 0.24 : 0.34;
-    noise(p.x, p.y, p.sprint ? 280 : 40 + p.speed * 0.6, 'step');
+    noise(p.x, p.y, (p.sprint ? 280 : 40 + p.speed * 0.6) * (1 - 0.2 * sk('feet')), 'step');
     sfx('step');
   }
   aimAndFire(dt, mx, my, mag, assist);
@@ -1959,7 +2009,7 @@ function aimAndFire(dt, mx, my, mag, help) {
     aim = Math.atan2(mouse.y - (vh / 2 + (p.y - cam.y) * zoom), mouse.x - (vw / 2 + (p.x - cam.x) * zoom));
     firing = mouse.down;
   } else if (mag > 0.1) aim = Math.atan2(my, mx);
-  if (aim !== null) p.a += angDiff(p.a, aim) * Math.min(1, dt * 18);
+  if (aim !== null) p.a += angDiff(p.a, aim) * Math.min(1, dt * 18 * settings.sens);
   tickReload(dt);
   if (firing) shoot();
 }
@@ -1990,7 +2040,7 @@ function shoot() {
   else p.fireT = 1 / s.rate;
   const mx = p.x + Math.cos(p.a) * 18, my = p.y + Math.sin(p.a) * 18;
   // la dispersión crece al disparar seguido (retroceso) y al esprintar; quieto en sigilo, más precisa
-  const spread = s.spread * (1 + p.bloom * 1.5) * (p.sprint ? 1.8 : 1) * (p.sneak && p.speed < 10 ? 0.7 : 1);
+  const spread = s.spread * (1 - 0.1 * sk('steady')) * (1 + p.bloom * 1.5) * (p.sprint ? 1.8 : 1) * (p.sneak && p.speed < 10 ? 0.7 : 1);
   for (let i = 0; i < s.pellets; i++) bullet(mx, my, p.a + rnd(-spread, spread), s.speed * rnd(0.94, 1.06), s.dmg, true, s.bolt, { pierce: s.pierce, burn: s.burn, boom: s.boom, life: s.boom ? 0.9 : 1.2 });
   p.bloom = Math.min(1.5, p.bloom + 0.18 * (s.bloom ?? 1) * (s.pellets > 1 ? 0.5 : 1));
   cam.x -= Math.cos(p.a) * s.kick; cam.y -= Math.sin(p.a) * s.kick; // la cámara retrocede con el disparo
@@ -2143,6 +2193,7 @@ function hurtEnemy(e, dmg, a) {
 function hurtPlayer(dmg, a) {
   const p = room.p;
   if (p.dead) return;
+  dmg *= (1 - 0.08 * sk('tough')) * (room.painT > 0 ? 0.7 : 1); // piel dura y analgésicos
   run.hp -= dmg; p.hurtT = 0.35;
   if (a !== undefined) { p.vx += Math.cos(a) * dmg * 6; p.vy += Math.sin(a) * dmg * 6; } // el impacto te empuja
   cam.shake = Math.max(cam.shake, 5);
@@ -2357,6 +2408,8 @@ function update(dt) {
     else if (room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
   }
   updateDoors(dt); updateCams(dt); updateCoins(dt); updateStreet(dt);
+  if (room.heal) { const H = room.heal, k = Math.min(dt, H.t); run.hp = Math.min(run.maxHp, run.hp + H.amt * k / H.T); if ((H.t -= dt) <= 0) room.heal = null; } // curación poco a poco
+  if (room.energyT > 0) room.energyT -= dt; if (room.painT > 0) room.painT -= dt;
   if (room.drag) { // el cuerpo que arrastras va detrás de ti y deja un rastro de sangre
     const b = room.drag, tx = p.x - Math.cos(p.a) * 22, ty = p.y - Math.sin(p.a) * 22;
     useFloor(b.z);
@@ -2595,6 +2648,13 @@ function drawHead(c, r, L, skin) {
   else if (L.head === 'police') { c.beginPath(); c.arc(r * 0.02, 0, R * 1.05, 0, 7); c.fill(); c.fillStyle = '#0c1226'; c.beginPath(); c.ellipse(r * 0.38, 0, R * 0.5, R * 0.9, 0, -Math.PI / 2, Math.PI / 2); c.fill(); c.fillStyle = '#e8c45a'; c.beginPath(); c.arc(r * 0.24, 0, R * 0.22, 0, 7); c.fill(); }
   else if (L.head === 'hair') { c.beginPath(); c.arc(r * 0.0, 0, R * 1.02, Math.PI * 0.55, Math.PI * 1.45); c.fill(); }
   else if (L.head === 'beanie') { c.beginPath(); c.arc(r * 0.02, 0, R * 1.02, Math.PI * 0.42, Math.PI * 1.58); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 1.5; c.beginPath(); c.arc(r * 0.02, 0, R * 0.8, Math.PI * 0.55, Math.PI * 1.45); c.stroke(); }
+  if (L.mask && L.mask !== 'ninguna') { // máscara sobre la cara (la mitad de delante, vista desde arriba)
+    const fx = r * 0.06, face = col => { c.fillStyle = col; c.beginPath(); c.arc(fx, 0, R * 1.04, -Math.PI / 2, Math.PI / 2); c.fill(); };
+    if (L.mask === 'pasamontanas') { c.fillStyle = '#121316'; c.beginPath(); c.arc(fx, 0, R * 1.06, 0, 7); c.fill(); c.fillStyle = skin; c.fillRect(fx + R * 0.45, -R * 0.55, R * 0.35, R * 1.1); }
+    else if (L.mask === 'hockey') { face('#e8e6de'); c.fillStyle = '#2a2a2a'; for (const [dx, dy] of [[0.5, -0.35], [0.5, 0.35], [0.75, 0], [0.3, 0]]) { c.beginPath(); c.arc(fx + R * dx, R * dy, R * 0.09, 0, 7); c.fill(); } }
+    else if (L.mask === 'calavera') { face('#ded8c8'); c.fillStyle = '#151515'; for (const dy of [-0.38, 0.38]) { c.beginPath(); c.arc(fx + R * 0.45, R * dy, R * 0.2, 0, 7); c.fill(); } c.fillRect(fx + R * 0.75, -R * 0.08, R * 0.2, R * 0.16); }
+    else if (L.mask === 'payaso') { face('#f2efe8'); c.fillStyle = '#e04a2a'; c.beginPath(); c.arc(fx + R * 0.95, 0, R * 0.2, 0, 7); c.fill(); c.fillStyle = '#ff8a2a'; for (const dy of [-1, 1]) { c.beginPath(); c.arc(fx - R * 0.2, dy * R * 0.95, R * 0.35, 0, 7); c.fill(); } }
+  }
   c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1.2; c.beginPath(); c.arc(r * 0.05, 0, R * (L.head === 'helmet' || L.head === 'visor' ? 1.12 : L.head === 'hood' ? 1.22 : 1), 0, 7); c.stroke();
 }
 // o: { gun: [largo, ancho], walk: fase de la zancada, mv: 0-1 cuánto anda, skin, hurt, silenced, shield }
@@ -2608,7 +2668,7 @@ function drawHuman(c, x, y, a, r, L, o) {
     c.fillStyle = '#0f1012'; rrect(c, lx + r * 0.12, sd * r * 0.44 - r * 0.19, r * 0.24, r * 0.38, r * 0.12); c.fill(); // bota
   }
   if (g) { // arma por debajo de las manos
-    c.fillStyle = '#1b1f24'; c.fillRect(r * 0.55, -g[1] / 2 + r * 0.05, g[0], g[1]);
+    c.fillStyle = o.gunCol || '#1b1f24'; c.fillRect(r * 0.55, -g[1] / 2 + r * 0.05, g[0], g[1]);
     c.fillStyle = '#3a414c'; c.fillRect(r * 0.55, -g[1] / 2 + r * 0.05, g[0], 1.2);
     if (o.silenced) { c.fillStyle = '#121519'; c.fillRect(r * 0.55 + g[0], -g[1] / 2 + r * 0.05 + 0.5, 6, g[1] - 1); }
   }
@@ -3113,7 +3173,7 @@ function render() {
   // jugador
   if (!p.dead) {
     p.walk = (p.walk || 0) + p.speed * 0.016 * 0.22; // aproximado: la zancada no necesita el dt exacto
-    drawHuman(ctx, p.x, p.y, p.a, p.r, room.disguise ? LOOK.guard : LOOK.player, { gun: GUN_SHAPE[curW().id] || [16, 6], walk: p.walk, mv: Math.min(1, p.speed / 120), skin: SKIN[0], hurt: p.hurtT > 0, silenced: wstats(curW()).silenced });
+    drawHuman(ctx, p.x, p.y, p.a, p.r, playerLook(), { gun: GUN_SHAPE[curW().id] || [16, 6], gunCol: gunColor(), walk: p.walk, mv: Math.min(1, p.speed / 120), skin: SKIN[0], hurt: p.hurtT > 0, silenced: wstats(curW()).silenced });
     if (curW().id === 'crossbow') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = '#20262e'; ctx.fillRect(16, -8, 2.5, 16); ctx.restore(); }
     if (p.swingT > 0) {
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
@@ -3206,10 +3266,16 @@ function render() {
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = 'rgba(255,170,90,0.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, 7); ctx.stroke();
   }
-  if (s.laser && !p.dead) {
-    const d = castRay(p.x, p.y, Math.cos(p.a), Math.sin(p.a), 600);
-    ctx.strokeStyle = 'rgba(255,60,60,0.55)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(p.x + Math.cos(p.a) * 22, p.y + Math.sin(p.a) * 22); ctx.lineTo(p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); ctx.stroke();
+  if (s.laser && settings.laser && !p.dead) { // mira láser: haz que se desvanece con la distancia y punto con halo donde da
+    const c = Math.cos(p.a), sn = Math.sin(p.a), d = castRay(p.x, p.y, c, sn, 700), x0 = p.x + c * 22, y0 = p.y + sn * 22, x1 = p.x + c * d, y1 = p.y + sn * d;
+    const fl = 0.85 + 0.15 * Math.sin(room.time * 40), g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, `rgba(255,50,50,${(0.5 * fl).toFixed(3)})`); g.addColorStop(1, 'rgba(255,50,50,0.06)');
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    ctx.strokeStyle = g; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,150,140,0.55)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + c * Math.min(d - 22, 160), y0 + sn * Math.min(d - 22, 160)); ctx.stroke();
+    ctx.fillStyle = glow(ctx, x1, y1, 10, '255,60,60', 0.95 * fl); ctx.beginPath(); ctx.arc(x1, y1, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,235,230,0.95)'; ctx.beginPath(); ctx.arc(x1, y1, 1.6, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
   }
   if (!p.dead) for (const w of room.warns) {
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(w.a);
@@ -3410,6 +3476,8 @@ function syncObjs() { // lista desplegable de objetivos (se abre sola unos segun
 }
 function syncHud() {
   if (room.obj) syncObjs();
+  const it = run.items || {}, nIt = room.chase ? 0 : Object.values(it).reduce((a, b) => a + b, 0), ib = $('bItem');
+  if (ib.hidden !== !nIt) ib.hidden = !nIt; if ($('itemN').textContent !== String(nIt)) $('itemN').textContent = nIt;
   const tb = $('bTool'), jn = room.chase ? 0 : room.jams; if (tb.hidden !== !(jn > 0 || room.jamT > 0)) tb.hidden = !(jn > 0 || room.jamT > 0); if ($('toolN').textContent !== String(jn)) $('toolN').textContent = jn;
   const p = room.p, w = curW(), s = wstats(w);
   const key = `${s.name}|${w.ammo}|${w.reserve}|${run.nades}|${run.charges}|${room.charges.length}|${run.light}|${p.reloadT > 0}|${touchMode}|${run.weapons.length}`;
@@ -3466,11 +3534,19 @@ function renderShop() {
       const a = AMMO[id], has = w.ats.includes(id), on = w.at === id;
       html += item(a.name, a.desc, `ammoT:${id}`, on ? 'En uso' : has ? 'Usar' : `$${a.price}`, on || (!has && run.money < a.price), has);
     }
-  } else {
+  } else if (shopTab === 'eq') {
     html += item('Caja de munición', `+50 % de reserva en todas tus armas${ammoFull() ? ' (ya están llenas)' : ''}`, 'ammo', '$45', run.money < 45 || ammoFull());
     html += item('C4', `Se planta casi sin ruido y estalla cuando la detonas: abre paredes y cajas, o sirve de trampa. Tienes ${run.charges} (máx. 4)`, 'charge', '$70', run.money < 70 || run.charges >= 4);
     html += item('Granada', `Radio enorme, ruido enorme. Tienes ${run.nades} (máx. 5)`, 'nade', '$60', run.money < 60 || run.nades >= 5);
     html += item('Placas de blindaje', `+25 de vida máxima, con la que empiezas cada sala (${run.maxHp}, tope 200)`, 'maxhp', '$220', run.money < 220 || run.maxHp >= 200);
+    html += `<span style="font-size:12px;letter-spacing:.14em;color:var(--beam);margin-top:6px">CONSUMIBLES · SE USAN CON EL BOTÓN DE BOTIQUÍN (H)</span>`;
+    for (const k in ITEMS) { const [n, d, pr] = ITEMS[k], have = (run.items && run.items[k]) || 0; html += item(n, `${d}. Tienes ${have} (máx. 5)`, `item:${k}`, `$${pr}`, run.money < pr || have >= 5); }
+  } else if (shopTab === 'hab') {
+    for (const k in SKILLS) { const lv = sk(k), pr = SKILL_COST[lv]; html += item(`${SKILLS[k][0]} ${'●'.repeat(lv)}${'○'.repeat(3 - lv)}`, SKILLS[k][1], `skill:${k}`, lv >= 3 ? 'Al máximo' : `$${pr}`, lv >= 3 || run.money < pr, lv >= 3); }
+  } else {
+    const st = style(), row = (title, list, key, cur) => `<span style="font-size:12px;letter-spacing:.14em;color:var(--beam);margin-top:6px">${title}</span>` +
+      Object.entries(list).map(([k, v]) => { const own = !v[1] || st.owned.includes(k); return item(v[0], own ? (cur === k ? 'Puesto' : 'Tuyo') : 'Se compra una vez', `style:${key}:${k}`, cur === k ? 'Puesto' : own ? 'Poner' : `$${v[1]}`, cur === k || (!own && run.money < v[1]), cur === k); }).join('');
+    html += row('ROPA', OUTFITS, 'outfit', st.outfit) + row('MÁSCARA', MASKS, 'mask', st.mask) + row('CAMUFLAJE DE LAS ARMAS', CAMOS, 'camo', st.camo);
   }
   $('shopList').innerHTML = html;
   $('bNext').textContent = `Siguiente: ${mission(run.level).name}`;
@@ -3487,13 +3563,17 @@ function shopAct(act) {
   else if (k === 'nade') { pay(60); run.nades++; }
   else if (k === 'charge') { pay(70); run.charges++; }
   else if (k === 'maxhp') { pay(220); run.maxHp += 25; run.hp += 25; }
+  else if (k === 'item') { pay(ITEMS[v][2]); run.items = run.items || {}; run.items[v] = (run.items[v] || 0) + 1; }
+  else if (k === 'skill') { const lv = sk(v); pay(SKILL_COST[lv]); run.skills = { ...run.skills, [v]: lv + 1 }; }
+  else if (k === 'style') { const [, key, id] = act.split(':'), list = { outfit: OUTFITS, mask: MASKS, camo: CAMOS }[key], st = style(); if (list[id][1] && !st.owned.includes(id)) { pay(list[id][1]); st.owned.push(id); } st[key] = id; run.style = st; }
   renderShop();
   save();
 }
 
 // ================= Audio (sintetizado, sin archivos) =================
 // Reverberación (más dentro que fuera), panorama según dónde suena y ambiente: viento fuera, zumbido eléctrico dentro
-let ac = null, noiseBuf = null, master = null, verb = null, amb = null, out = null, rvAmt = 0;
+let ac = null, noiseBuf = null, master = null, verb = null, amb = null, out = null, rvAmt = 0, musicBus = null;
+function applyVolumes() { if (master) master.gain.value = 0.8 * settings.sfx; if (musicBus) musicBus.gain.value = settings.music; }
 function initAudio() {
   if (ac) { ac.resume(); return; }
   try {
@@ -3501,7 +3581,8 @@ function initAudio() {
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.2;
     comp.connect(ac.destination);
-    master = ac.createGain(); master.gain.value = 0.8; master.connect(comp);
+    master = ac.createGain(); master.gain.value = 0.8 * settings.sfx; master.connect(comp);
+    musicBus = ac.createGain(); musicBus.gain.value = settings.music; musicBus.connect(comp);
     out = master;
     noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
     const d = noiseBuf.getChannelData(0);
@@ -3530,7 +3611,7 @@ let music = null;
 const STEP = 60 / 92 / 4, CHORDS = [[45, [0, 3, 7]], [41, [0, 4, 7]], [48, [0, 4, 7]], [43, [0, 4, 7]]];
 const mfreq = m => 440 * Math.pow(2, (m - 69) / 12);
 function initMusic() {
-  const g = ac.createGain(); g.gain.value = 0; g.connect(master);
+  const g = ac.createGain(); g.gain.value = 0; g.connect(musicBus);
   const dl = ac.createDelay(1), fb = ac.createGain(), dw = ac.createGain(); dl.delayTime.value = STEP * 3; fb.gain.value = 0.38; dw.gain.value = 0.45;
   dl.connect(fb).connect(dl); dl.connect(dw).connect(g); // eco del arpegio
   music = { g, dl, step: 0, next: 0 };
@@ -3655,6 +3736,7 @@ function sfx(k, x, y) {
     case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
     case 'plant': burst(0.03, 0.2, 2500, 'bandpass', 3); tone(1800, 1800, 0.05, 0.08, 'square', 0.12); break;
     case 'click': tone(1600, 1600, 0.03, 0.12); tone(800, 800, 0.05, 0.1, 'square', 0.05); break;
+    case 'heal': tone(520, 780, 0.18, 0.09, 'sine'); tone(780, 1040, 0.2, 0.07, 'sine', 0.12); break;
     case 'horn': tone(410, 400, 0.35, 0.06 * v, 'square'); tone(520, 510, 0.35, 0.05 * v, 'square'); break;
     case 'door': burst(0.08, 0.12 * v, 900, 'bandpass', 2); tone(180, 120, 0.12, 0.05 * v, 'triangle'); break;
     case 'tink': tone(3200, 2800, 0.06, 0.08 * v, 'triangle'); tone(4100, 3600, 0.05, 0.05 * v, 'triangle', 0.07); break;
@@ -3673,7 +3755,7 @@ function sfx(k, x, y) {
 function show(id) {
   ambience(id === null);
   if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
-  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -3763,6 +3845,8 @@ addEventListener('keydown', e => {
   if (state !== 'play' || e.repeat) return;
   if (e.code === 'KeyC') { toggleSneak(); return; }
   if (e.code === 'KeyJ') { useJammer(); return; }
+  if (e.code === 'KeyL') { settings.laser = !settings.laser; saveSettings(); banner(settings.laser ? 'Mira láser encendida' : 'Mira láser apagada'); return; }
+  if (e.code === 'KeyH') { useItem(); return; }
   if (e.code === 'KeyO') { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; return; }
   const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
@@ -3799,6 +3883,39 @@ $('bfPlan').addEventListener('click', e => {
   renderPlan(); sfx('click');
 });
 $('bTool').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); useJammer(); });
+$('bItem').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); useItem(); });
+// ---- Ajustes y partidas
+let settingsBack = 'menu';
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* sin almacenamiento */ } applyVolumes(); }
+function openSettings(back) {
+  settingsBack = back;
+  $('sMusic').value = Math.round(settings.music * 100); $('sSfx').value = Math.round(settings.sfx * 100); $('sSens').value = Math.round(settings.sens * 100);
+  $('sVib').checked = settings.vib; $('sLaser').checked = settings.laser;
+  show('settings');
+}
+for (const [id, k, f] of [['sMusic', 'music', v => v / 100], ['sSfx', 'sfx', v => v / 100], ['sSens', 'sens', v => v / 100]]) $(id).addEventListener('input', e => { settings[k] = f(+e.target.value); saveSettings(); });
+$('sVib').addEventListener('change', e => { settings.vib = e.target.checked; saveSettings(); buzz(30); });
+$('sLaser').addEventListener('change', e => { settings.laser = e.target.checked; saveSettings(); });
+$('bSettings').addEventListener('click', () => { initAudio(); openSettings('menu'); });
+$('bPauseSet').addEventListener('click', () => openSettings('pause'));
+$('bSetBack').addEventListener('click', () => { if (settingsBack === 'pause') show('pause'); else { refreshMenu(); show('menu'); } });
+function renderSlots() {
+  $('slotList').innerHTML = [1, 2, 3].map(n => {
+    const d = loadSave(n), t = d && d.t ? new Date(d.t).toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div class="slot${n === slot ? ' cur' : ''}"><div><b>Ranura ${n}${n === slot ? ' · actual' : ''}</b><small>${d ? `Misión ${d.run.level}: ${mission(d.run.level).name} · $${d.run.money}${t ? ' · ' + t : ''}` : 'Vacía'}</small></div>` +
+      `<div class="row">${d ? `<button class="cta" data-slot="load:${n}">Jugar</button><button class="ghost" data-slot="del:${n}">Borrar</button>` : `<button class="cta" data-slot="new:${n}">Nueva</button>`}</div></div>`;
+  }).join('');
+}
+$('bSlots').addEventListener('click', () => { renderSlots(); show('slots'); });
+$('bSlotsBack').addEventListener('click', () => { refreshMenu(); show('menu'); });
+$('slotList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-slot]'); if (!b) return;
+  const [k, n] = b.dataset.slot.split(':'), i = +n;
+  if (k === 'del') { if (b.dataset.sure) { try { localStorage.removeItem(SLOT_KEY(i)); } catch (er) { /* sin almacenamiento */ } renderSlots(); } else { b.dataset.sure = '1'; b.textContent = '¿Seguro?'; } return; }
+  setSlot(i);
+  if (k === 'new') { begin(); newRun(); brief(startRoom); return; }
+  const d = loadRun(); if (d) { if (d.shop) openShop('Partida guardada. Prepárate para la siguiente misión.'); else brief(startRoom); }
+});
 function loadRun() {
   const d = loadSave();
   if (!d) { refreshMenu(); return null; }
