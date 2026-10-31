@@ -254,8 +254,8 @@ const path = require('path');
   const alarm = await ev(() => { const r = __apagon.room; return { alarm: r.alarm, taken: r.loot.taken, timer: r.timer > 20 }; });
   assert.deepStrictEqual(alarm, { alarm: true, taken: true, timer: true });
   await shot('alarm');
-  // Salida → tienda → comprar arma y mejora → siguiente sala
-  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  // Salida → tienda → comprar arma y mejora → siguiente sala (y se empieza con la vida llena aunque acabaras herido)
+  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 23; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(200);
   assert.strictEqual(await ev(() => __apagon.state), 'shop');
   await ev(() => { __apagon.run.money = 1000; });
@@ -275,7 +275,7 @@ const path = require('path');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.money, __apagon.run.weapons.length]), ['shop', 470, 2]);
   await shot('shop');
   await page.click('#bNext');
-  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['play', 2]);
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level, __apagon.run.hp]), ['play', 2, 100], 'la sala nueva empieza con la vida llena');
   await page.waitForTimeout(1500);
 
   // Si se acaba el tiempo antes del golpe, también te atrapan

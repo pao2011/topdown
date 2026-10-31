@@ -200,6 +200,7 @@ function splitRooms(x0, y0, x1, y1, leaves, doors, rand, ri) {
 }
 const md = (a, b) => Math.abs(a % W - b % W) + Math.abs(((a / W) | 0) - ((b / W) | 0));
 const lcell = L => ((L.y0 + L.y1) >> 1) * W + ((L.x0 + L.x1) >> 1);
+const lampAt = (c, r, z, rgb, kind, oy = 0) => ({ x: (c % W) * T + T / 2, y: ((c / W) | 0) * T + T / 2 + oy, r, z, rgb, kind });
 const nearDoors = doors => c => doors.some(([dx, dy]) => Math.abs(dx - c % W) <= 2 && Math.abs(dy - ((c / W) | 0)) <= 2);
 // Coloca props en la planta actual si caben; si cortarían el paso a alguna zona, se deshacen
 function placer(start, avoid) {
@@ -254,7 +255,7 @@ function layoutBoss() { // vestíbulo a la izquierda y una gran arena con column
   carveDoor(6, 10, 1);
   for (const [px, py] of [[11, 5], [11, 15], [16, 10], [21, 5], [21, 15]]) for (let k = 0; k < 4; k++) map[(py + (k >> 1)) * W + px + (k & 1)] = WALL;
   return { start: 10 * W + 3, exit: 10 * W + 27, loot: -1, lootZ: 0, stairs: [], spawnOk: i => i % W >= 9,
-    lamps: [[9, 10], [19, 3], [19, 18], [25, 6], [25, 15]].map(([x, y]) => [y * W + x, LAMP_R, 0, '255,205,150']) };
+    lamps: [[9, 10], [19, 3], [19, 18], [25, 6], [25, 15]].map(([x, y]) => lampAt(y * W + x, LAMP_R, 0, '255,205,150', 'floor')) };
 }
 
 // Golpe: un edificio (a veces con primera planta) en medio de un patio con aparcamiento, garita,
@@ -318,10 +319,21 @@ function layoutHeist(level, rand, ri) {
   else { const d = bfs(start); vault = leaves.reduce((a, b) => d[lcell(b)] > d[lcell(a)] ? b : a); }
 
   const lamps = [];
-  const light = (L, rgb, z) => { // unas salas iluminadas de lleno, otras con un punto de luz, el resto a oscuras
+  // Unas salas iluminadas de lleno (tubo fluorescente en la pared), otras con una lámpara de pie en una esquina, el resto a oscuras
+  const light = (L, rgb, z) => {
     const lr = rand(), w = L.x1 - L.x0 + 1, h = L.y1 - L.y0 + 1;
-    if (lr < 0.35) lamps.push([lcell(L), clamp(Math.max(w, h) * T * 0.6, 110, 240), z, rgb]);
-    else if (lr < 0.55) lamps.push([lcell(L), 100, z, '255,205,150']);
+    if (lr < 0.35) {
+      const R = clamp(Math.max(w, h) * T * 0.85, 140, 300);
+      for (const [row, wall, kind] of [[L.y0, L.y0 - 1, 'wallN'], [L.y1, L.y1 + 1, 'wallS']]) for (const dx of [0, 1, -1, 2, -2]) {
+        const cx = ((L.x0 + L.x1) >> 1) + dx, c = row * W + cx;
+        if (cx < L.x0 || cx > L.x1 || map[c] !== FLOOR || map[wall * W + cx] !== WALL) continue;
+        lamps.push(lampAt(c, R, z, rgb, kind, kind === 'wallN' ? -T / 2 + 4 : T / 2 - 4));
+        return;
+      }
+    }
+    if (lr < 0.55) for (const c of [L.y0 * W + L.x0, L.y0 * W + L.x1, L.y1 * W + L.x0, L.y1 * W + L.x1, lcell(L)]) {
+      if (map[c] === FLOOR) { lamps.push(lampAt(c, lr < 0.35 ? clamp(Math.max(w, h) * T * 0.7, 120, 240) : 100, z, '255,205,150', 'floor')); return; }
+    }
   };
   let place = placer(start, c => nearDoor(c) || nearStairs(c) || md(c, start) <= 3 || md(c, exit) <= 2);
   for (const L of leaves) {
@@ -346,7 +358,8 @@ function layoutHeist(level, rand, ri) {
     const door = rand() < 0.5 ? [y0 * W + x0 + 1, y0 * W + x0 + 2] : [(y0 + 3) * W + x0 + 1, (y0 + 3) * W + x0 + 2];
     if (!place(ring.filter(k => !door.includes(k)), WALL)) continue;
     inner.forEach(k => { zone[k] = 1; FK[k] = 3; });
-    lamps.push([inner[0], 80, 0, '255,205,150']);
+    const topDoor = door[0] === y0 * W + x0 + 1; // bombilla en la pared sin puerta
+    lamps.push(topDoor ? lampAt(inner[2], 80, 0, '255,205,150', 'wallS', T / 2 - 4) : lampAt(inner[0], 80, 0, '255,205,150', 'wallN', -T / 2 + 4));
     break;
   }
   // Contenedores de mercancías, barreras de hormigón (cubren de las balas, no de la vista), coches, árboles, setos y cajas
@@ -357,9 +370,10 @@ function layoutHeist(level, rand, ri) {
   for (let k = 8 + ri(6); k > 0; k--) { const c = yard(); if (c >= 0) for (const b of [c, c + 1, c + W, c + W + 1].slice(0, 2 + ri(3))) place([b], BUSH); }
   for (let k = 4; k > 0; k--) { const c = yard(); if (c >= 0) place([c], CRATE); }
   // Farolas de sodio alrededor del edificio y en el aparcamiento; la zona de llegada queda en penumbra
-  for (let x = bx0; x <= bx1; x += 8 + ri(4)) lamps.push([(by0 - 2) * W + x, 170, 0, '255,160,80'], [(by1 + 2) * W + x, 170, 0, '255,160,80']);
-  for (let y = by0 + 4; y < by1; y += 9 + ri(4)) { lamps.push([y * W + bx1 + 2, 170, 0, '255,160,80']); if (rand() < 0.4) lamps.push([y * W + bx0 - 2, 170, 0, '255,160,80']); }
-  lamps.push([4 * W + ((px0 + px1) >> 1), 190, 0, '255,160,80']);
+  const street = c => lampAt(c, 170, 0, '255,160,80', 'street');
+  for (let x = bx0; x <= bx1; x += 8 + ri(4)) lamps.push(street((by0 - 2) * W + x), street((by1 + 2) * W + x));
+  for (let y = by0 + 4; y < by1; y += 9 + ri(4)) { lamps.push(street(y * W + bx1 + 2)); if (rand() < 0.4) lamps.push(street(y * W + bx0 - 2)); }
+  lamps.push({ ...street(4 * W + ((px0 + px1) >> 1)), r: 190 });
 
   if (maps[1]) { // amueblar la primera planta
     useFloor(1);
@@ -389,16 +403,19 @@ function buildRoom(level, seed) {
   const r = {
     level, W, H, maps, fks, map: maps[0], stairs: L.stairs, start: center(L.start), exit: center(L.exit),
     loot: L.loot >= 0 ? { ...center(L.loot), z: L.lootZ, taken: false } : null,
-    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [], charges: [], crateHp: {},
+    lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [], charges: [], crateHp: {}, fx: [],
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0,
   };
-  for (const [c, lr, z, rgb] of L.lamps) {
-    if (c <= 0 || c >= W * H || !maps[z]) continue;
-    useFloor(z);
+  for (const s of L.lamps) {
+    if (!maps[s.z]) continue;
+    useFloor(s.z);
+    const c = cellOf(s.x, s.y);
     if (BLOCK_SIGHT[map[c]] || map[c] === VOID) continue;
-    const p = center(c);
-    r.lamps.push({ x: p.x, y: p.y, r: lr, z, rgb, on: true, poly: visPoly(p.x, p.y, 0, Math.PI, lr, 96) });
+    // hx/hy: dónde está la luminaria dibujada (en perspectiva, por encima de la base); ahí se le dispara
+    const [hx, hy] = s.kind === 'street' ? [6, -30] : s.kind === 'floor' ? [0, -20] : s.kind === 'wallN' ? [0, -2] : [0, 2];
+    r.lamps.push({ ...s, hx: s.x + hx, hy: s.y + hy, on: true, poly: visPoly(s.x, s.y, 0, Math.PI, s.r, 96) });
   }
+  if (r.loot) { useFloor(r.loot.z); r.loot.poly = visPoly(r.loot.x, r.loot.y, 0, Math.PI, 80, 40); } // su propio brillo dorado
   useFloor(0);
   if (boss) {
     const b = makeEnemy('boss', 10 * W + 24, rand);
@@ -434,7 +451,7 @@ function buildRoom(level, seed) {
   const goal = r.loot || r.exit;
   r.p.a = Math.atan2(goal.y - r.start.y, goal.x - r.start.x);
   // Cuenta atrás siempre: hasta dar el golpe (o abatir al jefe); al robar, otra más corta para escapar
-  r.timer = boss ? 300 : Math.round(70 + Math.hypot(goal.x - r.start.x, goal.y - r.start.y) / T * 1.6);
+  r.timer = boss ? 420 : Math.round(180 + Math.hypot(goal.x - r.start.x, goal.y - r.start.y) / T * 3);
   return r;
 }
 
@@ -469,6 +486,7 @@ const curW = () => run.weapons[run.cur];
 function wstats(w) { const s = { ...WEAPONS[w.id] }; for (const m of w.mods) MODS[m].apply(s); return s; }
 
 function startRoom() {
+  run.hp = run.maxHp; // cada sala (y cada reintento) empieza con la vida llena
   const { snap, ...rest } = run;
   run.snap = JSON.stringify(rest);
   room = buildRoom(run.level, run.seed + run.level * 977);
@@ -490,11 +508,10 @@ function completeRoom() {
   const bonus = 80 + 20 * run.level, ghost = room.detected ? 0 : 120, wasBoss = run.level % BOSS_EVERY === 0;
   const loot = room.loot ? 150 + 50 * run.level : 0;
   run.money += bonus + ghost + loot;
-  run.hp = Math.min(run.maxHp, run.hp + 20);
   run.level++;
   sfx('buy');
   const stats = (loot ? `Botín <b>+$${loot}</b> · ` : '') + `Bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
-    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + ` · +20 de vida`;
+    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '');
   if (!wasBoss) { openShop(stats); return; }
   winStats = stats;
   state = 'win';
@@ -626,6 +643,8 @@ function lit(x, y, z) {
     if (d < (run.light ? HALO_ON : HALO_OFF) + 6 && los(p.x, p.y, X, Y)) return true;
     if (run.light && d < BEAM && Math.abs(angDiff(p.a, Math.atan2(Y - p.y, X - p.x))) < 0.66 && los(p.x, p.y, X, Y)) return true;
     if (room.lamps.some(l => l.on && l.z === z && Math.hypot(l.x - X, l.y - Y) < l.r + 6 && los(l.x, l.y, X, Y))) return true;
+    const L = room.loot; // el botín también da luz
+    if (L && !L.taken && L.z === z && Math.hypot(L.x - X, L.y - Y) < 86 && los(L.x, L.y, X, Y)) return true;
   }
   return false;
 }
@@ -762,6 +781,7 @@ function snipe(e) {
   const F = FOES[e.type], mx = e.x + Math.cos(e.a) * (e.r + 14), my = e.y + Math.sin(e.a) * (e.r + 14);
   bullet(mx, my, e.a, 1400, F.dmg, false);
   flash(mx, my, 140, 0.09);
+  fx({ k: 'muzzle', x: mx, y: my, a: e.a, life: 0.06, s: 1.3 });
   noise(e.x, e.y, 520, 'eshot', e);
   sfx('eshot', e.x, e.y);
   e.fireT = 1 / F.rate;
@@ -776,6 +796,7 @@ function bossAttack(e, dt, d) {
       const mx = e.x + Math.cos(e.a) * (e.r + 10), my = e.y + Math.sin(e.a) * (e.r + 10);
       bullet(mx, my, e.a + rnd(-0.2, 0.2), 600, FOES.boss.dmg, false);
       flash(mx, my, 120, 0.06);
+      fx({ k: 'muzzle', x: mx, y: my, a: e.a, life: 0.05, s: 1.3 });
       sfx('eshot', e.x, e.y);
     }
   } else if (e.fireT <= 0 && e.reactT <= 0) {
@@ -806,6 +827,7 @@ function enemyShoot(e) {
   const mx = e.x + Math.cos(e.a) * (e.r + 6), my = e.y + Math.sin(e.a) * (e.r + 6);
   for (let i = 0; i < F.pellets; i++) bullet(mx, my, e.a + rnd(-F.spread, F.spread), 620, F.dmg, false);
   flash(mx, my, 110, 0.07);
+  fx({ k: 'muzzle', x: mx, y: my, a: e.a, life: 0.05, s: F.pellets > 1 ? 1.4 : 1 });
   noise(e.x, e.y, 420, 'eshot', e);
   sfx('eshot', e.x, e.y);
 }
@@ -887,6 +909,11 @@ function shoot() {
   const quiet = s.silenced || s.bolt;
   noise(p.x, p.y, s.noise, s.noise < 200 ? 'step' : 'shot'); // un disparo silenciado solo despierta sospechas
   if (!quiet) { flash(mx, my, 150, 0.08); p.muzzleT = 0.15; }
+  if (!s.bolt) { // fogonazo y casquillo que sale despedido hacia un lado
+    fx({ k: 'muzzle', x: mx, y: my, a: p.a, life: 0.05, s: s.silenced ? 0.45 : s.pellets > 1 ? 1.5 : 1 });
+    const side = p.a + Math.PI / 2 + rnd(-0.3, 0.3), v = rnd(70, 120);
+    room.parts.push({ x: p.x + Math.cos(p.a) * 6, y: p.y + Math.sin(p.a) * 6, z: curZ, vx: Math.cos(side) * v + p.vx, vy: Math.sin(side) * v + p.vy, t: 0.45, c: '#c9a64a', s: 2.5, shell: true });
+  }
   cam.shake = Math.max(cam.shake, s.pellets > 1 ? 7 : quiet ? 1 : 2.5);
   sfx(s.bolt ? 'bolt' : s.silenced ? 'sil' : s.pellets > 1 ? 'shotgun' : 'shot');
   if (!w.ammo) reload();
@@ -981,7 +1008,7 @@ function toggleLight() { run.light = !run.light; sfx('empty'); }
 
 // ================= Daño, balas, explosiones =================
 function bullet(x, y, a, speed, dmg, mine, bolt = false) {
-  room.bullets.push({ x, y, z: curZ, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, mine, bolt, life: 1.2 });
+  room.bullets.push({ x, y, sx: x, sy: y, z: curZ, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, mine, bolt, life: 1.2 });
 }
 function hurtEnemy(e, dmg, a) {
   e.hp -= dmg;
@@ -1019,15 +1046,18 @@ function updateBullets(dt) {
       const tx = Math.floor(b.x / T), ty = Math.floor(b.y / T), c = ty * W + tx;
       if (border(tx, ty) || BLOCK_SHOT[map[c]]) {
         b.dead = true;
-        sparks(b.x - b.vx * 0.004, b.y - b.vy * 0.004, 4);
+        const ix = b.x - b.vx * 0.004, iy = b.y - b.vy * 0.004; // punto de impacto, justo antes del muro
+        sparks(ix, iy, 4);
+        fx({ k: 'puff', x: ix, y: iy, life: 0.4, r: 9 });
+        decal({ x: ix, y: iy, r: 1.8, hole: true });
         if (!border(tx, ty) && map[c] === GLASS) breakTile(tx, ty, b.mine);
         else if (!border(tx, ty) && map[c] === CRATE && (room.crateHp[c] = (room.crateHp[c] ?? 40) - b.dmg) <= 0) breakTile(tx, ty, b.mine);
         else if (b.mine) noise(b.x, b.y, b.bolt ? 60 : 110, 'impact'); // el impacto también distrae
         break;
       }
       if (b.mine) {
-        for (const l of room.lamps) if (l.on && l.z === b.z && Math.hypot(l.x - b.x, l.y - b.y) < 12) {
-          l.on = false; b.dead = true; sparks(l.x, l.y, 12); lampChanged(l);
+        for (const l of room.lamps) if (l.on && l.z === b.z && Math.hypot(l.hx - b.x, l.hy - b.y) < 11) {
+          l.on = false; b.dead = true; sparks(l.hx, l.hy, 12); lampChanged(l);
           noise(l.x, l.y, 160, 'impact'); sfx('glass', l.x, l.y);
         }
         for (const e of room.enemies) if (e.z === b.z && Math.hypot(e.x - b.x, e.y - b.y) < e.r) {
@@ -1056,6 +1086,7 @@ function updateNades(dt) {
 let lampsDirty = true; // hay que volver a hornear las luces (lámpara rota o pared caída)
 function refreshLamps(x, y) { // la luz de las lámparas se recalcula si cae una pared cerca
   for (const l of room.lamps) if (l.z === curZ && Math.hypot(l.x - x, l.y - y) < l.r + 80) { l.poly = visPoly(l.x, l.y, 0, Math.PI, l.r, 96); lampChanged(l); }
+  if (room.loot && room.loot.z === curZ && Math.hypot(room.loot.x - x, room.loot.y - y) < 160) room.loot.poly = visPoly(room.loot.x, room.loot.y, 0, Math.PI, 80, 40);
   bakeDirty(x, y);
 }
 function breakTile(tx, ty, mine) {
@@ -1091,14 +1122,20 @@ function explode(x, y, foe, R = 125, breakR = 46) {
   for (const l of room.lamps) if (l.on && l.z === z && Math.hypot(l.x - x, l.y - y) < R) { l.on = false; lampChanged(l); }
   noise(x, y, 800, foe ? 'eshot' : 'boom'); // la granada del jefe no cuenta como ruido tuyo
   flash(x, y, 280, 0.35);
-  sparks(x, y, 30);
-  room.decals.push({ x, y, z, r: 30, scorch: true });
+  fx({ k: 'fire', x, y, life: 0.42, r: R * 0.85 }); // bola de fuego
+  fx({ k: 'ring', x, y, life: 0.3, r: R * 1.3 }); // onda expansiva
+  for (let i = 0; i < 8; i++) { const a = rnd(0, 6.3), v = rnd(10, 60); fx({ k: 'smoke', x: x + Math.cos(a) * rnd(0, 20), y: y + Math.sin(a) * rnd(0, 20), vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(1.4, 2.4), r0: rnd(12, 22), r1: rnd(40, 70), g: Math.floor(rnd(62, 92)) }); }
+  for (let i = 0; i < 18; i++) { const a = rnd(0, 6.3), v = rnd(80, 320); room.parts.push({ x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: rnd(0.4, 0.9), c: '#ffb04a', s: 2, glow: true }); } // brasas
+  for (let i = 0; i < 14; i++) { const a = rnd(0, 6.3), v = rnd(120, 360); room.parts.push({ x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: rnd(0.35, 0.7), c: Math.random() < 0.5 ? '#5a5f68' : '#4a3b2a', s: rnd(2.5, 4.5), debris: true }); } // cascotes
+  room.decals.push({ x, y, z, r: 38, scorch: true });
   cam.shake = 16; buzz(90);
   sfx('boom', x, y);
 }
 
 // ================= Efectos =================
 function flash(x, y, r, t) { room.flashes.push({ x, y, z: curZ, r, t, max: t, poly: visPoly(x, y, 0, Math.PI, r, 40) }); }
+function fx(o) { room.fx.push({ z: curZ, t: 0, ...o }); }
+function decal(d) { room.decals.push({ z: curZ, ...d }); if (room.decals.length > 320) room.decals.splice(0, 1); }
 function popup(x, y, text, color) { room.texts.push({ x, y, z: curZ, text, color, t: 1.3 }); }
 function sparks(x, y, n) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.3, s = rnd(60, 260); room.parts.push({ x, y, z: curZ, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: rnd(0.15, 0.4), c: '#ffd98a', s: 2 }); } }
 function blood(x, y, a, n) {
@@ -1106,8 +1143,13 @@ function blood(x, y, a, n) {
   if (room.decals.length < 220) room.decals.push({ x: x + Math.cos(a) * rnd(6, 20), y: y + Math.sin(a) * rnd(6, 20), z: curZ, r: rnd(3, 7) });
 }
 function updateFx(dt) {
-  for (const q of room.parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.9; q.vy *= 0.9; q.t -= dt; }
+  for (const q of room.parts) {
+    q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.9; q.vy *= 0.9;
+    if ((q.t -= dt) <= 0 && (q.shell || q.debris)) decal({ x: q.x, y: q.y, z: q.z, r: q.shell ? 1.6 : q.s * 0.6, shell: q.shell, rubble: q.debris }); // quedan en el suelo
+  }
   room.parts = room.parts.filter(q => q.t > 0);
+  for (const f of room.fx) { f.t += dt; if (f.vx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.97; f.vy *= 0.97; } }
+  room.fx = room.fx.filter(f => f.t < f.life);
   for (const r of room.rings) r.t += dt;
   room.rings = room.rings.filter(r => r.t < 0.7);
   for (const t of room.texts) { t.t -= dt; t.y -= 18 * dt; }
@@ -1224,6 +1266,7 @@ function bakeRegion(z, x0, y0, x1, y1) {
     if (t === BUSH) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(X + T / 2 + 5, Y + T / 2 + 6, 20, 16, 0, 0, 7); g.fill(); }
   }
   for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) drawTile(g, M, x, y, z);
+  for (const l of room.lamps) if (l.z === z && l.x > (X0 - 1) * T && l.x < (X1 + 2) * T && l.y > (Y0 - 1) * T && l.y < (Y1 + 2) * T) drawFixture(g, l);
   brighten(g, bakes[z], x0, y0, x1, y1, 0.8);
   // color de las luces horneado sobre suelos y muros (sodio fuera, fluorescente o cálida dentro), con penumbra
   g.globalCompositeOperation = 'lighter';
@@ -1266,6 +1309,29 @@ function drawFloor(g, x, y, k, z) {
     g.fillStyle = '#1d2024'; g.fillRect(X, Y, T, T); dots(6, '#23272c', '#17191c', 2);
     if (h < 0.25) { g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.arc(X + hash(x, y, 2) * T, Y + hash(x, y, 9) * T, 6 + h * 30, 0, 7); g.fill(); }
     g.fillStyle = '#15171a'; if (x % 2 === 0) g.fillRect(X, Y, 1, T); if (y % 2 === 0) g.fillRect(X, Y, T, 1);
+  }
+}
+// Soportes de las lámparas, en perspectiva: lo vertical sube hacia la parte de arriba de la pantalla
+function drawFixture(g, l) {
+  const { x, y } = l;
+  g.lineCap = 'round';
+  if (l.kind === 'street') { // farola: zapata en la acera, poste y brazo con la luminaria
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x + 9, y + 3, 13, 4, 0.25, 0, 7); g.fill();
+    g.fillStyle = '#3a3e45'; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill();
+    g.fillStyle = '#4e545c'; g.beginPath(); g.arc(x - 1, y - 1, 3, 0, 7); g.fill();
+    g.strokeStyle = '#2b2f35'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 28); g.lineTo(x + 6, y - 30); g.stroke();
+    g.strokeStyle = '#5b626c'; g.lineWidth = 1; g.beginPath(); g.moveTo(x - 1, y - 2); g.lineTo(x - 1, y - 27); g.stroke();
+    g.fillStyle = '#22262b'; g.fillRect(x + 1, y - 33, 11, 5);
+  } else if (l.kind === 'floor') { // lámpara de pie: base, varilla y pantalla
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x + 5, y + 3, 9, 3, 0, 0, 7); g.fill();
+    g.fillStyle = '#2b2a30'; g.beginPath(); g.ellipse(x, y, 6, 3.5, 0, 0, 7); g.fill();
+    g.strokeStyle = '#8a7f6a'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 18); g.stroke();
+    g.fillStyle = '#b9a77e'; g.beginPath(); g.moveTo(x - 7, y - 17); g.lineTo(x + 7, y - 17); g.lineTo(x + 5, y - 26); g.lineTo(x - 5, y - 26); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x - 7, y - 18, 14, 2);
+  } else { // tubo fluorescente atornillado a la pared
+    const n = l.kind === 'wallN';
+    g.fillStyle = '#2e333b'; g.fillRect(x - 14, n ? y - 5 : y + 1, 28, 4);
+    g.fillStyle = '#7d8691'; g.fillRect(x - 12, n ? y - 2 : y, 24, 2);
   }
 }
 const CAR_COLORS = ['#3b2a2f', '#2b3848', '#3d3e44', '#43392a', '#24383b', '#4a4d52'];
@@ -1414,6 +1480,43 @@ function glow(c, x, y, r, rgb, a) {
   g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`); g.addColorStop(0.4, `rgba(${rgb},${(a * 0.7).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
   return g;
 }
+// El botín: lingotes de oro en una vitrina sobre un pedestal, con cordón de terciopelo alrededor y un brillo que lo recorre
+function drawLoot(L) {
+  const x = L.x, y = L.y, t = room.time, c = ctx;
+  const posts = [[-26, -26], [26, -26], [26, 26], [-26, 26]];
+  c.strokeStyle = '#7a1a24'; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath();
+  posts.forEach(([px, py], i) => { const [qx, qy] = posts[(i + 1) % 4]; c.moveTo(x + px, y + py); c.quadraticCurveTo(x + (px + qx) / 2, y + (py + qy) / 2 + 5, x + qx, y + qy); });
+  c.stroke();
+  for (const [px, py] of posts) {
+    c.fillStyle = 'rgba(0,0,0,0.4)'; c.beginPath(); c.arc(x + px + 2, y + py + 3, 3.5, 0, 7); c.fill();
+    c.fillStyle = '#b39a52'; c.beginPath(); c.arc(x + px, y + py, 3.5, 0, 7); c.fill();
+    c.fillStyle = '#e8d38c'; c.beginPath(); c.arc(x + px - 1, y + py - 1, 1.3, 0, 7); c.fill();
+  }
+  c.fillStyle = 'rgba(0,0,0,0.45)'; c.fillRect(x - 10, y - 8, 28, 28); // sombra del pedestal
+  const pg = c.createLinearGradient(x - 14, y - 14, x + 14, y + 14); pg.addColorStop(0, '#565c66'); pg.addColorStop(1, '#25282e');
+  c.fillStyle = pg; c.fillRect(x - 14, y - 14, 28, 28);
+  c.fillStyle = '#17191d'; c.fillRect(x - 14, y + 9, 28, 5); // cara frontal: da altura
+  c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(x - 14, y - 14, 28, 1.5);
+  if (L.taken) { // vitrina rota
+    c.fillStyle = 'rgba(170,215,245,0.6)';
+    for (let i = 0; i < 7; i++) { const a = hash(i, 4, 1) * 6.3, d = 6 + hash(i, 5, 1) * 18, sx = x + Math.cos(a) * d, sy = y + Math.sin(a) * d; c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 3, sy + 1); c.lineTo(sx + 1, sy + 3); c.closePath(); c.fill(); }
+    return;
+  }
+  const bar = (bx, by) => { // lingote: base, cara superior clara y bisel
+    const g = c.createLinearGradient(bx, by - 3, bx, by + 4); g.addColorStop(0, '#f6d27a'); g.addColorStop(1, '#a8761e');
+    c.fillStyle = g; c.beginPath(); c.moveTo(bx - 5, by + 3); c.lineTo(bx + 5, by + 3); c.lineTo(bx + 4, by - 3); c.lineTo(bx - 4, by - 3); c.closePath(); c.fill();
+    c.fillStyle = '#ffe9a8'; c.fillRect(bx - 3.5, by - 2.5, 7, 2);
+    c.strokeStyle = '#6e4c12'; c.lineWidth = 0.6; c.stroke();
+  };
+  for (const [bx, by] of [[-6, 4], [0, 4], [6, 4], [-3, -1], [3, -1], [0, -6]]) bar(x + bx, y + by);
+  c.save(); c.beginPath(); c.rect(x - 11, y - 10, 22, 18); c.clip(); // brillo que recorre los lingotes
+  const sw = x - 30 + ((t * 40) % 90), sg = c.createLinearGradient(sw - 8, y - 10, sw + 8, y + 8);
+  sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,240,0.55)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = sg; c.fillRect(x - 11, y - 10, 22, 18);
+  c.restore();
+  c.strokeStyle = 'rgba(170,215,245,0.55)'; c.lineWidth = 1.2; c.strokeRect(x - 12, y - 12, 24, 22); // vitrina
+  c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x - 9, y + 6); c.lineTo(x - 3, y - 9); c.moveTo(x + 2, y + 7); c.lineTo(x + 6, y - 2); c.stroke();
+}
 function render() {
   const S = zoom * dpr, p = room.p, up = p.z === 1;
   useFloor(p.z);
@@ -1446,7 +1549,13 @@ function render() {
   };
   if (up) { ctx.globalAlpha = 0.28; blit(ctx, bakes[0]); canopies(); ctx.globalAlpha = 1; } // desde arriba, la planta baja se ve apagada
   blit(ctx, bakes[p.z]);
-  for (const d of room.decals) if (here(d)) { ctx.fillStyle = d.scorch ? 'rgba(0,0,0,0.5)' : d.rubble ? 'rgba(80,86,96,0.7)' : 'rgba(110,20,20,0.75)'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); }
+  for (const d of room.decals) if (here(d)) {
+    if (d.scorch) ctx.fillStyle = glow(ctx, d.x, d.y, d.r, '0,0,0', 0.75);
+    else ctx.fillStyle = d.shell ? '#a88a3a' : d.hole ? '#0b0c0e' : d.rubble ? 'rgba(80,86,96,0.75)' : 'rgba(110,20,20,0.75)';
+    if (d.shell) ctx.fillRect(d.x - 1.6, d.y - 0.8, 3.2, 1.6);
+    else { ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); }
+  }
+  if (room.loot && here(room.loot)) drawLoot(room.loot);
   for (const e of room.enemies) {
     const rr = visionRange(e);
     if (!here(e) || !onScreen(e.x, e.y, rr)) continue;
@@ -1506,14 +1615,13 @@ function render() {
     if (maps[1]) { ctx.globalAlpha = 0.14; blit(ctx, bakes[1]); }
     ctx.globalAlpha = 1;
   }
-  // balas
-  ctx.lineCap = 'round';
-  for (const b of room.bullets) {
-    if (!here(b)) continue;
-    ctx.strokeStyle = b.mine ? (b.bolt ? '#c9d6e3' : '#ffe9b0') : '#ff9a7a'; ctx.lineWidth = b.bolt ? 2.5 : 2;
-    ctx.beginPath(); ctx.moveTo(b.x - b.vx * 0.018, b.y - b.vy * 0.018); ctx.lineTo(b.x, b.y); ctx.stroke();
+  for (const q of room.parts) if (here(q) && !q.glow) { ctx.fillStyle = q.c; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
+  for (const f of room.fx) { // humo y polvo: solo se ven donde hay luz
+    if (!here(f) || (f.k !== 'smoke' && f.k !== 'puff')) continue;
+    const k = f.t / f.life, r = f.k === 'smoke' ? f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6) : f.r * (0.5 + k);
+    ctx.fillStyle = f.k === 'smoke' ? glow(ctx, f.x, f.y, r, `${f.g},${f.g},${f.g + 4}`, 0.6 * (1 - k)) : glow(ctx, f.x, f.y, r, '120,124,130', 0.45 * (1 - k));
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
   }
-  for (const q of room.parts) if (here(q)) { ctx.fillStyle = q.c; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
 
   // ---- Oscuridad: luz horneada de las lámparas + linterna, halo y fogonazos ----
   lctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1533,6 +1641,8 @@ function render() {
     fillPoly(lctx, visPoly(p.x, p.y, 0, Math.PI, amb, 48));
   }
   for (const f of room.flashes) if (here(f)) { lctx.fillStyle = glow(lctx, f.x, f.y, f.r, '0,0,0', f.t / f.max); fillPoly(lctx, f.poly); }
+  const L = room.loot;
+  if (L && !L.taken && here(L)) { lctx.fillStyle = glow(lctx, L.x, L.y, 80, '0,0,0', 0.6); fillPoly(lctx, L.poly); }
   // niebla: se pinta sobre la máscara, así solo enturbia lo que está iluminado
   fogPat = fogPat || lctx.createPattern(fogCv, 'repeat');
   const fx = (room.time * 9) % 256, fy = (room.time * 4) % 256;
@@ -1545,6 +1655,57 @@ function render() {
   ctx.setTransform(S, 0, 0, S, ox, oy);
   ctx.globalCompositeOperation = 'lighter'; // tono cálido de la linterna (el de las lámparas va horneado en el suelo)
   if (cone) { ctx.fillStyle = glow(ctx, p.x, p.y, BEAM, '255,217,138', 0.06); fillPoly(ctx, cone); }
+  if (L && !L.taken && here(L)) { ctx.fillStyle = glow(ctx, L.x, L.y, 80, '255,200,90', 0.14); fillPoly(ctx, L.poly); }
+  // lo que emite luz, en modo aditivo: luminarias encendidas, trazadoras, fogonazos, fuego, onda y brasas
+  for (const l of room.lamps) if (l.on && here(l)) {
+    const wallLamp = l.kind === 'wallN' || l.kind === 'wallS';
+    ctx.fillStyle = glow(ctx, l.hx, l.hy, wallLamp ? 18 : 14, l.rgb, 0.55); ctx.beginPath(); ctx.arc(l.hx, l.hy, wallLamp ? 18 : 14, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgb(${l.rgb})`;
+    if (l.kind === 'street') ctx.fillRect(l.x + 2, l.y - 29, 9, 2);
+    else if (l.kind === 'floor') ctx.fillRect(l.x - 6, l.y - 18, 12, 2);
+    else ctx.fillRect(l.x - 12, l.kind === 'wallN' ? l.y - 2 : l.y, 24, 2);
+  }
+  ctx.lineCap = 'round';
+  for (const b of room.bullets) {
+    if (!here(b)) continue;
+    const sp = Math.hypot(b.vx, b.vy), tl = Math.min(Math.hypot(b.x - (b.sx ?? b.x), b.y - (b.sy ?? b.y)), sp * 0.035), ux = b.vx / sp, uy = b.vy / sp;
+    if (!sp || !(tl > 0.5)) continue; // recién salida (o sin origen): aún no tiene estela
+    const col = b.mine ? (b.bolt ? '200,225,255' : '255,225,150') : '255,130,80', tx = b.x - ux * tl, ty = b.y - uy * tl;
+    const gr = ctx.createLinearGradient(tx, ty, b.x, b.y); gr.addColorStop(0, `rgba(${col},0)`); gr.addColorStop(1, `rgba(${col},0.95)`);
+    ctx.strokeStyle = gr; ctx.lineWidth = b.bolt ? 2.5 : 1.8; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.strokeStyle = `rgba(${col},0.16)`; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(b.x - ux * tl * 0.4, b.y - uy * tl * 0.4); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,250,235,0.95)'; ctx.beginPath(); ctx.arc(b.x, b.y, 1.4, 0, 7); ctx.fill();
+  }
+  for (const f of room.fx) {
+    if (!here(f)) continue;
+    const k = f.t / f.life;
+    if (f.k === 'muzzle') { // estrella de fogonazo en la boca del cañón
+      const r = f.s * 14, a = 0.9 * (1 - k);
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a);
+      ctx.fillStyle = glow(ctx, 0, 0, r, '255,210,140', a); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(255,245,215,${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.moveTo(0, -3 * f.s); ctx.lineTo(r * 1.5, 0); ctx.lineTo(0, 3 * f.s); ctx.closePath(); ctx.fill();
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(r * 0.55, d * r * 0.75); ctx.lineTo(r * 0.4, 0); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+    } else if (f.k === 'fire') { // crece rápido y se apaga de blanco a rojo
+      const r = f.r * (0.35 + 0.65 * Math.sqrt(k)), g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+      g.addColorStop(0, `rgba(255,250,220,${(0.95 * (1 - k)).toFixed(3)})`); g.addColorStop(0.35, `rgba(255,170,60,${(0.8 * (1 - k)).toFixed(3)})`);
+      g.addColorStop(0.75, `rgba(200,50,20,${(0.45 * (1 - k)).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
+    } else if (f.k === 'smoke' && f.t < 0.5) { // el fuego ilumina el humo recién salido
+      const r = f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6);
+      ctx.fillStyle = glow(ctx, f.x, f.y, r, '255,140,50', 0.3 * (1 - f.t / 0.5)); ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fill();
+    } else if (f.k === 'ring') {
+      ctx.strokeStyle = `rgba(255,240,220,${(0.6 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 1 + 4 * (1 - k);
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, 7); ctx.stroke();
+    }
+  }
+  for (const q of room.parts) if (here(q) && q.glow) { ctx.fillStyle = `rgba(255,${Math.floor(120 + 100 * Math.min(1, q.t * 2))},60,${Math.min(1, q.t * 2).toFixed(3)})`; ctx.fillRect(q.x - 1, q.y - 1, 2, 2); }
+  if (L && !L.taken && here(L)) for (let i = 0; i < 4; i++) { // destellos sobre los lingotes
+    const a = Math.max(0, Math.sin(room.time * 3 + i * 1.7)), sx = L.x - 8 + hash(i, 1, 3) * 16, sy = L.y - 8 + hash(i, 2, 3) * 12, r = 1 + 3 * a;
+    ctx.fillStyle = `rgba(255,248,220,${(0.9 * a).toFixed(3)})`;
+    ctx.fillRect(sx - r, sy - 0.5, r * 2, 1); ctx.fillRect(sx - 0.5, sy - r, 1, r * 2);
+  }
   ctx.globalCompositeOperation = 'source-over';
 
   // ---- Lo que brilla por encima de la oscuridad ----
@@ -1555,13 +1716,6 @@ function render() {
     ctx.fillStyle = `rgba(${ec},${(0.18 + 0.12 * pulse).toFixed(3)})`; ctx.fillRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
     ctx.strokeStyle = ctx.fillStyle = `rgb(${ec})`; ctx.lineWidth = 2; ctx.strokeRect(room.exit.x - 18, room.exit.y - 18, 36, 36);
     ctx.fillText(room.boss ? 'BLOQUEADA' : 'SALIDA', room.exit.x, room.exit.y);
-  }
-  for (const l of room.lamps) if (l.on && here(l)) { ctx.fillStyle = `rgb(${l.rgb})`; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(l.x, l.y, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = '#fff6e0'; ctx.beginPath(); ctx.arc(l.x, l.y, 4, 0, 7); ctx.fill(); }
-  if (room.loot && !room.loot.taken && here(room.loot)) { // el botín brilla: se ve desde lejos para que sepas adónde ir
-    const L = room.loot, k = 8 + 2 * pulse;
-    ctx.fillStyle = `rgba(255,217,138,${(0.2 + 0.15 * pulse).toFixed(3)})`; ctx.beginPath(); ctx.arc(L.x, L.y, 20, 0, 7); ctx.fill();
-    ctx.fillStyle = '#ffd98a'; ctx.beginPath(); ctx.moveTo(L.x, L.y - k); ctx.lineTo(L.x + k, L.y); ctx.lineTo(L.x, L.y + k); ctx.lineTo(L.x - k, L.y); ctx.closePath(); ctx.fill();
-    ctx.fillText('BOTÍN', L.x, L.y - 26);
   }
   for (const c of room.charges) if (here(c) && Math.sin(room.time * 6) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(c.x, c.y, 2.5, 0, 7); ctx.fill(); } // C4 armada
   for (const n of room.nades) if (here(n) && Math.sin(n.t * (n.t < 0.6 ? 40 : 14)) > 0) { ctx.fillStyle = '#ff5444'; ctx.beginPath(); ctx.arc(n.x, n.y, 2.5, 0, 7); ctx.fill(); }
@@ -1647,7 +1801,7 @@ function drawHud() {
   const uw = vw / ui, uh = vh / ui, x = 14 + inset.l / ui, y = 12 + inset.t / ui, bw = Math.min(150, uw / 2 - 80);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillStyle = 'rgba(14,19,26,0.6)'; ctx.fillRect(x, y + 14, bw, 9);
-  ctx.fillStyle = run.hp < 30 ? '#ff5444' : '#62d6ad'; ctx.fillRect(x, y + 14, bw * run.hp / run.maxHp, 9);
+  ctx.fillStyle = run.hp < 30 ? '#ff5444' : '#62d6ad'; ctx.fillRect(x, y + 14, bw * Math.min(1, run.hp / run.maxHp), 9);
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
   ctx.fillText(`VIDA ${Math.ceil(run.hp)}`, x, y);
   ctx.font = '700 18px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a';
@@ -1765,8 +1919,7 @@ function renderShop() {
     html += item('Caja de munición', `+50 % de reserva en todas tus armas${ammoFull() ? ' (ya están llenas)' : ''}`, 'ammo', '$45', run.money < 45 || ammoFull());
     html += item('C4', `Se planta casi sin ruido y estalla cuando la detonas: abre paredes y cajas, o sirve de trampa. Tienes ${run.charges} (máx. 4)`, 'charge', '$70', run.money < 70 || run.charges >= 4);
     html += item('Granada', `Radio enorme, ruido enorme. Tienes ${run.nades} (máx. 5)`, 'nade', '$60', run.money < 60 || run.nades >= 5);
-    html += item('Botiquín', `+40 de vida (${Math.ceil(run.hp)}/${run.maxHp})`, 'med', '$50', run.money < 50 || run.hp >= run.maxHp);
-    html += item('Placas de blindaje', '+25 de vida máxima (tope 200)', 'maxhp', '$220', run.money < 220 || run.maxHp >= 200);
+    html += item('Placas de blindaje', `+25 de vida máxima, con la que empiezas cada sala (${run.maxHp}, tope 200)`, 'maxhp', '$220', run.money < 220 || run.maxHp >= 200);
   }
   $('shopList').innerHTML = html;
   $('bNext').textContent = `Entrar en la sala ${run.level}`;
@@ -1781,7 +1934,6 @@ function shopAct(act) {
   else if (k === 'ammo') { pay(45); addAmmo(0.5); }
   else if (k === 'nade') { pay(60); run.nades++; }
   else if (k === 'charge') { pay(70); run.charges++; }
-  else if (k === 'med') { pay(50); run.hp = Math.min(run.maxHp, run.hp + 40); }
   else if (k === 'maxhp') { pay(220); run.maxHp += 25; run.hp += 25; }
   renderShop();
   save();
