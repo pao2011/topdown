@@ -50,7 +50,15 @@ const FOES = {
   // escudo: para las balas de frente y gira despacio: hay que rodearlo
   shield: { hp: 120, walk: 42, run: 90,  dmg: 8,  rate: 1.4, spread: 0.12, pellets: 1, vision: 230, reward: 60, r: 15, color: '#5a6f8f', shield: true },
   boss:   { hp: 1400, walk: 50, run: 110, dmg: 7, rate: 1,   spread: 0.2,  pellets: 1, vision: 380, reward: 1000, r: 24, color: '#7a2e2e', boss: true },
+  // civiles: desarmados; si te ven armado, ven un cuerpo u oyen disparos, huyen y llaman a la policía
+  civil:  { hp: 30,  walk: 40, run: 150, dmg: 0,  rate: 0,   spread: 0,    pellets: 0, vision: 230, reward: 0,  r: 12, color: '#8a8f99', civil: true },
+  // policía: llega un rato después del aviso, con uniforme azul y placa dorada; los GEO, en las misiones avanzadas
+  police: { hp: 75,  walk: 62, run: 140, dmg: 8,  rate: 2.2, spread: 0.12, pellets: 1, vision: 290, reward: 40, r: 13, color: '#2a4f9e', cop: true },
+  swatp:  { hp: 150, walk: 55, run: 120, dmg: 9,  rate: 4,   spread: 0.1,  pellets: 1, vision: 300, reward: 70, r: 14, color: '#1b2a4a', cop: true },
 };
+const PUBLIC = { banco: 5, galeria: 4, oficinas: 2, casino: 7, joyeria: 4, museo: 5 }; // civiles por escenario (lugares públicos)
+const LOOT_ALARM = { banco: true, galeria: true, datos: true, joyeria: true, museo: true }; // ahí el botín tiene sensor: cogerlo hace saltar la alarma
+const POLICE_DELAY = { sigilo: 30, mixta: 42, asalto: 22 }; // segundos que tarda la policía desde el aviso
 const BOSS_EVERY = 8; // misión del jefe; tras la campaña sigue el modo infinito con un jefe más duro cada 8 misiones
 // Campaña: cada misión tiene nombre, escenario, tipo de operación, vehículo de huida y, a veces, persecución
 const MISSIONS = [
@@ -73,9 +81,9 @@ const MISSIONS = [
 ];
 const SCENES = { oficinas: 'Oficinas', almacen: 'Almacén del puerto', galeria: 'Galería de arte', banco: 'Banco', datos: 'Centro de datos', fortaleza: 'Fortaleza' };
 const OPS = {
-  sigilo: { name: 'Sigilo', desc: 'Si te detectan, llaman a la policía: salta la alarma y llegan refuerzos. Sin ser visto, el botín vale el doble.' },
-  asalto: { name: 'Asalto', desc: 'La alarma suena desde el principio y hay más guardias, pero llevas granadas y C4 de más, y la C4 revienta las puertas de seguridad.' },
-  mixta:  { name: 'Mixta',  desc: 'Tú decides: entrar en silencio o a tiros.' },
+  sigilo: { name: 'Sigilo', desc: 'Si alguien da el aviso, la policía llega enseguida. Sin que nadie te vea, el botín vale el doble.' },
+  asalto: { name: 'Asalto', desc: 'La alarma suena desde el principio, la policía llega pronto y hay más guardias, pero llevas granadas y C4 de más, y la C4 revienta las puertas de seguridad.' },
+  mixta:  { name: 'Mixta',  desc: 'Tú decides: entrar en silencio o a tiros. Si dan el aviso, la policía tarda algo más en llegar.' },
 };
 const LOOTS = { maletin: ['maletín', 1], carga: ['sacos de dinero', 1.15], diamante: ['diamante', 1.6], lingotes: ['lingotes de oro', 1.4], disco: ['disco cifrado', 1.3] };
 const SCENE_LOOT = { oficinas: 'maletin', almacen: 'carga', galeria: 'diamante', banco: 'lingotes', datos: 'disco' };
@@ -85,6 +93,55 @@ function mission(level) {
   const r = mulberry32(level * 7919), pick = a => a[Math.floor(r() * a.length)], boss = level % BOSS_EVERY === 0;
   return { n: level, name: boss ? `El Alcaide · ${level / BOSS_EVERY}` : `Contrato ${level}`, boss, scene: boss ? 'fortaleza' : pick(['oficinas', 'almacen', 'galeria', 'banco', 'datos']),
     op: pick(['sigilo', 'asalto', 'mixta']), car: pick(['van', 'sedan', 'suv', 'armored']), chase: !boss && r() < 0.45, brief: 'Un contrato más en la ciudad. Cada vez pagan más y vigilan mejor.' };
+}
+// Objetivos: primarios (obligatorios) y secundarios (dan dinero y estrellas). Salen de la misión, así el briefing ya los conoce
+function missionObjectives(level) {
+  const M = mission(level), r = mulberry32(level * 7349 + 11), L = LOOTS[SCENE_LOOT[M.scene]] || ['el botín'];
+  const prim = M.boss ? [{ id: 'boss', text: 'Abate al Alcaide' }, { id: 'escape', text: 'Sal de la fortaleza' }]
+    : [{ id: 'loot', text: `Roba ${L[0]}` }, { id: 'escape', text: 'Escapa en el vehículo de extracción' }];
+  const stealth = M.op !== 'asalto' && !M.boss, pool = [];
+  if (stealth && !LOOT_ALARM[M.scene]) pool.push({ id: 'noalarm', text: 'Que no salte la alarma' });
+  if (stealth && LOOT_ALARM[M.scene]) pool.push({ id: 'noalarmPre', text: 'Que no salte la alarma antes de coger el botín' });
+  if (stealth) pool.push({ id: 'ghost', text: 'Que nadie te detecte' }, { id: 'silent', n: 3, text: 'Elimina a 3 guardias con el cuchillo sin que te vean' });
+  if (PUBLIC[M.scene] && !M.boss) pool.push({ id: 'nocivil', text: 'Ningún civil muerto' });
+  if (!M.boss) pool.push({ id: 'cash', n: 120 + level * 35, text: `Saquea al menos $${120 + level * 35}` });
+  pool.push({ id: 'fast', n: Math.round(3.5 + level * 0.15), text: `Termina en menos de ${Math.round(3.5 + level * 0.15)} minutos` });
+  if (M.scene === 'banco' || M.scene === 'datos') pool.push({ id: 'code', text: 'Abre la cámara con el código, sin hackearla' });
+  if (!stealth) pool.push({ id: 'kills', n: 6 + Math.round(level * 0.8), text: `Abate a ${6 + Math.round(level * 0.8)} enemigos` });
+  const sec = [];
+  while (sec.length < 2 && pool.length) sec.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+  return [...prim.map(o => ({ ...o, primary: true, state: 0 })), ...sec.map(o => ({ ...o, primary: false, state: 0, reward: 100 + 25 * level }))];
+}
+function objState(o) { // 1 cumplido, -1 fallido, 0 pendiente; los de «que no pase X» se cumplen al escapar si no fallaron
+  const R = room, end = R.escaped;
+  switch (o.id) {
+    case 'loot': return R.loot && R.loot.taken ? 1 : 0;
+    case 'vault': return R.doors.some(d => d.open) ? 1 : 0;
+    case 'boss': return R.boss ? 0 : 1;
+    case 'escape': return end ? 1 : 0;
+    case 'noalarm': return R.alarm ? -1 : end ? 1 : 0;
+    case 'noalarmPre': return R.alarmBeforeLoot ? -1 : R.loot && R.loot.taken ? 1 : 0;
+    case 'ghost': return R.detected ? -1 : end ? 1 : 0;
+    case 'nocivil': return R.civKilled ? -1 : end ? 1 : 0;
+    case 'cash': return R.cash >= o.n ? 1 : end ? -1 : 0;
+    case 'fast': return R.time > o.n * 60 ? -1 : end ? 1 : 0;
+    case 'code': return R.vaultBy === 'code' ? 1 : R.vaultBy || end ? -1 : 0;
+    case 'silent': return R.silent >= o.n ? 1 : end ? -1 : 0;
+    case 'kills': return R.kills >= o.n ? 1 : end ? -1 : 0;
+  }
+  return 0;
+}
+function updateObjectives() { // lo cumplido o fallido ya no cambia
+  for (const o of room.obj) {
+    if (o.state) continue;
+    const st = objState(o);
+    if (!st) continue;
+    o.state = st; room.objV = (room.objV || 0) + 1;
+    if (!room.escaped) { banner(`${st > 0 ? 'Objetivo cumplido' : 'Objetivo fallido'}: ${o.text}`); sfx(st > 0 ? 'objective' : 'fail'); }
+  }
+}
+function policeDelay() {
+  return Math.max(12, (room.boss ? 25 : POLICE_DELAY[room.op] || 40) - run.level * 0.7 - room.civKilled * 6);
 }
 function pickFoe(level, roll) {
   const pool = ['guard', 'guard', 'guard', ...(level >= 2 ? ['dog', 'heavy'] : []), ...(level >= 3 ? ['shield', 'sniper'] : []), ...(level >= 4 ? ['elite'] : [])];
@@ -524,7 +581,7 @@ function buildRoom(level, seed) {
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0, zone, introT: 1.6,
     mission: M, op: M.op, cash: 0, shownCash: 0, searched: new Set(), act: null, reinfT: 20, code: null, hasCode: false, codeDrawer: -1,
     doors: (L.secure || []).map(d => ({ ...d, x: (d.cells[0] % W + (d.v ? 0.5 : 1)) * T, y: (((d.cells[0] / W) | 0) + (d.v ? 1 : 0.5)) * T, open: false, hack: 0 })),
-    vault: L.vault || null,
+    vault: L.vault || null, obj: missionObjectives(level), civKilled: 0, subdued: 0, policeT: 0, police: false, alarmBeforeLoot: false, vaultBy: null, escaped: false,
   };
   if (r.loot) r.loot.type = SCENE_LOOT[M.scene] || 'lingotes';
   for (const s of L.lamps) {
@@ -578,8 +635,19 @@ function buildRoom(level, seed) {
     if (sup.length) sup[ri(sup.length)].keycard = true;
     r.terminal = L.terminal;
   }
-  if (M.op === 'asalto') { // entrar con todo: la alarma suena desde el principio
-    r.alarm = true; r.detected = true;
+  if (PUBLIC[M.scene] && !boss) { // civiles: empleados y clientes que pasean por las salas (nunca en la cámara)
+    const V = r.vault, civ = cands.filter(c => zone[c] && dist0[c] >= 4 && !(V && V.z === 0 && c % W >= V.x0 && c % W <= V.x1 && ((c / W) | 0) >= V.y0 && ((c / W) | 0) <= V.y1));
+    for (let k = PUBLIC[M.scene] + Math.floor(level / 5), tries = 0; k > 0 && civ.length && tries < 200; tries++) {
+      const c = civ[ri(civ.length)], q = center(c);
+      if (r.enemies.some(e => Math.hypot(e.x - q.x, e.y - q.y) < T * 2)) continue;
+      const e = makeEnemy('civil', c, rand);
+      e.look = CIV_LOOKS[ri(CIV_LOOKS.length)]; e.skin = ri(SKIN.length);
+      r.enemies.push(e); k--;
+    }
+  }
+  if (r.doors.length) r.obj.splice(0, 0, { id: 'vault', text: 'Abre la cámara acorazada', primary: true, state: 0 });
+  if (M.op === 'asalto') { // entrar con todo: la alarma suena desde el principio y la policía ya está en camino
+    r.alarm = true; r.detected = true; r.alarmBeforeLoot = true; r.policeT = POLICE_DELAY.asalto;
     for (const e of r.enemies) e.alertLvl = 1;
   }
   r.p = { x: r.start.x, y: r.start.y, z: 0, onStairs: false, vx: 0, vy: 0, a: 0, r: 12, speed: 0, sneak: true, stepT: 0, fireT: 0, reloadT: 0, meleeT: 0, nadeT: 0, noiseT: 0, breachT: 0, swingT: 0, hurtT: 0, muzzleT: 0, dead: false, stam: 100, restT: 0, tired: false, sprint: false, bloom: 0 };
@@ -1113,15 +1181,37 @@ function renderChase() {
 }
 function completeRoom() {
   if (room.mission.chase && !room.chaseWon) { startChase(); return; } // primero hay que despistarlos
-  const M = room.mission, bonus = 80 + 20 * run.level, wasBoss = run.level % BOSS_EVERY === 0;
-  const loot = room.loot ? Math.round((150 + 60 * run.level) * (LOOTS[room.loot.type] || [0, 1])[1]) : 0;
+  const M = room.mission, bonus = 80 + 20 * run.level, wasBoss = run.level % BOSS_EVERY === 0, lv = run.level;
+  room.escaped = true; updateObjectives();
+  const loot = room.loot ? Math.round((150 + 60 * lv) * (LOOTS[room.loot.type] || [0, 1])[1]) : 0;
   const ghost = room.detected ? 0 : M.op === 'sigilo' ? loot : 120; // en sigilo, sin ser visto, el botín vale el doble
-  run.money += room.cash + bonus + ghost + loot;
+  const sec = room.obj.filter(o => !o.primary), secDone = sec.filter(o => o.state > 0), objPay = secDone.reduce((a, o) => a + o.reward, 0);
+  const civPen = room.civKilled * (80 + 10 * lv), total = Math.max(0, room.cash + bonus + ghost + loot + objPay - civPen);
+  run.money += total;
+  const stars = 1 + secDone.length, rank = stars === 3 && !room.alarm ? 'S' : stars === 3 ? 'A' : stars === 2 ? 'B' : 'C';
+  const score = total + secDone.length * 200 + (room.alarm ? 0 : 300) + (room.detected ? 0 : 300) + Math.round(Math.max(0, room.timer) * 2);
+  run.best = run.best || {};
+  const prev = run.best[lv] || 0; if (score > prev) run.best[lv] = score;
   run.level++;
   sfx('buy');
-  const stats = (loot ? `${LOOTS[room.loot.type][0]} <b>+$${loot}</b> · ` : '') + `saqueo <b>+$${room.cash}</b> · bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
-    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '');
-  if (!wasBoss) { openShop(stats); return; }
+  const stats = (loot ? `${LOOTS[room.loot.type][0]} <b>+$${loot}</b> · ` : '') + `saqueo <b>+$${room.cash}</b> · objetivos <b>+$${objPay}</b> · bajas ${room.kills} · silenciosas ${room.silent} · bonus de sala <b>+$${bonus}</b>` +
+    (ghost ? ` · fantasma (sin ser detectado) <b>+$${ghost}</b>` : '') + (civPen ? ` · civiles abatidos <b class="bad">−$${civPen}</b>` : '');
+  showResults({ M, lv, rank, stars, score, prev, total, rows: [[loot && LOOTS[room.loot.type][0].replace(/^./, c => c.toUpperCase()), loot], ['Saqueo', room.cash], ['Bonus de misión', bonus], [ghost && 'Fantasma', ghost], ['Objetivos secundarios', objPay], [civPen && `Civiles abatidos (${room.civKilled})`, -civPen]].filter(r => r[0]) },
+    () => { if (!wasBoss) openShop(stats); else winScreen(stats); });
+}
+function showResults(R, next) { // rango, estrellas, objetivos y desglose; luego, la tienda
+  state = 'results';
+  $('rsName').textContent = R.M.name.toUpperCase();
+  $('rsRank').textContent = R.rank; $('rsRank').className = 'rank r' + R.rank;
+  $('rsStars').textContent = '★'.repeat(R.stars) + '☆'.repeat(3 - R.stars);
+  $('rsObj').innerHTML = room.obj.map(o => `<li class="${o.state > 0 ? 'ok' : 'ko'}">${o.state > 0 ? '✓' : '✗'} ${o.text}${o.primary ? '' : ` <em>+$${o.reward}</em>`}</li>`).join('');
+  $('rsRows').innerHTML = R.rows.map(([k, v]) => `<div><span>${k}</span><b class="${v < 0 ? 'bad' : ''}">${v < 0 ? '−' : '+'}$${Math.abs(v)}</b></div>`).join('') + `<div class="tot"><span>Total</span><b>+$${R.total}</b></div>`;
+  $('rsScore').innerHTML = `Puntuación <b>${R.score}</b>` + (R.score > R.prev ? (R.prev ? ` · <span class="rec">¡nuevo récord! (antes ${R.prev})</span>` : '') : ` · mejor marca ${R.prev}`);
+  resultsNext = next;
+  show('results');
+}
+let resultsNext = null;
+function winScreen(stats) {
   winStats = stats;
   state = 'win';
   $('winInfo').textContent = run.level - 1 >= MISSIONS.length ? `Campaña completada: has acabado con el Alcaide para siempre. Puedes seguir en modo infinito: cada ${BOSS_EVERY} misiones vuelve un jefe más duro.` : `Has abatido al Alcaide en «${mission(run.level - 1).name}». La campaña sigue: quedan ${MISSIONS.length - run.level + 1} misiones.`;
@@ -1177,11 +1267,13 @@ function brief(after) {
   $('bfNum').textContent = `MISIÓN ${String(M.n).padStart(2, '0')} / ${MISSIONS.length}${M.n > MISSIONS.length ? ' · MODO INFINITO' : ''} · ${(SCENES[M.scene] || '').toUpperCase()}`;
   $('bfName').textContent = M.name.toUpperCase();
   $('bfTags').innerHTML = [`<span class="tag op-${M.op}">${M.boss ? 'Jefe' : OPS[M.op].name}</span>`, `<span class="tag">${car}</span>`, M.chase ? '<span class="tag">Persecución</span>' : '', vault ? '<span class="tag">Cámara blindada</span>' : ''].join('');
-  const obj = M.boss ? ['Abate al Alcaide: la salida está bloqueada mientras siga en pie.', 'A media vida pide refuerzos.']
-    : [`Roba ${(LOOTS[SCENE_LOOT[M.scene]] || ['el botín'])[0]} y escapa en el vehículo (${car.toLowerCase()}).`,
-      vault ? 'La cámara tiene puerta de seguridad: busca el código en los cajones, en el supervisor o en la terminal, o hackéala.' : M.scene === 'galeria' ? 'Puede que la pieza esté en una cámara cerrada.' : 'Registra cajones, estanterías y cuerpos: lo que saquees va a la bolsa.',
-      OPS[M.op].desc, M.chase ? 'Al huir te perseguirán: derriba sus coches o aguanta hasta perderlos.' : 'La cuenta atrás empieza al entrar.'];
-  $('bfObj').innerHTML = obj.map((o, i) => `<li style="--i:${i}">${o}</li>`).join('');
+  const objs = missionObjectives(run.level), info = M.boss ? ['La salida está bloqueada mientras el Alcaide siga en pie; a media vida pide refuerzos.']
+    : [vault ? 'La cámara tiene puerta de seguridad: busca el código en los cajones, en el supervisor o en la terminal, o hackéala.' : M.scene === 'galeria' ? 'Puede que la pieza esté en una cámara cerrada.' : 'Registra cajones, estanterías y cuerpos: lo que saquees va a la bolsa.',
+      OPS[M.op].desc, LOOT_ALARM[M.scene] ? 'El botín tiene sensor: al cogerlo saltará la alarma.' : 'El botín no tiene alarma: si nadie te ve, nadie sabrá que te lo has llevado.',
+      PUBLIC[M.scene] ? 'Hay civiles: si te ven armado o ven un cuerpo, huirán a llamar a la policía. Con el cuchillo se les reduce sin hacerles daño.' : '',
+      M.chase ? 'Al huir te perseguirán: derriba sus coches o aguanta hasta perderlos.' : ''].filter(Boolean);
+  let i = 0; const li = t => `<li style="--i:${i++}">${t}</li>`;
+  $('bfObj').innerHTML = `<li class="bf-h">Objetivos principales</li>${objs.filter(o => o.primary).map(o => li(o.text)).join('')}<li class="bf-h">Secundarios</li>${objs.filter(o => !o.primary).map(o => li(`${o.text} <em>+$${o.reward}</em>`)).join('')}<li class="bf-h">Información</li>${info.map(li).join('')}`;
   const card = $('bfCard'); card.classList.remove('anim'); void card.offsetWidth; card.classList.add('anim');
   const text = M.brief || '', el = $('bfBrief'); let n = 0; el.textContent = '';
   clearInterval(typeT);
@@ -1262,12 +1354,16 @@ function openDoor(d) {
   useFloor(z0);
 }
 // Sigilo: si te detectan, llaman a la policía; asalto: suena desde el principio. Con alarma llegan refuerzos
+// Alguien da el aviso (un guardia por radio, un civil por teléfono, el sensor del botín): la policía tarda un rato en llegar;
+// con ella en la zona empieza el cerco y llegan oleadas
 function triggerAlarm(msg) {
   if (room.alarm) return;
   const p = room.p, g = room.loot && !room.loot.taken ? room.loot : room.exit;
-  room.alarm = true; room.sirenT = 0; room.reinfT = 12;
-  room.timer = Math.min(room.timer, Math.round(70 + (Math.hypot(g.x - p.x, g.y - p.y) + Math.hypot(room.exit.x - g.x, room.exit.y - g.y)) / T * 1.2));
-  banner(msg);
+  room.alarm = true; room.sirenT = 0; room.policeT = policeDelay();
+  room.alarmBeforeLoot = !(room.loot && room.loot.taken);
+  room.timer = Math.min(room.timer, Math.round(room.policeT + 50 + (Math.hypot(g.x - p.x, g.y - p.y) + Math.hypot(room.exit.x - g.x, room.exit.y - g.y)) / T * 1.2));
+  banner(`${msg} · Policía en ${Math.round(room.policeT)} s`);
+  sfx('radio');
 }
 function spawnPolice(n) {
   const cells = [];
@@ -1275,21 +1371,24 @@ function spawnPolice(n) {
   const z0 = curZ;
   useFloor(0);
   for (let i = 0; i < n && cells.length; i++) {
-    const e = makeEnemy(run.level > 9 && Math.random() < 0.3 ? 'shield' : run.level > 5 && Math.random() < 0.3 ? 'elite' : 'guard', cells[(Math.random() * cells.length) | 0], Math.random);
+    const e = makeEnemy(run.level > 7 && Math.random() < 0.35 ? 'swatp' : 'police', cells[(Math.random() * cells.length) | 0], Math.random);
     Object.assign(e, { state: 'investigate', target: { x: room.p.x, y: room.p.y }, urgent: true, alertLvl: 2 });
     room.enemies.push(e);
   }
   useFloor(z0);
-  if (!room.police) { room.police = true; banner('Llegan refuerzos de la policía'); }
 }
 // Al coger el botín salta la alarma: cuenta atrás para escapar y los guardias se movilizan
 function stealLoot() {
   const L = room.loot;
-  const escape = Math.round(50 + Math.hypot(room.exit.x - L.x, room.exit.y - L.y) / T * 1.0); // la nueva cuenta atrás: escapar
-  room.timer = room.alarm ? Math.max(room.timer, Math.min(escape, 45)) : escape;
-  L.taken = true; room.alarm = true; room.sirenT = 0;
+  L.taken = true;
   popup(L.x, L.y - 20, '¡BOTÍN!', '#ffd98a');
-  banner('¡ALARMA! Escapa antes de que llegue la policía');
+  if (!LOOT_ALARM[room.mission.scene] && !room.alarm) { // sin sensor: nadie se entera si nadie te ve
+    banner('Botín en la bolsa. Llega al vehículo de extracción sin que te vean'); sfx('cash'); buzz(60);
+    return;
+  }
+  const escape = Math.round(50 + Math.hypot(room.exit.x - L.x, room.exit.y - L.y) / T * 1.0);
+  triggerAlarm('¡El botín tenía sensor y ha saltado la alarma!');
+  room.timer = Math.max(room.timer, escape);
   // la mitad acude a la cámara del botín y la otra mitad corta el paso en la salida
   room.enemies.forEach((e, i) => {
     e.alertLvl = 2;
@@ -1310,6 +1409,11 @@ function noise(x, y, r, kind, src, tx = x, ty = y) {
   }
 }
 function hear(e, x, y, kind, d) {
+  if (FOES[e.type].civil) { // los civiles no investigan: si suenan tiros o gritos, huyen; si no, miran
+    if (e.state === 'subdued' || e.state === 'panic') return;
+    if (kind === 'shot' || kind === 'boom' || kind === 'eshot' || kind === 'alert') panic(e, x, y); else if (e.state === 'patrol') suspicious(e, x, y);
+    return;
+  }
   const fromPlayer = kind !== 'alert' && kind !== 'eshot';
   if (e.state === 'combat') { if (fromPlayer && kind !== 'impact') e.last = { x, y }; return; }
   const err = Math.min(60, d * 0.15); // no saben exactamente de dónde vino
@@ -1352,7 +1456,7 @@ function enterCombat(e) {
   if (e.state !== 'combat') {
     e.state = 'combat'; e.reactT = Math.max(0.2, rnd(0.35, 0.7) - run.level * 0.015); e.aware = 1; e.path = null;
     room.detected = true;
-    if (room.op === 'sigilo') triggerAlarm('¡Te han descubierto! La policía está en camino');
+    if (!room.alarm && !FOES[e.type].melee && !(e.radioT > 0)) { e.radioT = 2.6; e.radioMsg = 'Un guardia te ha visto y ha dado el aviso por radio'; } // si lo abates antes, no llega a avisar
     warn(e, '#ff5444');
     if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '!', '#ff5444');
     sfx(FOES[e.type].melee ? 'bark' : 'alert', e.x, e.y);
@@ -1418,6 +1522,8 @@ function updateEnemy(e, dt) {
     if (Math.random() < dt * 25) room.parts.push({ x: e.x + rnd(-6, 6), y: e.y + rnd(-6, 6), z: e.z, vx: rnd(-20, 20), vy: rnd(-40, -10), t: rnd(0.3, 0.6), c: '#ffb04a', s: 2, glow: true });
     if (e.hp <= 0) { hurtEnemy(e, 0, e.a); return; }
   }
+  if (e.radioT > 0 && (e.radioT -= dt) <= 0 && !room.alarm) triggerAlarm(e.radioMsg || 'Han dado el aviso');
+  if (F.civil) { updateCivil(e, dt); return; }
   e.fireT -= dt; e.moveA = null;
   if (F.boss && !e.called && e.hp < e.maxHp / 2) { e.called = true; reinforcements(); } // aunque no te vea en ese momento
   const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy), toP = Math.atan2(dy, dx);
@@ -1443,7 +1549,7 @@ function updateEnemy(e, dt) {
       if (e.aware > 0.3 && e.state === 'patrol') suspicious(e, p.x, p.y);
     }
   }
-  if (!combat) for (const b of room.bodies) {
+  if (!combat) for (const b of found()) { // un cuerpo o un civil maniatado: lo investiga y da el aviso por radio
     if (e.seen.has(b) || b.z !== e.z) continue;
     const bd = Math.hypot(b.x - e.x, b.y - e.y);
     if (bd < F.vision * 0.9 && Math.abs(angDiff(e.a, Math.atan2(b.y - e.y, b.x - e.x))) < 0.62 && los(e.x, e.y, b.x, b.y)) {
@@ -1451,6 +1557,8 @@ function updateEnemy(e, dt) {
       if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '?!', '#ffb547');
       investigate(e, b.x, b.y, true);
       noise(e.x, e.y, 260, 'alert', e, b.x, b.y);
+      if (!room.alarm && !F.melee && !(e.radioT > 0)) { e.radioT = 3.5; e.radioMsg = b.state === 'subdued' ? 'Han encontrado a un civil maniatado y avisan a la policía' : 'Han encontrado un cuerpo y avisan a la policía'; }
+      for (const g of room.enemies) if (!FOES[g.type].civil && g !== e) g.alertLvl = Math.max(g.alertLvl, 1); // todos más atentos
     }
   }
 
@@ -1508,6 +1616,46 @@ function updateEnemy(e, dt) {
   // apuntando gira muy despacio (corriendo lo esquivas); escudo y jefe también, para poder rodearlos
   const want = face ?? e.moveA ?? e.a, turn = (e.aimT > 0 ? 0.4 : F.boss ? 2.5 : F.shield && combat ? 2 : combat ? 6 : 3.2) * dt;
   e.a += clamp(angDiff(e.a, want), -turn, turn);
+}
+const found = () => room.bodies.filter(b => !b.hidden).concat(room.enemies.filter(c => c.state === 'subdued'));
+// Civiles: pasean; si te ven armado (poco a poco, según lo expuesto que vayas) o ven un cuerpo, gritan, huyen hacia la calle y llaman
+function panic(e, x, y) {
+  if (e.state === 'panic' || e.state === 'subdued') return;
+  e.state = 'panic'; e.callT = 4.5; e.path = null; e.aware = 1;
+  if (lit(e.x, e.y, e.z)) popup(e.x, e.y - 24, '¡!', '#ff8a5c');
+  sfx('scream', e.x, e.y);
+  noise(e.x, e.y, 230, 'alert', e, x ?? room.p.x, y ?? room.p.y); // los gritos atraen a los guardias
+}
+function updateCivil(e, dt) {
+  const p = room.p, F = FOES.civil, same = e.z === p.z && !p.dead, d = dist(e, p);
+  e.moveA = null;
+  if (e.state === 'subdued') return;
+  if (e.state === 'patrol' || e.state === 'suspicious') {
+    const R = F.vision * (0.6 + 0.4 * Math.min(1, room.exposure));
+    if (same && d < R && Math.abs(angDiff(e.a, ang(e, p))) < 1.05 && los(e.x, e.y, p.x, p.y)) {
+      e.aware += dt * Math.max(0.6, room.exposure) * (1 + 1.5 * (1 - d / R));
+      if (e.aware >= 1) panic(e, p.x, p.y); else if (e.aware > 0.35) suspicious(e, p.x, p.y);
+    } else e.aware = Math.max(0, e.aware - dt * 0.25);
+    for (const b of found()) if (b.z === e.z && dist(e, b) < 210 && Math.abs(angDiff(e.a, ang(e, b))) < 1.05 && los(e.x, e.y, b.x, b.y)) { panic(e, b.x, b.y); break; }
+  }
+  let face = null;
+  if (e.state === 'patrol') {
+    if (e.waitT > 0) { e.waitT -= dt; face = lookAround(e, dt, 1.2); }
+    else if (moveTo(e, e.goal.x, e.goal.y, F.walk, dt)) { e.waitT = rnd(1.5, 5); e.wpI = (e.wpI + 1) % e.wps.length; e.goal = jitter(e.wps[e.wpI]); }
+  } else if (e.state === 'suspicious') {
+    face = Math.atan2(e.target.y - e.y, e.target.x - e.x);
+    if ((e.stateT -= dt) <= 0) { e.state = 'patrol'; e.waitT = 1; }
+  } else if (e.state === 'panic') { // corre a la calle con el móvil en la mano
+    if (e.callT > 0 && (e.callT -= dt) <= 0 && !room.alarm) triggerAlarm('Un civil ha llamado a la policía');
+    if ((e.ringT = (e.ringT || 0) - dt) <= 0 && e.callT > 0) { e.ringT = 1.2; sfx('phone', e.x, e.y); }
+    if (moveTo(e, room.start.x, room.start.y, F.run, dt) || dist(e, room.start) < 40) { // ha escapado: si no había llamado, llama ahora
+      if (!room.alarm) triggerAlarm('Un testigo ha escapado y ha llamado a la policía');
+      room.enemies.splice(room.enemies.indexOf(e), 1);
+      return;
+    }
+  }
+  const want = face ?? e.moveA ?? e.a;
+  e.a += clamp(angDiff(e.a, want), -4 * dt, 4 * dt);
 }
 function snipe(e) {
   const F = FOES[e.type], mx = e.x + Math.cos(e.a) * (e.r + 14), my = e.y + Math.sin(e.a) * (e.r + 14);
@@ -1629,7 +1777,7 @@ function assist(a) { // ayuda de apuntado suave para pantallas táctiles
   let best = null, bd = 0.22;
   for (const e of room.enemies) {
     const d = dist(p, e), da = Math.abs(angDiff(a, ang(p, e)));
-    if (e.z === p.z && d < 420 && da < bd && lit(e.x, e.y, e.z)) { best = e; bd = da; }
+    if (e.z === p.z && !FOES[e.type].civil && d < 420 && da < bd && lit(e.x, e.y, e.z)) { best = e; bd = da; }
   }
   return best ? ang(p, best) : a;
 }
@@ -1691,7 +1839,7 @@ function melee() {
   let best = null, bd = 72;
   for (const e of room.enemies) {
     const d = dist(p, e);
-    if (e.z === p.z && d < bd && Math.abs(angDiff(p.a, ang(p, e))) < 1.75 && los(p.x, p.y, e.x, e.y)) { best = e; bd = d; }
+    if (e.z === p.z && e.state !== 'subdued' && d < bd && Math.abs(angDiff(p.a, ang(p, e))) < 1.75 && los(p.x, p.y, e.x, e.y)) { best = e; bd = d; }
   }
   if (best) { // se abalanza hacia el objetivo más cercano
     p.a = ang(p, best);
@@ -1703,9 +1851,10 @@ function melee() {
   let hit = false;
   for (const e of [...room.enemies]) {
     if (e.z === p.z && dist(p, e) < e.r + p.r + 22 && Math.abs(angDiff(p.a, ang(p, e))) < 1.1) {
+      hit = true;
+      if (FOES[e.type].civil) { if (e.state !== 'subdued') { e.state = 'subdued'; e.callT = 0; room.subdued++; popup(e.x, e.y - 22, 'REDUCIDO', '#62d6ad'); sfx('click', e.x, e.y); } continue; }
       const behind = Math.abs(angDiff(e.a, ang(e, p))) > 1.9;
       hurtEnemy(e, e.state !== 'combat' || behind ? (FOES[e.type].boss ? 300 : 999) : 55, p.a); // al jefe no se le remata de un tajo
-      hit = true;
     }
   }
   const fx = Math.floor((p.x + Math.cos(p.a) * (p.r + 14)) / T), fy = Math.floor((p.y + Math.sin(p.a) * (p.r + 14)) / T), ft = map[fy * W + fx];
@@ -1768,17 +1917,25 @@ function hurtEnemy(e, dmg, a) {
   e.hp -= dmg;
   e.x += Math.cos(a) * Math.min(10, 2 + dmg * 0.08); e.y += Math.sin(a) * Math.min(10, 2 + dmg * 0.08);
   blood(e.x, e.y, a, 8);
-  if (e.hp > 0) { enterCombat(e); return; }
-  const unaware = e.state !== 'combat';
-  const reward = Math.round(FOES[e.type].reward * (unaware ? 1.5 : 1));
-  room.cash += reward; room.kills++;
-  if (unaware) room.silent++;
-  popup(e.x, e.y - 20, unaware ? `SIGILO +$${reward}` : `+$${reward}`, unaware ? '#62d6ad' : '#ffd98a');
+  const civ = FOES[e.type].civil;
+  if (e.hp > 0) { if (civ) panic(e, room.p.x, room.p.y); else enterCombat(e); return; }
+  if (civ) { // matar civiles: penaliza, acelera a la policía y aterroriza a los que lo ven
+    room.civKilled++;
+    if (room.alarm && !room.police) room.policeT = Math.max(3, room.policeT - 8);
+    popup(e.x, e.y - 20, 'CIVIL ABATIDO', '#ff5444');
+    for (const c of room.enemies) if (c !== e && FOES[c.type].civil && dist(c, e) < 320 && los(c.x, c.y, e.x, e.y)) panic(c, e.x, e.y);
+  } else {
+    const unaware = e.state !== 'combat';
+    const reward = Math.round(FOES[e.type].reward * (unaware ? 1.5 : 1));
+    room.cash += reward; room.kills++;
+    if (unaware) room.silent++;
+    popup(e.x, e.y - 20, unaware ? `SIGILO +$${reward}` : `+$${reward}`, unaware ? '#62d6ad' : '#ffd98a');
+  }
   const slide = Math.min(280, 60 + dmg * 1.5); // el cuerpo sale despedido según el golpe y se desliza hasta pararse
-  room.bodies.push({ x: e.x, y: e.y, z: e.z, a, type: e.type, keycard: e.keycard, seed: Math.random(), t: 0, vx: Math.cos(a) * slide, vy: Math.sin(a) * slide });
+  room.bodies.push({ x: e.x, y: e.y, z: e.z, a, type: e.type, look: e.look, keycard: e.keycard, seed: Math.random(), t: 0, vx: Math.cos(a) * slide, vy: Math.sin(a) * slide });
   for (let i = 0; i < 3; i++) decal({ x: e.x + Math.cos(a) * (6 + i * 14), y: e.y + Math.sin(a) * (6 + i * 14), z: e.z, r: 6 - i, a, seed: Math.random(), splat: true }); // rastro hacia donde sale despedido
   room.enemies.splice(room.enemies.indexOf(e), 1);
-  if (!FOES[e.type].melee && Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10), z: e.z });
+  if (!FOES[e.type].melee && !civ && Math.random() < 0.65) room.items.push({ x: e.x + rnd(-10, 10), y: e.y + rnd(-10, 10), z: e.z });
   if (e === room.boss) { room.boss = null; banner('¡Alcaide abatido! La salida está abierta'); cam.shake = 14; }
   if (e.keycard) popup(e.x, e.y - 34, 'Lleva una tarjeta', '#8fb8ff');
   sfx('gore', e.x, e.y);
@@ -1993,7 +2150,11 @@ function update(dt) {
   ambience(true);
   updateUse(dt);
   room.shownCash += (room.cash - room.shownCash) * Math.min(1, dt * 5);
-  if (room.alarm && !room.boss && room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
+  if (room.alarm && !room.boss) { // la policía llega un rato después del aviso y luego sigue mandando oleadas
+    if (!room.police) { if ((room.policeT -= dt) <= 0) { room.police = true; room.reinfT = 22; spawnPolice(3 + (run.level >> 2)); banner('¡Ha llegado la policía!'); sfx('siren'); } }
+    else if (room.enemies.length < 30 && (room.reinfT -= dt) <= 0) { room.reinfT = Math.max(12, 26 - run.level); spawnPolice(run.level > 6 ? 3 : 2); }
+  }
+  updateObjectives();
   if (room.loot && room.loot.taken && (room.exhaustT = (room.exhaustT || 0) - dt) <= 0) { // el coche de huida, en marcha
     room.exhaustT = 0.18; useFloor(0);
     fx({ k: 'smoke', x: room.exit.x + rnd(-4, 4), y: room.exit.y + CAR_DIM[room.mission.car][1] / 2 + 4, vx: rnd(-8, 8), vy: rnd(15, 30), life: 0.9, r0: 3, r1: 11, g: 95 });
@@ -2191,7 +2352,15 @@ const LOOK = {
   shield: { body: '#28344a', trim: '#141a24', legs: '#191e27', head: 'visor',  hat: '#1c2430', gun: [10, 4] },
   boss:   { body: '#5e2020', trim: '#2a0f0f', legs: '#1c1414', head: 'helmet', hat: '#2c2c2e', gun: [27, 9], pads: true },
   player: { body: '#24473f', trim: '#173029', legs: '#18211f', head: 'beanie', hat: '#14191b' },
+  police: { body: '#2b55a8', trim: '#183066', legs: '#141c33', head: 'police', hat: '#15214a', gun: [12, 4.5], star: true },
+  swatp:  { body: '#1e2a45', trim: '#0f1629', legs: '#0e1322', head: 'helmet', hat: '#162038', gun: [20, 5], star: true, pads: true },
 };
+// civiles: ropa de calle o de oficina, sin arma; pelo en vez de gorra
+const CIV_LOOKS = [
+  { body: '#6b4a3a', trim: '#4a3226', legs: '#23262c', head: 'hair', hat: '#2a1a12' }, { body: '#3a5a7a', trim: '#e8e4da', legs: '#1f2430', head: 'hair', hat: '#121212' },
+  { body: '#7a2f3a', trim: '#5a1f28', legs: '#2a2a30', head: 'hair', hat: '#8a6a3a' }, { body: '#4a6a4a', trim: '#2f4a2f', legs: '#3a3020', head: 'hair', hat: '#3a2a1a' },
+  { body: '#8a8a90', trim: '#d9d4c8', legs: '#25272c', head: 'hair', hat: '#5a5a5a' }, { body: '#c9a64a', trim: '#8a6a2a', legs: '#2a2a30', head: 'hair', hat: '#1a1210' },
+];
 const SKIN = ['#c99a78', '#8d5e3f', '#e3bc98', '#6b4430'];
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
 function drawHead(c, r, L, skin) {
@@ -2205,6 +2374,8 @@ function drawHead(c, r, L, skin) {
     if (L.head === 'visor') { c.fillStyle = 'rgba(150,190,230,0.55)'; c.beginPath(); c.arc(r * 0.04, 0, R * 1.12, -0.9, 0.9); c.lineTo(r * 0.04 + R * 0.5, 0); c.fill(); }
   } else if (L.head === 'mask') { c.beginPath(); c.arc(r * 0.06, 0, R, 0, 7); c.fill(); c.fillStyle = skin; c.fillRect(r * 0.06 + R * 0.45, -R * 0.55, R * 0.4, R * 1.1); }
   else if (L.head === 'hood') { c.beginPath(); c.arc(r * 0.02, 0, R * 1.22, Math.PI * 0.3, Math.PI * 1.7); c.fill(); for (let i = 0; i < 6; i++) { const t = Math.PI * (0.4 + i * 0.25); c.fillRect(Math.cos(t) * R * 1.2 - 1, Math.sin(t) * R * 1.2 - 1, 2.5, 2.5); } }
+  else if (L.head === 'police') { c.beginPath(); c.arc(r * 0.02, 0, R * 1.05, 0, 7); c.fill(); c.fillStyle = '#0c1226'; c.beginPath(); c.ellipse(r * 0.38, 0, R * 0.5, R * 0.9, 0, -Math.PI / 2, Math.PI / 2); c.fill(); c.fillStyle = '#e8c45a'; c.beginPath(); c.arc(r * 0.24, 0, R * 0.22, 0, 7); c.fill(); }
+  else if (L.head === 'hair') { c.beginPath(); c.arc(r * 0.0, 0, R * 1.02, Math.PI * 0.55, Math.PI * 1.45); c.fill(); }
   else if (L.head === 'beanie') { c.beginPath(); c.arc(r * 0.02, 0, R * 1.02, Math.PI * 0.42, Math.PI * 1.58); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 1.5; c.beginPath(); c.arc(r * 0.02, 0, R * 0.8, Math.PI * 0.55, Math.PI * 1.45); c.stroke(); }
   c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1.2; c.beginPath(); c.arc(r * 0.05, 0, R * (L.head === 'helmet' || L.head === 'visor' ? 1.12 : L.head === 'hood' ? 1.22 : 1), 0, 7); c.stroke();
 }
@@ -2223,15 +2394,22 @@ function drawHuman(c, x, y, a, r, L, o) {
     c.fillStyle = '#3a414c'; c.fillRect(r * 0.55, -g[1] / 2 + r * 0.05, g[0], 1.2);
     if (o.silenced) { c.fillStyle = '#121519'; c.fillRect(r * 0.55 + g[0], -g[1] / 2 + r * 0.05 + 0.5, 6, g[1] - 1); }
   }
-  const hand = g ? [[r * 0.72, r * 0.16], [r * 0.55 + Math.min(g[0], 18) * 0.62, -r * 0.02 + r * 0.05]] : [[r * 0.25 - sw * r * 0.5, r * 0.8], [r * 0.25 + sw * r * 0.5, -r * 0.8]];
+  const hand = o.tied ? [[-r * 0.55, r * 0.2], [-r * 0.55, -r * 0.2]] : o.phone ? [[r * 0.2, r * 0.42], [r * 0.25 + sw * r * 0.5, -r * 0.8]] : g ? [[r * 0.72, r * 0.16], [r * 0.55 + Math.min(g[0], 18) * 0.62, -r * 0.02 + r * 0.05]] : [[r * 0.25 - sw * r * 0.5, r * 0.8], [r * 0.25 + sw * r * 0.5, -r * 0.8]];
   c.lineCap = 'round'; c.strokeStyle = L.body; c.lineWidth = r * 0.38; // brazos
   c.beginPath(); c.moveTo(0, r * 0.62); c.lineTo(hand[0][0], hand[0][1]); c.moveTo(0, -r * 0.62); c.lineTo(hand[1][0], hand[1][1]); c.stroke();
   c.fillStyle = o.skin; for (const [hx, hy] of hand) { c.beginPath(); c.arc(hx, hy, r * 0.17, 0, 7); c.fill(); }
+  if (o.phone) { c.fillStyle = '#9fd0ff'; c.fillRect(r * 0.12, r * 0.22, r * 0.2, r * 0.32); } // pantalla del móvil
+  if (o.tied) { c.strokeStyle = '#d9c9a0'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-r * 0.55, r * 0.3); c.lineTo(-r * 0.55, -r * 0.3); c.stroke(); } // bridas
   // torso con chaleco, hombreras y un brillo arriba a la izquierda
   c.fillStyle = o.hurt ? '#ff8f80' : L.body; c.beginPath(); c.ellipse(-r * 0.05, 0, r * 0.56, r * 0.95, 0, 0, 7); c.fill();
   c.fillStyle = L.trim; rrect(c, -r * 0.32, -r * 0.55, r * 0.58, r * 1.1, r * 0.2); c.fill();
   c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(-r * 0.05, -r * 0.42, r * 0.22, r * 0.3); c.fillRect(-r * 0.05, r * 0.12, r * 0.22, r * 0.3); // bolsillos
   if (L.pads) { c.fillStyle = L.trim; for (const sd of [-1, 1]) { c.beginPath(); c.ellipse(-r * 0.05, sd * r * 0.8, r * 0.3, r * 0.24, 0, 0, 7); c.fill(); } }
+  if (L.star) { // placa dorada de policía
+    c.fillStyle = '#e8c45a'; c.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.09 : r * 0.22; c.lineTo(r * 0.12 + Math.cos(a) * rr, -r * 0.42 + Math.sin(a) * rr); }
+    c.closePath(); c.fill();
+  }
   c.fillStyle = 'rgba(255,255,255,0.09)'; c.beginPath(); c.ellipse(-r * 0.2, -r * 0.35, r * 0.28, r * 0.42, 0, 0, 7); c.fill();
   c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 1.5; c.beginPath(); c.ellipse(-r * 0.05, 0, r * 0.56, r * 0.95, 0, 0, 7); c.stroke();
   drawHead(c, r, L, o.skin);
@@ -2257,7 +2435,7 @@ function drawDog(c, x, y, a, r, walk, mv) {
 }
 // Cadáver tendido: brazos y piernas abiertos (según su semilla), el arma caída al lado y un charco que se extiende
 function drawCorpse(c, b) {
-  const L = LOOK[b.type], r = FOES[b.type].r, k = Math.min(1, (b.t || 0) / 6), h = i => hash(Math.floor(b.seed * 1e6), i, 7);
+  const L = b.look || LOOK[b.type], r = FOES[b.type].r, k = Math.min(1, (b.t || 0) / 6), h = i => hash(Math.floor(b.seed * 1e6), i, 7);
   c.save(); c.translate(b.x, b.y); c.rotate(b.a);
   const pr = (b.type === 'dog' ? 12 : 19) * (0.35 + 0.65 * k); // charco
   c.fillStyle = 'rgba(62,3,5,0.92)';
@@ -2678,8 +2856,13 @@ function render() {
     const d = Math.hypot(e.x - (e.px ?? e.x), e.y - (e.py ?? e.y)); // zancada según lo que se ha movido desde el último fotograma
     e.px = e.x; e.py = e.y; e.walk = (e.walk || 0) + d * 0.22; e.mv = (e.mv || 0) * 0.85 + Math.min(1, d / 1.5) * 0.15;
     if (e.type === 'dog') { drawDog(ctx, e.x, e.y, e.a, e.r, e.walk * 1.4, e.mv); continue; }
-    const L = LOOK[e.type];
-    drawHuman(ctx, e.x, e.y, e.a, e.r, L, { gun: L.gun, walk: e.walk, mv: e.mv, skin: SKIN[(e.skin ??= Math.floor(Math.random() * SKIN.length))], shield: FOES[e.type].shield });
+    const L = e.look || LOOK[e.type], sub = e.state === 'subdued';
+    drawHuman(ctx, e.x, e.y, e.a, sub ? e.r * 0.9 : e.r, L, { gun: L.gun, walk: e.walk, mv: sub ? 0 : e.mv, skin: SKIN[(e.skin ??= Math.floor(Math.random() * SKIN.length))], shield: FOES[e.type].shield, phone: e.state === 'panic' && e.callT > 0, tied: sub });
+    if ((e.radioT > 0 || (e.state === 'panic' && e.callT > 0)) && lit(e.x, e.y, e.z)) { // dando el aviso: si lo paras a tiempo, no llega
+      const k = e.radioT > 0 ? e.radioT / 3.5 : e.callT / 4.5;
+      ctx.strokeStyle = '#ff8a5c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, e.y - 26, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - k)); ctx.stroke();
+      ctx.fillStyle = '#ff8a5c'; ctx.font = '700 10px "Saira Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.radioT > 0 ? 'RADIO' : 'LLAMA', e.x, e.y - 40);
+    }
     if (e.type === 'elite') { ctx.strokeStyle = 'rgba(201,166,74,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 3, e.a - 0.6, e.a + 0.6); ctx.stroke(); }
   }
   for (const e of room.enemies) if (e.aimT > 0 && here(e)) { // láser del francotirador: solo se ve donde llega tu luz
@@ -2910,14 +3093,17 @@ function drawHud() {
     syncHud(); syncUse();
     return;
   }
-  let worst = 0;
-  for (const e of room.enemies) worst = Math.max(worst, e.state === 'combat' ? 2 : e.state === 'patrol' ? 0 : 1);
-  const label = ['OCULTO', 'ALERTA', 'DETECTADO'][worst], col = ['#62d6ad', '#ffb547', '#ff5444'][worst];
+  // nivel de alerta: tranquilo, sospechas, policía avisada (con cuenta atrás hasta que llega) y policía en la zona
+  const susp = room.enemies.some(e => e.state !== 'patrol' && e.state !== 'subdued') || room.bodies.some(b => !b.hidden && room.enemies.some(e => e.seen && e.seen.has(b)));
+  const heat = room.police ? 3 : room.alarm ? 2 : susp ? 1 : 0;
+  const label = room.boss ? (room.enemies.some(e => e.state === 'combat') ? 'COMBATE' : 'SIN DETECTAR') : ['TRANQUILO', 'SOSPECHAS', `POLICÍA EN ${Math.ceil(room.policeT)} s`, 'POLICÍA EN LA ZONA'][heat];
+  const col = ['#62d6ad', '#ffb547', '#ff8a5c', '#ff5444'][heat];
   ctx.textAlign = 'center';
   ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#7d8ca0';
-  ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.length} HOSTILES`, uw / 2, y);
-  ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = col;
+  ctx.fillText(`MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.filter(e => !FOES[e.type].civil).length} HOSTILES`, uw / 2, y);
+  ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = heat >= 2 && Math.sin(room.time * 8) > 0 ? '#ffd98a' : col;
   ctx.fillText(label, uw / 2, y + 14);
+  if (!room.boss) for (let i = 0; i < 4; i++) { ctx.fillStyle = i <= heat ? col : 'rgba(125,140,160,0.3)'; ctx.fillRect(uw / 2 - 31 + i * 16, y + 24, 14, 3); } // pips de alerta
   if (room.boss) {
     const b = room.boss, bw2 = Math.min(300, uw - 320);
     ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ff5444';
@@ -2928,16 +3114,16 @@ function drawHud() {
   let by = y + (room.boss ? 70 : 40);
   const ts = Math.ceil(room.timer), clock = `${Math.floor(ts / 60)}:${String(ts % 60).padStart(2, '0')}`;
   if (room.alarm) {
-    ctx.font = '700 22px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = Math.sin(room.time * 8) > 0 ? '#ff5444' : '#ffb547';
-    ctx.fillText(`ALARMA ${clock}`, uw / 2, y + 36);
+    ctx.font = '700 20px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = Math.sin(room.time * 8) > 0 ? '#ff5444' : '#ffb547';
+    ctx.fillText(`${room.police ? 'CERCO' : 'HUYE'} ${clock}`, uw / 2, y + 40);
     by = y + 66;
   } else if (room.loot) {
     ctx.font = '700 18px "Saira Semi Condensed", sans-serif';
     ctx.fillStyle = ts <= 10 && Math.sin(room.time * 8) > 0 ? '#ff5444' : ts <= 30 ? '#ffb547' : '#ffd98a';
-    ctx.fillText(`TIEMPO ${clock}`, uw / 2, y + 34);
+    ctx.fillText(`TIEMPO ${clock}`, uw / 2, y + 40);
     ctx.font = '600 11px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ffd98a';
     const shut = room.doors.some(d => !d.open);
-    ctx.fillText(room.loot && room.loot.taken ? 'ESCAPA EN EL VEHÍCULO' : shut ? (room.hasCode ? `CÓDIGO ${room.code}: ABRE LA CÁMARA` : 'LA CÁMARA ESTÁ CERRADA: CONSIGUE EL CÓDIGO O HACKÉALA') : `ROBA EL BOTÍN (${(LOOTS[room.loot.type] || ['botín'])[0].toUpperCase()}) Y ESCAPA`, uw / 2, y + 56);
+    ctx.fillText(room.loot && room.loot.taken ? 'LLEGA AL VEHÍCULO DE EXTRACCIÓN' : shut ? (room.hasCode ? `CÓDIGO ${room.code}: ABRE LA CÁMARA` : 'LA CÁMARA ESTÁ CERRADA: CONSIGUE EL CÓDIGO O HACKÉALA') : `ROBA EL BOTÍN (${(LOOTS[room.loot.type] || ['botín'])[0].toUpperCase()}) Y ESCAPA`, uw / 2, y + 56);
     by = y + 74;
   } else if (room.boss) {
     ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = ts <= 30 ? '#ff5444' : '#7d8ca0';
@@ -2971,7 +3157,18 @@ function drawStick(s, gx, gy, aim) {
   ctx.beginPath(); ctx.arc(ox + v.x * STICK_R, oy + v.y * STICK_R, 22, 0, 7); ctx.fill();
 }
 let hudKey = '';
+let objsOpen = false, objsKey = '';
+function syncObjs() { // lista desplegable de objetivos (se abre sola unos segundos al empezar)
+  const open = objsOpen || (room.time < 6 && !room.objSeen), key = `${room.objV || 0}|${open}`;
+  if (key === objsKey) return;
+  objsKey = key;
+  const li = o => `<li class="${o.primary ? '' : 'sec '}${o.state > 0 ? 'ok' : o.state < 0 ? 'ko' : ''}">${o.state > 0 ? '✓' : o.state < 0 ? '✗' : '○'} ${o.text}${o.primary ? '' : ` <em>+$${o.reward}</em>`}</li>`;
+  $('objsList').innerHTML = `<li class="h">Principales</li>${room.obj.filter(o => o.primary).map(li).join('')}<li class="h">Secundarios</li>${room.obj.filter(o => !o.primary).map(li).join('')}`;
+  $('objsList').hidden = !open; $('bObjs').setAttribute('aria-expanded', open);
+  $('objsN').textContent = `${room.obj.filter(o => o.state > 0).length}/${room.obj.length}`;
+}
 function syncHud() {
+  if (room.obj) syncObjs();
   const p = room.p, w = curW(), s = wstats(w);
   const key = `${s.name}|${w.ammo}|${w.reserve}|${run.nades}|${run.charges}|${room.charges.length}|${run.light}|${p.reloadT > 0}|${touchMode}|${run.weapons.length}`;
   if (p.reloadT > 0) $('bWeapon').style.setProperty('--p', `${100 * (1 - p.reloadT / s.reload)}%`);
@@ -3216,6 +3413,11 @@ function sfx(k, x, y) {
     case 'charge': tone(300, 1100, 0.9, 0.07 * v, 'sine'); break;
     case 'plant': burst(0.03, 0.2, 2500, 'bandpass', 3); tone(1800, 1800, 0.05, 0.08, 'square', 0.12); break;
     case 'click': tone(1600, 1600, 0.03, 0.12); tone(800, 800, 0.05, 0.1, 'square', 0.05); break;
+    case 'scream': tone(700, 1150, 0.35, 0.11 * v, 'sawtooth'); tone(1000, 640, 0.32, 0.08 * v, 'sawtooth', 0.28); break;
+    case 'radio': burst(0.22, 0.12, 1700, 'bandpass', 3); tone(1250, 1250, 0.05, 0.05, 'square', 0.24); break;
+    case 'phone': tone(1400, 1400, 0.07, 0.05 * v, 'sine'); tone(1400, 1400, 0.07, 0.05 * v, 'sine', 0.14); break;
+    case 'objective': tone(880, 1320, 0.14, 0.13, 'triangle'); tone(1320, 1760, 0.16, 0.11, 'triangle', 0.12); break;
+    case 'fail': tone(420, 240, 0.3, 0.13, 'triangle'); break;
     case 'siren':
       for (const det of [0, 9]) { tone(620 + det, 1080 + det, 0.5, 0.07, 'sawtooth'); tone(1080 + det, 620 + det, 0.5, 0.07, 'sawtooth', 0.5); }
       break;
@@ -3226,7 +3428,7 @@ function sfx(k, x, y) {
 function show(id) {
   ambience(id === null);
   if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
-  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief']) $(o).hidden = o !== id;
+  for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
 function resize() {
@@ -3294,6 +3496,8 @@ press('bLight', toggleLight);
 press('bWeapon', cycleWeapon);
 press('bSneak', toggleSneak);
 $('bPause').addEventListener('click', () => pause());
+$('bObjs').addEventListener('click', e => { e.stopPropagation(); objsOpen = !objsOpen; objsKey = ''; if (room) room.objSeen = true; });
+$('bRsGo').addEventListener('click', () => { const f = resultsNext; resultsNext = null; if (f) f(); });
 
 function pause() {
   if (state !== 'play') return;
@@ -3313,6 +3517,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') { state = 'play'; show(null); } }
   if (state !== 'play' || e.repeat) return;
   if (e.code === 'KeyC') { toggleSneak(); return; }
+  if (e.code === 'KeyO') { objsOpen = !objsOpen; objsKey = ''; room.objSeen = true; return; }
   const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
   else if (/^Digit[1-5]$/.test(e.code) && run.weapons[e.code[5] - 1]) selectWeapon(e.code[5] - 1);

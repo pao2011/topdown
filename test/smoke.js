@@ -43,7 +43,7 @@ const path = require('path');
   // Salen los 6 tipos de enemigo en las salas 1-7 y la sala 8 es la del jefe
   const kinds = await ev(() => {
     const A = __apagon, seen = new Set();
-    for (let lvl = 1; lvl <= 7; lvl++) for (let k = 0; k < 4; k++) A.buildRoom(lvl, lvl * 31 + k).enemies.forEach(e => seen.add(e.type));
+    for (let lvl = 1; lvl <= 7; lvl++) for (let k = 0; k < 4; k++) A.buildRoom(lvl, lvl * 31 + k).enemies.forEach(e => e.type !== 'civil' && seen.add(e.type));
     const b = A.buildRoom(8, 5);
     return { seen: [...seen].sort(), bosses: b.enemies.filter(e => e.type === 'boss').length, boss: b.boss && b.boss.type };
   });
@@ -277,18 +277,22 @@ const path = require('path');
   await page.tap('#bNoise');
   await page.waitForTimeout(2200); // deja explotar la granada
 
-  // Golpe: la salida está cerrada sin botín; al cogerlo salta la alarma con cuenta atrás
-  await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  // Golpe: la salida está cerrada sin botín; en las oficinas el maletín no tiene sensor: cogerlo no da la alarma
+  await ev(() => { const r = __apagon.room; r.enemies.length = 0; r.alarm = false; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(200);
   assert.strictEqual(await ev(() => __apagon.state), 'play', 'sin botín la salida está cerrada');
   await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await page.waitForTimeout(200);
   const alarm = await ev(() => { const r = __apagon.room; return { alarm: r.alarm, taken: r.loot.taken, timer: r.timer > 20 }; });
-  assert.deepStrictEqual(alarm, { alarm: true, taken: true, timer: true });
+  assert.deepStrictEqual(alarm, { alarm: false, taken: true, timer: true });
   await shot('alarm');
-  // Salida → tienda → comprar arma y mejora → siguiente sala (y se empieza con la vida llena aunque acabaras herido)
+  // Salida → resultados (rango, objetivos) → tienda → comprar arma y mejora → siguiente sala (con la vida llena aunque acabaras herido)
   await ev(() => { const r = __apagon.room; r.p.dead = false; __apagon.run.hp = 23; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(200);
+  assert.strictEqual(await ev(() => __apagon.state), 'results');
+  assert.match(await page.textContent('#rsRank'), /^[SABC]$/);
+  assert((await page.textContent('#rsObj')).includes('Escapa en el vehículo de extracción'), 'los objetivos salen en los resultados');
+  await page.click('#bRsGo');
   assert.strictEqual(await ev(() => __apagon.state), 'shop');
   await ev(() => { __apagon.run.money = 1000; });
   await page.click('.tabs button[data-tab="arm"]');
@@ -331,6 +335,20 @@ const path = require('path');
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('overTitle').textContent]), ['over', 'TE HAN ATRAPADO']);
   await page.click('#bRetry');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.room.alarm]), ['play', false]);
+
+  // Civiles (misión 1, oficinas): si uno te ve, huye y llama; la policía llega tras su cuenta atrás, con uniforme propio
+  const civ = await ev(async () => {
+    const A = __apagon; A.run.level = 1; A.startRoom(); const r = A.room, wait = ms => new Promise(f => setTimeout(f, ms));
+    const c = r.enemies.find(e => e.type === 'civil'); if (!c) return null;
+    r.enemies.splice(0, r.enemies.length, c); A.run.hp = 999; A.useFloor(c.z);
+    for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4; if (A.castRay(c.x, c.y, Math.cos(t), Math.sin(t), 90) >= 90) { Object.assign(r.p, { x: c.x + Math.cos(t) * 70, y: c.y + Math.sin(t) * 70, z: c.z }); Object.assign(c, { a: t, lookA: t, waitT: 9, lookT: 9 }); break; } }
+    A.run.light = true; await wait(2500); const seen = c.state;
+    r.enemies.forEach(e => { if (e.callT > 0) e.callT = 0.05; }); await wait(200);
+    const called = r.alarm && !r.police;
+    r.policeT = 0.05; await wait(300);
+    return { seen, called, police: r.police, cops: r.enemies.some(e => e.type === 'police' || e.type === 'swatp') };
+  });
+  if (civ) assert.deepStrictEqual(civ, { seen: 'panic', called: true, police: true, cops: true }); else console.warn('aviso: sin civiles en la misión 1');
 
   // Primera planta: al pisar la escalera subes; al volver a pisarla, bajas
   const upSeed = await ev(() => { const A = __apagon; for (let s = 1; s < 300; s++) if (A.buildRoom(3, s + 3 * 977).maps.length === 2) return s; return -1; });
@@ -375,6 +393,8 @@ const path = require('path');
   assert.deepStrictEqual(nade, [0, true], 'la granada estalla al tocar un coche');
   await ev(() => { const C = __apagon.room.chase; C.t = C.len; for (const f of C.foes) Object.assign(f, { dead: true, spin: 0, vx: 0 }); });
   await page.waitForTimeout(2000);
+  assert.strictEqual(await ev(() => __apagon.state), 'results');
+  await page.click('#bRsGo');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['shop', 5], 'al perderlos, a la tienda');
 
   // Cámara (misión 5): la puerta se hackea (cancelar guarda el progreso) o se abre con el código; registrar cuerpos llena la bolsa
@@ -421,6 +441,8 @@ const path = require('path');
   await page.waitForTimeout(200);
   await ev(() => { const r = __apagon.room; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
   await page.waitForTimeout(300);
+  assert.strictEqual(await ev(() => __apagon.state), 'results');
+  await page.click('#bRsGo');
   assert.strictEqual(await ev(() => __apagon.state), 'shop');
   assert((await page.innerHTML('#shopStats')).includes(`saqueo <b>+$${bag}</b>`), 'la bolsa se cobra al escapar');
 
@@ -433,6 +455,8 @@ const path = require('path');
   await shot('boss');
   await ev(() => { const A = __apagon; A.run.hp = 100; A.room.p.dead = false; A.hurtEnemy(A.room.boss, 1e6, 0); });
   await page.waitForTimeout(300);
+  assert.strictEqual(await ev(() => __apagon.state), 'results');
+  await page.click('#bRsGo');
   assert.strictEqual(await ev(() => __apagon.state), 'win');
   await page.click('#bWinGo');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['shop', 9]);
