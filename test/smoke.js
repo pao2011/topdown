@@ -6,12 +6,15 @@ const path = require('path');
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // el 3D se dibuja en calidad baja: el WebGL por software de las pruebas va justo de relleno (la lógica es la misma)
+  const lowGfx = () => { try { const k = 'apagon-ajustes', q = JSON.parse(localStorage.getItem(k) || '{}'); if (!q.gfx) localStorage.setItem(k, JSON.stringify({ ...q, gfx: 'baja', shadows: false })); } catch (e) { /* sin almacenamiento */ } };
+  await ctx.addInitScript(lowGfx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/fonts|ERR_/.test(m.text())) errors.push(m.text()); });
   const shot = name => process.env.SHOTS && page.screenshot({ path: path.join(process.env.SHOTS, name + '.png') });
-  const ev = fn => page.evaluate(fn);
+  const ev = (fn, arg) => page.evaluate(fn, arg);
   const story = async pg => { if (await pg.isVisible('#bStGo')) await pg.click('#bStGo'); }; // escena de historia antes de algunas misiones
   const url = 'file://' + path.resolve(__dirname, '../index.html');
   await page.goto(url);
@@ -81,16 +84,24 @@ const path = require('path');
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   };
 
-  // Stick izquierdo mueve; stick derecho a fondo dispara
+  // Primera persona: el stick izquierdo mueve (hacia donde miras), arrastrar a la derecha gira la vista y el botón dispara
+  assert(await ev(() => __apagon.fps3d), 'el juego va en 3D (WebGL)');
   const p0 = await ev(() => ({ ...__apagon.room.p }));
-  await touch(1, 120, 300, 180, 300, 700);
+  await touch(1, 120, 300, 120, 240, 700); // stick hacia arriba: adelante
   const p1 = await ev(() => ({ ...__apagon.room.p }));
   assert(Math.hypot(p1.x - p0.x, p1.y - p0.y) > 20, 'el stick izquierdo debe mover al jugador');
-  await touch(2, 560, 300, 620, 300, 500);
-  assert(await ev(() => __apagon.run.weapons[0].ammo < 12 || __apagon.room.p.reloadT > 0), 'el stick derecho a fondo debe disparar');
+  assert((p1.x - p0.x) * Math.cos(p0.a) + (p1.y - p0.y) * Math.sin(p0.a) > 10, 'stick arriba: avanza hacia donde mira');
+  const a0 = await ev(() => __apagon.room.p.a);
+  await touch(2, 560, 200, 640, 200, 150);
+  const turned = await ev(a => __apagon.room.p.a - a, a0);
+  assert(turned > 0.2, 'arrastrar a la derecha gira la vista: ' + turned);
+  const fireAt = async ms => { const b = await page.$eval('#bFire', e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b[0], y: b[1], id: 5 }] }); await page.waitForTimeout(ms); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); };
+  await fireAt(500);
+  assert(await ev(() => __apagon.run.weapons[0].ammo < 12 || __apagon.room.p.reloadT > 0), 'el botón de disparo debe disparar');
   // Botón de sigilo: con él activado, el stick a fondo no pasa de sigilo
   await page.tap('#bSneak');
-  const sneakMove = await (async () => { const t = touch(1, 120, 300, 190, 300, 500); await page.waitForTimeout(350); const r = await ev(() => [__apagon.room.p.sneak, Math.round(__apagon.room.p.speed)]); await t; return r; })();
+  await ev(() => { const A = __apagon, p = A.room.p; A.useFloor(p.z); let best = 0, ba = p.a; for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, d = A.castRay(p.x, p.y, Math.cos(a), Math.sin(a), 400); if (d > best) { best = d; ba = a; } } p.a = ba; }); // mirando a un sitio despejado
+  const sneakMove = await (async () => { const t = touch(1, 120, 300, 120, 230, 500); await page.waitForTimeout(350); const r = await ev(() => [__apagon.room.p.sneak, Math.round(__apagon.room.p.speed)]); await t; return r; })();
   await page.tap('#bSneak');
   assert(sneakMove[0] && sneakMove[1] > 20 && sneakMove[1] <= 80, 'con el sigilo activado se mueve en sigilo: ' + sneakMove);
   await shot('play');
@@ -98,10 +109,10 @@ const path = require('path');
   // Munición limitada: recargar gasta reserva, sin reserva no dispara, las cajas la reponen
   await ev(() => { const w = __apagon.run.weapons[0]; w.ammo = 0; w.reserve = 5; __apagon.room.p.reloadT = 0; });
   await page.keyboard.press('KeyR');
-  await page.waitForTimeout(1200);
+  await page.waitForFunction(() => __apagon.room.p.reloadT <= 0, null, { timeout: 6000 }); await page.waitForTimeout(100);
   assert.deepStrictEqual(await ev(() => { const w = __apagon.run.weapons[0]; return [w.ammo, w.reserve]; }), [5, 0]);
   await ev(() => { __apagon.run.weapons[0].ammo = 0; });
-  await touch(2, 560, 300, 620, 300, 400);
+  await fireAt(400);
   assert.strictEqual(await ev(() => __apagon.room.bullets.filter(b => b.mine).length), 0, 'sin munición no debe disparar');
   const got = await ev(async () => { const r = __apagon.room; r.items.push({ x: r.p.x, y: r.p.y, z: r.p.z }); await new Promise(f => setTimeout(f, 150)); return __apagon.run.weapons[0].reserve; });
   assert.strictEqual(got, 12, 'una caja da el 25 % de la reserva máxima');
@@ -116,39 +127,40 @@ const path = require('path');
   });
   assert.deepStrictEqual(heard, { s1: 'suspicious', warned: true, s2: 'investigate', urgent: true });
 
-  // Todo oscuro: un guardia a tu espalda, fuera de la linterna, es un píxel negro
+  // Todo oscuro: un guardia delante, lejos de las lámparas y con la linterna apagada, apenas se ve; la linterna lo ilumina
   const dark = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies.filter(e => e.type !== 'civil')) for (let k = 0; k < 8; k++) {
+    for (const e of r.enemies.filter(e => !['civil', 'drone', 'dog'].includes(e.type))) for (let k = 0; k < 8; k++) {
       const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
       A.useFloor(e.z);
-      if (r.loot && Math.hypot(e.x - r.loot.x, e.y - r.loot.y) < 90) continue; // el botín brilla por encima de la oscuridad a propósito
+      if (r.loot && Math.hypot(e.x - r.loot.x, e.y - r.loot.y) < 120) continue; // el botín brilla
       if (A.castRay(e.x, e.y, c, s, 150) < 150) continue;
-      r.p.x = e.x + c * 130; r.p.y = e.y + s * 130; r.p.z = e.z; r.p.a = a; // de espaldas al guardia
-      if (A.lit(e.x, e.y, e.z)) continue;
-      Object.assign(e, { state: 'patrol', aware: 0, a: a + Math.PI, lookA: a + Math.PI, waitT: 5, lookT: 5 });
-      window.__dark = e; r.enemies.splice(0, r.enemies.length, e);
-      window.__goal = [r.loot, r.boss]; r.loot = null; r.boss = { type: 'boss', hp: 1, maxHp: 1 }; // sin flecha de objetivo en el HUD: podría caer justo encima
-      return true; // solo él: nada lo atrae hacia tu luz
+      if (r.lamps.some(l => l.on && l.z === e.z && Math.hypot(l.x - e.x, l.y - e.y) < l.r + 40)) continue;
+      r.p.x = e.x + c * 110; r.p.y = e.y + s * 110; r.p.z = e.z; r.p.a = a + Math.PI; // mirándolo de frente
+      Object.assign(e, { state: 'patrol', aware: 0, a: a + Math.PI, lookA: a + Math.PI, waitT: 99, lookT: 99, path: null });
+      window.__dark = e; r.enemies.splice(0, r.enemies.length, e); r.flashes.length = 0;
+      A.run.light = false; A.G3.pitch = 0;
+      return true;
     }
     return false;
   });
   if (dark) {
     await page.waitForTimeout(700);
-    let px;
-    for (let i = 0; i < 6 && !(px && px.every(v => v < 10)); i++) { // un fogonazo ajeno sí ilumina: se reintenta
-      await page.waitForTimeout(80);
-      px = await ev(() => {
-        const { cam, S, cw, ch } = __apagon.view, e = window.__dark;
-        const x = Math.round(cw / 2 + (e.x - cam.x) * S), y = Math.round(ch / 2 + (e.y - cam.y) * S);
-        return [...document.getElementById('c').getContext('2d').getImageData(x, y, 1, 1).data].slice(0, 3);
-      });
-    }
-    const dbg = await ev(() => { const A = __apagon, r = A.room, e = window.__dark; return { st: e.state, d: Math.round(Math.hypot(e.x - r.p.x, e.y - r.p.y)), lit: A.lit(e.x, e.y, e.z), fl: r.flashes.length, alive: r.enemies.includes(e), pa: r.p.a.toFixed(2), ez: e.z, pz: r.p.z, floors: r.maps.length,
-      lamps: r.lamps.filter(l => Math.hypot(l.x - e.x, l.y - e.y) < l.r + 60).map(l => [l.z, Math.round(Math.hypot(l.x - e.x, l.y - e.y)), l.r]), tile: r.maps[e.z][A.cellOf(e.x, e.y)] }; });
-    await ev(() => { [__apagon.room.loot, __apagon.room.boss] = window.__goal; });
-    if (!px.every(v => v < 10)) await shot('darkfail');
-    assert(px.every(v => v < 10), 'un guardia fuera de tu luz debe quedar a oscuras, píxel: ' + px + ' ' + JSON.stringify(dbg));
+    const lum = () => ev(() => { // dibuja y lee el píxel del pecho del guardia en el lienzo 3D
+      const A = __apagon, G = A.G3, e = window.__dark, r = A.room; e.x = e.x; r.p.a = Math.atan2(e.y - r.p.y, e.x - r.p.x);
+      G.cam.rotation.y = -r.p.a - Math.PI / 2; G.cam.rotation.x = 0; G.cam.updateMatrixWorld();
+      const v = new THREE.Vector3(e.x, e.z * 134 + 47, e.y).project(G.cam), gl = G.R.getContext(), cvs = G.R.domElement;
+      G.R.clear(); G.R.render(G.S, G.cam);
+      const x = Math.round((v.x + 1) / 2 * cvs.width), y = Math.round((v.y + 1) / 2 * cvs.height), px = new Uint8Array(4);
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return Math.round((px[0] + px[1] + px[2]) / 3);
+    });
+    const off = await lum();
+    await ev(() => { __apagon.run.light = true; });
+    await page.waitForTimeout(300);
+    const on = await lum();
+    if (!(off < 45 && on > off + 15)) await shot('darkfail');
+    assert(off < 45 && on > off + 15, `a oscuras el guardia apenas se ve y con la linterna sí (sin luz ${off}, con luz ${on})`);
   } else console.warn('aviso: ningún guardia apto; se omite la prueba de oscuridad');
 
   // Vista: plantado delante de un guardia, acaba detectándote
@@ -320,7 +332,8 @@ const path = require('path');
 
   // Guardado: tras recargar la página, «Nueva partida» pide confirmación y «Continuar» recupera la tienda
   await page.reload();
-  assert.match(await page.textContent('#bCont'), /misión 2: Marea Baja/);
+  await page.waitForSelector('#boot', { state: 'detached', timeout: 15000 });
+  assert.match(await page.textContent('#bCont'), /misión 2: Marea Baja/, 'errores: ' + errors + ' ' + await ev(() => JSON.stringify(Object.entries(localStorage).map(([k, v]) => [k, v.slice(0, 120)]))));
   assert(await page.isVisible('#bShop'), 'con partida guardada, el menú ofrece la tienda');
   await page.click('#bPlay');
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('bPlay').textContent]), ['menu', '¿Borrar la partida guardada?']);
@@ -535,7 +548,9 @@ const path = require('path');
   assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['shop', 9]);
 
   // PC: sin botones táctiles, HUD escalado, ratón apunta y dispara; una partida corrupta se ignora
+  await ctx.close(); // la página del móvil ya no hace falta (y su 3D le quitaría tiempo a la de PC)
   const desk = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  await desk.addInitScript(lowGfx);
   const dp = await desk.newPage();
   dp.on('pageerror', e => errors.push(e.message));
   await dp.goto(url);
@@ -547,14 +562,14 @@ const path = require('path');
   assert.deepStrictEqual(await dp.evaluate(() => [__apagon.state, __apagon.room.tutorial, __apagon.room.tut]), ['play', true, 0]);
   const tut = await dp.evaluate(async () => {
     const A = __apagon, r = A.room, p = r.p, wait = ms => new Promise(f => setTimeout(f, ms)), log = [];
-    Object.assign(p, { x: 260, y: 140 }); await wait(250); log.push(r.tut);
+    Object.assign(p, { x: 260, y: 140 }); for (let i = 0; i < 30 && r.tut < 1; i++) await wait(100); log.push(r.tut);
     const g = r.tutGuard; A.hurtEnemy(g, 999, 0); r.tut = 3; await wait(800);
-    const bd = r.bodies[0]; Object.assign(p, { x: bd.x, y: bd.y }); A.use(); await wait(1500); log.push(r.hasCode);
+    const bd = r.bodies[0]; Object.assign(p, { x: bd.x, y: bd.y }); A.use(); for (let i = 0; i < 60 && !r.hasCode; i++) await wait(100); log.push(r.hasCode);
     Object.assign(p, { x: r.loot.x, y: r.loot.y }); await wait(300);
-    Object.assign(p, { x: r.exit.x, y: r.exit.y }); await wait(400);
-    return { log, state: A.state, saved: !!localStorage.getItem('apagon-ranura-1') && JSON.parse(localStorage.getItem('apagon-ranura-1')).run.tutorial };
+    Object.assign(p, { x: r.exit.x, y: r.exit.y }); for (let i = 0; i < 40 && A.state === 'play'; i++) await wait(100);
+    return { log, state: A.state, saved: !!(localStorage.getItem('apagon-ranura-1') && JSON.parse(localStorage.getItem('apagon-ranura-1')).run.tutorial) };
   });
-  assert.deepStrictEqual(tut, { log: [1, true], state: 'menu', saved: undefined });
+  assert.deepStrictEqual(tut, { log: [1, true], state: 'menu', saved: false });
   assert(await dp.isVisible('#menuNote'), 'al acabar el tutorial, aviso en el menú');
   await dp.click('#bPlay');
   await story(dp);
@@ -562,10 +577,12 @@ const path = require('path');
   await dp.waitForTimeout(300);
   assert(await dp.isHidden('#acts'), 'en PC no se muestran los botones táctiles');
   assert.strictEqual(await dp.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--hud').trim()), '1.5');
-  await dp.mouse.move(1500, 540);
+  await dp.mouse.move(960, 540); await dp.waitForTimeout(100);
+  const pa0 = await dp.evaluate(() => __apagon.room.p.a);
+  await dp.mouse.move(1160, 540, { steps: 8 }); await dp.waitForTimeout(100);
+  assert(await dp.evaluate(a => __apagon.room.p.a - a > 0.2, pa0), 'mover el ratón gira la vista');
   await dp.mouse.down(); await dp.waitForTimeout(400); await dp.mouse.up();
   assert(await dp.evaluate(() => __apagon.run.weapons[0].ammo < 12), 'el clic debe disparar');
-  assert(await dp.evaluate(() => Math.abs(__apagon.room.p.a) < 0.3), 'debe apuntar hacia el ratón');
   if (process.env.SHOTS) await dp.screenshot({ path: path.join(process.env.SHOTS, 'desktop.png') });
   // Consumibles: con vendas y herido, H cura poco a poco
   await dp.evaluate(() => { const A = __apagon; A.room.enemies.length = 0; A.run.items = { vendas: 1 }; A.run.hp = 50; });

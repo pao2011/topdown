@@ -126,6 +126,7 @@ details.howto[open] summary { margin-bottom: 10px; }
 #top .btn b { top: -6px; right: -6px; }
 .set-panel { width: min(520px, 100%); }
 .set { display: grid; grid-template-columns: 1fr 1.3fr; align-items: center; gap: 12px; font-size: 15px; color: var(--ink); }
+.set select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 4px 8px; }
 .set.chk { grid-template-columns: auto 1fr; justify-content: start; } .set input[type=range] { width: 100%; accent-color: var(--beam); } .set input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--beam); }
 .slot-list { display: grid; gap: 8px; }
 .slot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; }
@@ -261,9 +262,19 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
 @media (orientation: portrait) { .pm-list { grid-template-columns: 1fr 1fr; gap: 4px 8px; } .pm-row { padding: 4px 8px; font-size: 13px; } }
 @media (max-height: 560px) and (orientation: landscape) { .pm-panel { width: min(940px, 100%); padding: 12px 18px; gap: 7px; } .pm-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } .pm-row { white-space: nowrap; } .pm-row b { min-width: 34px; padding: 1px 6px; } .pm-panel .cta, .pm-panel .ghost { padding: 7px 18px; font-size: 13px; } .pm-panel .bf-title { font-size: 26px !important; } .pm-row { padding: 3px 9px; font-size: 13px; } .pm-list { gap: 4px 10px; } .pm-note { font-size: 12px; } }
 @media (max-width: 620px) and (orientation: landscape) { .pm-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px 8px; } .pm-row { padding: 2px 8px; } .pm-panel .bf-title { font-size: 22px !important; } .pm-panel { gap: 5px; } }
+/* Primera persona: el lienzo 3D va debajo y el del HUD encima, transparente; botón de disparo en móvil */
+#g3 { z-index: 0; cursor: default; } #c { z-index: 1; }
+body.fps.playing #c { cursor: none; }
+.btn.fire { background: rgba(120, 30, 24, .55); border-color: rgba(255, 110, 90, .6); color: #ffb0a0; }
+.btn.fire.press { background: rgba(255, 84, 68, .45); border-color: var(--alarm); }
+body:not(.fps) #bFire { display: none; }
+body.fps #acts { grid-template-columns: auto auto auto; gap: 18px 12px; }
+body.chase #bFire { display: none; }
+#hud { position: relative; z-index: 5; }
 </style>
 </head>
 <body>
+<canvas id="g3"></canvas>
 <canvas id="c"></canvas>
 <div id="safe"></div>
 <div id="padNote" role="status" hidden></div>
@@ -289,6 +300,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
     <button id="bBreach" class="btn" aria-label="C4: plantar o detonar"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="10" rx="1"/><path d="M8 9V6h8v3M12 4V2M9 14h6"/></svg><b id="chargeN">2</b><small>C4</small></button>
     <button id="bNade" class="btn" aria-label="Granada"><svg viewBox="0 0 24 24"><circle cx="11" cy="14" r="6"/><path d="M11 8V5h4l3 3"/></svg><b id="nadeN">2</b><small>Granada</small></button>
     <button id="bSneak" class="btn" aria-label="Sigilo: activar o desactivar" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 19c2-5 5-8 9-8"/><circle cx="15" cy="6" r="2.2"/><path d="M14 11l3 4-2 4M10 14l-3 5"/></svg><small>Sigilo</small></button>
+    <button id="bFire" class="btn big fire" aria-label="Disparar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg><small>Disparar</small></button>
     <button id="bKnife" class="btn big" aria-label="Cuchillo"><svg viewBox="0 0 24 24"><path d="M4 20l5-5"/><path d="M8 16l4 4"/><path d="M10 14L20 4c1 4-1 8-5 11z"/></svg><small>Cuchillo</small></button>
   </div>
   <div id="objs"><button id="bObjs" aria-expanded="false">Objetivos <span id="objsN"></span></button><ul id="objsList" hidden></ul></div>
@@ -413,7 +425,10 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
     <label class="set">Música <input id="sMusic" type="range" min="0" max="100"></label>
     <label class="set">Efectos <input id="sSfx" type="range" min="0" max="100"></label>
     <label class="set">Sensibilidad de la mira <input id="sSens" type="range" min="50" max="200"></label>
+    <label class="set">Campo de visión <input id="sFov" type="range" min="60" max="100"></label>
+    <label class="set">Calidad gráfica <select id="sGfx"><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja (móviles lentos)</option></select></label>
     <label class="set chk"><input id="sVib" type="checkbox"> Vibración</label>
+    <label class="set chk"><input id="sShadows" type="checkbox"> Sombras de la linterna (más bonito, más exigente)</label>
     <label class="set chk"><input id="sLaser" type="checkbox"> Mira láser (también con la tecla L)</label>
     <div class="row"><button id="bSetBack" class="cta">Volver</button><button id="bPadMap" class="ghost">Botones del mando</button></div>
   </div>
@@ -456,6 +471,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
   </div>
 </div>
 
+<script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
