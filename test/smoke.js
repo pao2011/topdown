@@ -280,6 +280,7 @@ const path = require('path');
   // Guardado: tras recargar la página, «Nueva partida» pide confirmación y «Continuar» recupera la tienda
   await page.reload();
   assert.match(await page.textContent('#bCont'), /misión 2: Marea Baja/);
+  assert(await page.isVisible('#bShop'), 'con partida guardada, el menú ofrece la tienda');
   await page.click('#bPlay');
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('bPlay').textContent]), ['menu', '¿Borrar la partida guardada?']);
   await page.click('#bCont');
@@ -294,7 +295,13 @@ const path = require('path');
   await ev(() => { __apagon.room.timer = 0.05; });
   await page.waitForTimeout(300);
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('overTitle').textContent, /Se acabó el tiempo/.test(document.getElementById('overInfo').textContent)]), ['over', 'TE HAN ATRAPADO', true]);
-  await page.click('#bRetry');
+  // Tras caer se puede pasar por la tienda antes de reintentar (con el equipo con el que entraste)
+  await ev(() => { __apagon.run.charges = 0; });
+  await page.click('#bOverShop');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level, __apagon.run.charges > 0, document.getElementById('shopTitle').textContent]), ['shop', 2, true, 'Prepárate: Marea Baja']);
+  await page.click('#bNext');
+  await page.click('#bGo');
+  assert.deepStrictEqual(await ev(() => [__apagon.state, __apagon.run.level]), ['play', 2]);
   // Si se acaba el tiempo tras la alarma, te atrapan
   await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
   await page.waitForTimeout(200);

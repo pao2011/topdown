@@ -813,9 +813,9 @@ function completeRoom() {
   show('win');
   save();
 }
-function openShop(stats) {
+function openShop(stats, title) {
   state = 'shop';
-  $('shopTitle').textContent = `${mission(run.level - 1).name}: completada`;
+  $('shopTitle').textContent = title || `${mission(run.level - 1).name}: completada`;
   $('shopStats').innerHTML = stats;
   shopTab = 'arm';
   renderShop();
@@ -840,7 +840,7 @@ function loadSave() {
 }
 function refreshMenu() {
   const d = loadSave(), b = $('bPlay');
-  $('bCont').hidden = !d;
+  $('bCont').hidden = $('bShop').hidden = !d;
   if (d) $('bCont').textContent = `Continuar · misión ${d.run.level}: ${mission(d.run.level).name}`;
   const lv = d ? d.run.level : 1;
   $('camp').innerHTML = MISSIONS.map((m, i) => `<span class="${i + 1 < lv ? 'done' : i + 1 === lv ? 'next' : ''}">${String(i + 1).padStart(2, '0')} ${m.name}</span>`).join('') +
@@ -2845,13 +2845,23 @@ $('bPlay').addEventListener('click', () => {
   begin(); newRun(); brief(startRoom);
 });
 $('bGo').addEventListener('click', () => { initAudio(); const f = goAfter; goAfter = null; clearInterval(typeT); if (f) f(); });
-$('bCont').addEventListener('click', () => {
+function loadRun() {
   const d = loadSave();
-  if (!d) { refreshMenu(); return; }
+  if (!d) { refreshMenu(); return null; }
   begin();
   run = { charges: 2, ...d.run, snap: null }; // las partidas de antes de las cargas empiezan con 2
   for (const w of run.weapons) { w.at = w.at || 'normal'; w.ats = w.ats || ['normal']; }
-  if (d.shop) openShop('Partida guardada. Prepárate para la siguiente misión.'); else brief(startRoom);
+  return d;
+}
+const prepShop = msg => openShop(msg, `Prepárate: ${mission(run.level).name}`); // tienda antes de entrar (desde el menú o tras caer)
+$('bCont').addEventListener('click', () => {
+  const d = loadRun();
+  if (d) { if (d.shop) openShop('Partida guardada. Prepárate para la siguiente misión.'); else brief(startRoom); }
+});
+$('bShop').addEventListener('click', () => { if (loadRun()) prepShop('Cambia de arma, mejóralas o repón munición, C4 y granadas antes de entrar.'); });
+$('bOverShop').addEventListener('click', () => { // vuelves al equipo con el que entraste y compras antes de reintentar
+  run = { ...JSON.parse(run.snap), snap: null };
+  prepShop('Cambia de arma, mejóralas o repón munición, C4 y granadas antes de reintentar.');
 });
 showMenu();
 $('bResume').addEventListener('click', () => { state = 'play'; show(null); });

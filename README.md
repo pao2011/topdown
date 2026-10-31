@@ -74,7 +74,7 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
   - escudo: para las balas de frente, salvo las perforantes;
   - el Alcaide: ametralladora, granadas y refuerzos a media vida.
 - **Sigilo cuerpo a cuerpo:** el cuchillo elimina al instante a un guardia que no te ha detectado o está de espaldas, y las bajas silenciosas pagan +50 %.
-- **Guardado:** la partida se guarda sola al entrar en cada misión y en la tienda. «Continuar» la retoma; «Nueva partida» pide confirmación. Siempre empiezas una misión con la vida llena, y si mueres la reintentas con el equipo con el que entraste.
+- **Guardado:** la partida se guarda sola al entrar en cada misión y en la tienda. «Continuar» la retoma; «Nueva partida» pide confirmación. Siempre empiezas una misión con la vida llena, y si mueres la reintentas con el equipo con el que entraste. Desde el menú (botón «Tienda») y al caer, antes de reintentar, puedes pasar por la tienda para cambiar de arma, mejorarlas o reponer munición, C4 y granadas.
 
 ## Pruebas
 
