@@ -1329,6 +1329,7 @@ function updatePlayer(dt) {
   // Movimiento: poco recorrido = sigilo, a fondo = andar, más allá del borde (o Mayús) = esprintar, que gasta resistencia
   const L = stickVec(sticks.L);
   let mx = L.x, my = L.y, mag = L.m, sprint = !!L.over;
+  if (sneakOn && !sprint && mag > SNEAK) { const k = SNEAK / mag; mx *= k; my *= k; mag = SNEAK; } // sigilo activado: el stick no pasa de sigilo
   const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   if (kx || ky) {
@@ -2488,7 +2489,8 @@ function drawHud() {
     if (sx < m || sx > vw - m || sy < m || sy > vh - m) {
       const a = Math.atan2(sy - vh / 2, sx - vw / 2);
       const k = Math.min((vw / 2 - m) / (Math.abs(Math.cos(a)) || 1e-6), (vh / 2 - m) / (Math.abs(Math.sin(a)) || 1e-6));
-      ctx.save(); ctx.translate(vw / 2 + Math.cos(a) * k, vh / 2 + Math.sin(a) * k); ctx.rotate(a);
+      const right = touchMode ? vw - $('acts').getBoundingClientRect().left + 14 : m; // en móvil, sin meterse bajo los botones
+      ctx.save(); ctx.translate(clamp(vw / 2 + Math.cos(a) * k, m, vw - right), vh / 2 + Math.sin(a) * k); ctx.rotate(a);
       ctx.globalAlpha = 0.85; ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-7, -9); ctx.lineTo(-3, 0); ctx.lineTo(-7, 9); ctx.closePath(); ctx.fill();
       ctx.restore();
@@ -2810,6 +2812,7 @@ function sfx(k, x, y) {
 // ================= Entrada =================
 function show(id) {
   ambience(id === null);
+  if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
   for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
@@ -2857,12 +2860,15 @@ const release = e => {
 };
 addEventListener('pointerup', release);
 addEventListener('pointercancel', release);
-cv.addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('contextmenu', e => e.preventDefault()); // la pulsación larga no abre menús del sistema
+const dropInput = () => { sticks.L = sticks.R = null; mouse.down = false; for (const k in keys) keys[k] = false; };
+addEventListener('blur', dropInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) { dropInput(); pause(); } }); // al cambiar de app, pausa
 
 const press = (id, fn) => $(id).addEventListener('pointerdown', e => {
   e.preventDefault(); e.stopPropagation();
   if (state !== 'play') return;
-  fn();
+  fn(); buzz(8);
   const b = $(id); b.classList.add('press'); setTimeout(() => b.classList.remove('press'), 120);
 });
 press('bKnife', melee);
@@ -2873,6 +2879,7 @@ press('bUse', use);
 press('bReload', reload);
 press('bLight', toggleLight);
 press('bWeapon', cycleWeapon);
+press('bSneak', toggleSneak);
 $('bPause').addEventListener('click', () => pause());
 
 function pause() {
@@ -2881,13 +2888,18 @@ function pause() {
   $('pauseInfo').textContent = `Misión ${run.level}: ${room.mission.name} · $${run.money} (+$${room.cash} en la bolsa) · vida ${Math.ceil(run.hp)}`;
   show('pause');
 }
-let sneakOn = false; // C alterna el sigilo con teclado
+let sneakOn = false; // C o el botón de sigilo lo alternan
+function toggleSneak() {
+  sneakOn = !sneakOn;
+  $('bSneak').classList.toggle('on', sneakOn); $('bSneak').setAttribute('aria-pressed', sneakOn);
+  banner(sneakOn ? 'Sigilo activado' : 'Sigilo desactivado');
+}
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') { state = 'play'; show(null); } }
   if (state !== 'play' || e.repeat) return;
-  if (e.code === 'KeyC') { sneakOn = !sneakOn; banner(sneakOn ? 'Sigilo activado (C para desactivar)' : 'Sigilo desactivado'); return; }
+  if (e.code === 'KeyC') { toggleSneak(); return; }
   const act = { Space: use, KeyE: melee, KeyG: throwNade, KeyB: breach, KeyQ: makeNoise, KeyR: reload, KeyF: toggleLight, Tab: cycleWeapon }[e.code];
   if (act) act();
   else if (/^Digit[1-5]$/.test(e.code) && run.weapons[e.code[5] - 1]) selectWeapon(e.code[5] - 1);

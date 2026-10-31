@@ -9,11 +9,22 @@ Sin dependencias ni compilación: `index.html` + `game.js`.
 - **En local:** abre `index.html` en el navegador o sirve la carpeta (`python3 -m http.server`) y entra desde el móvil con la IP del ordenador.
 - **Publicado:** en GitHub, *Settings → Pages → Deploy from a branch* y elige la rama con el código y la carpeta `/`. En móvil se juega en horizontal; en PC con teclado y ratón, y la vista y el HUD se adaptan al tamaño de la pantalla.
 
+## Android (APK)
+
+`android/` tiene un envoltorio mínimo: una actividad con un WebView a pantalla completa y en horizontal que carga el mismo `index.html` y `game.js` (la partida se guarda igual, en el almacenamiento del WebView; el botón atrás pausa). Se compila sin Gradle, solo con las herramientas del SDK (build-tools 34 y plataforma android-34) y Java:
+
+```
+keytool -genkeypair -keystore apagon.jks -alias apagon -keyalg RSA -keysize 2048 -validity 10000   # una vez
+ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... android/build.sh   # → android/out/apagon.apk
+```
+
+Guarda el keystore y su contraseña: para instalar una versión nueva encima de la anterior hay que firmarla con la misma clave.
+
 ## Controles
 
 | Táctil | Teclado / ratón | Acción |
 |---|---|---|
-| Stick izquierdo (poco recorrido) | `WASD` con el sigilo activado (`C` lo activa y lo desactiva) | Moverte en sigilo, sin ruido |
+| Stick izquierdo (poco recorrido) o botón Sigilo | `WASD` con el sigilo activado (`C` lo activa y lo desactiva) | Moverte en sigilo, sin ruido |
 | Stick izquierdo (a fondo) | `WASD` | Caminar: los pasos se oyen |
 | Stick izquierdo (más allá del borde) | `WASD` + `Mayús` | Correr: más rápido, mucho ruido y gasta aguante |
 | Stick derecho | Ratón | Apuntar la linterna |

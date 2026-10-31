@@ -80,6 +80,11 @@ const path = require('path');
   assert(Math.hypot(p1.x - p0.x, p1.y - p0.y) > 20, 'el stick izquierdo debe mover al jugador');
   await touch(2, 560, 300, 620, 300, 500);
   assert(await ev(() => __apagon.run.weapons[0].ammo < 12 || __apagon.room.p.reloadT > 0), 'el stick derecho a fondo debe disparar');
+  // Botón de sigilo: con él activado, el stick a fondo no pasa de sigilo
+  await page.tap('#bSneak');
+  const sneakMove = await (async () => { const t = touch(1, 120, 300, 190, 300, 500); await page.waitForTimeout(350); const r = await ev(() => [__apagon.room.p.sneak, Math.round(__apagon.room.p.speed)]); await t; return r; })();
+  await page.tap('#bSneak');
+  assert(sneakMove[0] && sneakMove[1] > 20 && sneakMove[1] <= 80, 'con el sigilo activado se mueve en sigilo: ' + sneakMove);
   await shot('play');
 
   // Munición limitada: recargar gasta reserva, sin reserva no dispara, las cajas la reponen

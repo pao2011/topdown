@@ -42,9 +42,10 @@ button:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
 .btn.big { width: 64px; height: 64px; }
 .btn.big svg { width: 30px; height: 30px; }
 .btn.off { opacity: .45; }
+.btn.on { background: rgba(98, 214, 173, .22); border-color: var(--ok); color: var(--ok); }
 #acts { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-45%) scale(var(--hud, 1)); transform-origin: right center; display: grid; grid-template-columns: auto auto; gap: 22px 14px; place-items: center; }
 #top { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 10px; transform: scale(var(--hud, 1)); transform-origin: top right; }
-#top .btn { width: 40px; height: 40px; }
+#top .btn { width: 46px; height: 46px; }
 #top .btn svg { width: 20px; height: 20px; }
 #bWeapon { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(var(--hud, 1)); transform-origin: bottom center; min-width: 150px; padding: 6px 16px 8px; border-radius: 6px; border: 1px solid rgba(217, 226, 236, .2); background: linear-gradient(90deg, rgba(255, 217, 138, .25) var(--p, 0%), rgba(14, 19, 26, .6) var(--p, 0%)); display: grid; gap: 0; text-align: center; touch-action: none; }
 .use { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(var(--hud, 1)); transform-origin: bottom center; padding: 9px 18px; border-radius: 22px; border: 1.5px solid #8fb8ff; background: rgba(14, 19, 26, .75); color: #cfe0ff; font-weight: 600; letter-spacing: .04em; white-space: nowrap; touch-action: none; }
@@ -118,7 +119,7 @@ details.howto[open] summary { margin-bottom: 10px; }
 @keyframes titleIn { from { letter-spacing: .45em; opacity: 0; filter: blur(6px); } }
 @keyframes tagIn { from { transform: translateY(6px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .brief-card.anim, .brief-card.anim * { animation: none !important; } }
-body.chase #bNoise, body.chase #bBreach, body.chase #bKnife { visibility: hidden; }
+body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak { visibility: hidden; }
 @media (max-height: 480px) { .brief-card { gap: 8px; padding: 14px 20px; } .bf-title { font-size: 40px; } .brief-card .lead { font-size: 14px; } #bfBrief { min-height: 0; } #bfObj { font-size: 12.5px; gap: 1px; } .brief-card .cta { padding: 9px 26px; } }
 .over h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--alarm); }
 .over p, .pause p { margin: 0; color: var(--dim); }
@@ -138,7 +139,7 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife { visibility: hidden
     <button id="bNoise" class="btn" aria-label="Hacer ruido"><svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><small>Ruido</small></button>
     <button id="bBreach" class="btn" aria-label="C4: plantar o detonar"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="10" rx="1"/><path d="M8 9V6h8v3M12 4V2M9 14h6"/></svg><b id="chargeN">2</b><small>C4</small></button>
     <button id="bNade" class="btn" aria-label="Granada"><svg viewBox="0 0 24 24"><circle cx="11" cy="14" r="6"/><path d="M11 8V5h4l3 3"/></svg><b id="nadeN">2</b><small>Granada</small></button>
-    <span></span>
+    <button id="bSneak" class="btn" aria-label="Sigilo: activar o desactivar" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 19c2-5 5-8 9-8"/><circle cx="15" cy="6" r="2.2"/><path d="M14 11l3 4-2 4M10 14l-3 5"/></svg><small>Sigilo</small></button>
     <button id="bKnife" class="btn big" aria-label="Cuchillo"><svg viewBox="0 0 24 24"><path d="M4 20l5-5"/><path d="M8 16l4 4"/><path d="M10 14L20 4c1 4-1 8-5 11z"/></svg><small>Cuchillo</small></button>
   </div>
   <button id="bUse" class="use" hidden></button>
