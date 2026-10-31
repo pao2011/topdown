@@ -272,7 +272,7 @@ const path = require('path');
     const A = __apagon, r = A.room, p = r.p, wait = ms => new Promise(f => setTimeout(f, ms)), keep = [A.run.weapons, A.run.cur, p.x, p.y, p.z], out = {};
     A.run.hp = 1000;
     A.run.weapons = [{ id: 'burst', mods: [], ammo: 30, reserve: 0, at: 'normal', ats: ['normal'] }]; A.run.cur = 0; p.fireT = 0; p.reloadT = 0; p.burstLeft = 0;
-    A.shoot(); await wait(400); out.burst = 30 - A.run.weapons[0].ammo;
+    A.shoot(); for (let i = 0; i < 20 && A.run.weapons[0].ammo > 27; i++) await wait(50); await wait(200); out.burst = 30 - A.run.weapons[0].ammo;
     const W = r.W; let wall = -1;
     for (let c = 0; c < r.map.length && wall < 0; c++) { const x = c % W, y = (c / W) | 0; if (r.map[c] === 1 && x > 4 && y > 2 && x < W - 3 && y < r.H - 3 && [1, 2, 3].every(k => r.map[c - k] === 0)) wall = c; }
     A.run.weapons = [{ id: 'gl', mods: [], ammo: 4, reserve: 0, at: 'normal', ats: ['normal'] }]; p.fireT = 0;
@@ -536,6 +536,20 @@ const path = require('path');
   await dp.evaluate(() => localStorage.setItem('apagon-partida-v1', '{"run":{"level":"x"}}'));
   await dp.reload();
   assert(await dp.isHidden('#bCont'), 'una partida corrupta no debe ofrecer continuar');
+  // Tutorial: diez pasos guiados (aquí se completan a mano) y vuelta al menú sin tocar la partida
+  await dp.click('#bTutorial'); await dp.waitForTimeout(300);
+  assert.deepStrictEqual(await dp.evaluate(() => [__apagon.state, __apagon.room.tutorial, __apagon.room.tut]), ['play', true, 0]);
+  const tut = await dp.evaluate(async () => {
+    const A = __apagon, r = A.room, p = r.p, wait = ms => new Promise(f => setTimeout(f, ms)), log = [];
+    Object.assign(p, { x: 260, y: 140 }); await wait(250); log.push(r.tut);
+    const g = r.tutGuard; A.hurtEnemy(g, 999, 0); r.tut = 3; await wait(800);
+    const bd = r.bodies[0]; Object.assign(p, { x: bd.x, y: bd.y }); A.use(); await wait(1500); log.push(r.hasCode);
+    Object.assign(p, { x: r.loot.x, y: r.loot.y }); await wait(300);
+    Object.assign(p, { x: r.exit.x, y: r.exit.y }); await wait(400);
+    return { log, state: A.state, saved: !!localStorage.getItem('apagon-ranura-1') && JSON.parse(localStorage.getItem('apagon-ranura-1')).run.tutorial };
+  });
+  assert.deepStrictEqual(tut, { log: [1, true], state: 'menu', saved: undefined });
+  assert(await dp.isVisible('#menuNote'), 'al acabar el tutorial, aviso en el menú');
   await dp.click('#bPlay');
   await story(dp);
   await dp.click('#bGo');
