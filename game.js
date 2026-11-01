@@ -768,7 +768,8 @@ function layoutHeist(level, rand, ri, M) {
   const rk = maps.map(() => new Uint8Array(W * H)); // tipo de sala de cada casilla: el 3D elige el mueble según la sala
   for (const [list, z] of [[leaves, 0], [uleaves, 1]]) if (maps[z]) for (const L of list) for (let y = L.y0; y <= L.y1; y++) for (let x = L.x0; x <= L.x1; x++) rk[z][y * W + x] = L === vault ? 16 : KCODE[L.kind] || 0;
   const staff = scene0 === 'tren' || scene0 === 'yate' ? [] : doors.slice(inner, inner + 3).flatMap(([dx, dy, v]) => v ? [dy * W + dx, (dy + 1) * W + dx] : [dy * W + dx, dy * W + dx + 1]); // puertas de servicio
-  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, flights, staff, rk, lamps, secure, terminal, idoors, vault: { ...vault, z: lootUp ? 1 : 0 },
+  const frontDoor = scene0 === 'tren' || scene0 === 'yate' ? null : { x: doors[inner + 3][0], y: doors[inner + 3][1] };
+  return { start, exit, loot, lootZ: lootUp ? 1 : 0, stairs, flights, staff, rk, frontDoor, lamps, secure, terminal, idoors, vault: { ...vault, z: lootUp ? 1 : 0 },
     road: { y0: H - 6, east: (H - 5) * T, west: (H - 3) * T },
     spawnOk: i => ((i / W) | 0) < H - 9 && (!hasVault || lootUp || !(i % W >= vault.x0 && i % W <= vault.x1 && ((i / W) | 0) >= vault.y0 && ((i / W) | 0) <= vault.y1)) };
 }
@@ -781,7 +782,7 @@ function buildRoom(level, seed) {
   walkMode = 0; // los guardias se colocan y patrullan sin pisar la escalera
   const dist0 = bfs(L.start);
   const r = {
-    level, W, H, maps, fks, map: maps[0], stairs: L.stairs, flights: L.flights || [], rk: L.rk || null, air: new Set(), start: center(L.start), exit: center(L.exit),
+    level, W, H, maps, fks, map: maps[0], stairs: L.stairs, flights: L.flights || [], rk: L.rk || null, frontDoor: L.frontDoor || null, air: new Set(), start: center(L.start), exit: center(L.exit),
     loot: L.loot >= 0 ? { ...center(L.loot), z: L.lootZ, taken: false } : null,
     lamps: [], enemies: [], bullets: [], nades: [], parts: [], rings: [], texts: [], bodies: [], decals: [], flashes: [], items: [], warns: [], charges: [], crateHp: {}, fx: [],
     detected: false, kills: 0, silent: 0, time: 0, deathT: 0, exposure: 0, boss: null, banner: null, alarm: false, timer: 0, sirenT: 0, zone, introT: 1.6,
@@ -4180,6 +4181,8 @@ function init3D() {
   const M = G3.M = {
     plaster: lampMat({ map: tx.plaster }), brick: lampMat({ map: tx.brick }), steel: lampMat({ map: tx.steel }), fence: lampMat({ map: tx.fence }), hull: lampMat({ map: tx.hull }),
     glass: new THREE.MeshLambertMaterial({ color: 0x9fc8e8, transparent: true, opacity: 0.22, depthWrite: false, emissive: 0x0a1420 }),
+    glassLit: new THREE.MeshLambertMaterial({ color: 0xffe2b0, transparent: true, opacity: 0.4, depthWrite: false, emissive: 0x6a5226 }),
+    stone: lampMat({ color: 0x8a867c }),
     crate: lampMat({ map: tx.crate }), desk: lampMat({ map: tx.desk }), shelf: lampMat({ map: tx.shelf }), rack: lampMat({ map: tx.rack, emissiveMap: tx.rackLed, emissive: 0xffffff }, 'led'),
     deposit: lampMat({ map: tx.deposit }), secure: lampMat({ map: tx.secure }), metal: lampMat({ map: tx.metal, vertexColors: true }, 'vc'), concrete: lampMat({ map: tx.concrete }),
     hedge: lampMat({ map: tx.hedge, alphaTest: 0.4, side: THREE.DoubleSide }, 'a'), bark: lampMat({ map: tx.bark }), leaves: lampMat({ map: tx.hedge, alphaTest: 0.4, side: THREE.DoubleSide }, 'a'),
@@ -4288,13 +4291,14 @@ function buildChunk(z, cx, cy) {
     const c = y * W + x, t = M[c], X = x * T, Y = y * T, f = F[c];
     if (t === VOID) continue;
     const top = bz + (z === 0 && up && up[c] !== VOID ? FLOOR_H : WALL_H), o = { z, base: bz };
-    const outdoor = n => z === 0 && !zone[n] && !BLOCK_WALK[M[n]];
+    const outdoor = n => z === 0 ? !zone[n] && !BLOCK_WALK[M[n]] : M[n] === VOID;
     const sideMat = (n, inner) => outdoor(n) && !border(x, y) ? 'brick' : inner === 'plaster' && (zone[n] || z === 1) ? WALLMAT[F[n]] || inner : inner;
     const skipFull = { px: isFull(M[c + 1]), nx: isFull(M[c - 1]), pz: isFull(M[c + W]), nz: isFull(M[c - W]) };
     if (t === WALL || t === VWALL) {
       const inner = t === VWALL ? 'steel' : border(x, y) ? 'fence' : f === 15 ? 'hull' : 'plaster';
       const ht = border(x, y) ? bz + 100 : top;
       box3(B, X, bz, Y, X + T, ht, Y + T, { ...o, mat: inner, mats: t === WALL && inner === 'plaster' ? { px: sideMat(c + 1, inner), nx: sideMat(c - 1, inner), pz: sideMat(c + W, inner), nz: sideMat(c - W, inner), py: 'roof' } : { py: 'roof' }, skip: { ...skipFull, ny: true }, vy0: bz });
+      if (!border(x, y) && t === WALL && f !== 15) facade3(B, o, X, Y, c, bz, top, outdoor);
       if (inner === 'plaster') for (const [dx, dy, k] of [[1, 0, 1], [-1, 0, 2], [0, 1, 3], [0, -1, 4]]) { // un cuadro colgado
         const n = c + dy * W + dx; if (BLOCK_WALK[M[n]] || !(zone[n] || z === 1) || ![8, 5, 4, 16, 12].includes(F[n]) || hash(x, y, 40 + k) > 0.16) continue;
         const pal = ['#7a2f2a', '#2a4a6a', '#3d5a3a', '#5a3a6a', '#c9a64a', '#1f3a55'], cx = X + T / 2 + dx * (T / 2 + 0.8), cz = Y + T / 2 + dy * (T / 2 + 0.8), hw = dx ? 0.8 : 14, hd = dx ? 14 : 0.8;
@@ -4305,9 +4309,11 @@ function buildChunk(z, cx, cy) {
       const horiz = BLOCK_WALK[M[c - 1]] && BLOCK_WALK[M[c + 1]], mats = { px: sideMat(c + 1, 'plaster'), nx: sideMat(c - 1, 'plaster'), pz: sideMat(c + W, 'plaster'), nz: sideMat(c - W, 'plaster'), py: 'roof' };
       box3(B, X, bz, Y, X + T, bz + 34, Y + T, { ...o, mat: 'plaster', mats, skip: { ...skipFull, ny: true }, vy0: bz });
       box3(B, X, bz + 96, Y, X + T, top, Y + T, { ...o, mat: 'plaster', mats, skip: { ...skipFull }, vy0: bz });
-      if (horiz) { box3(B, X, bz + 34, Y + T / 2 - 2, X + T, bz + 96, Y + T / 2 + 2, { ...o, mat: 'glass', skip: { px: true, nx: true, py: true, ny: true } }); box3(B, X + T / 2 - 1.5, bz + 34, Y + T / 2 - 3, X + T / 2 + 1.5, bz + 96, Y + T / 2 + 3, { ...o, mat: 'fence' }); }
-      else { box3(B, X + T / 2 - 2, bz + 34, Y, X + T / 2 + 2, bz + 96, Y + T, { ...o, mat: 'glass', skip: { pz: true, nz: true, py: true, ny: true } }); box3(B, X + T / 2 - 3, bz + 34, Y + T / 2 - 1.5, X + T / 2 + 3, bz + 96, Y + T / 2 + 1.5, { ...o, mat: 'fence' }); }
-    } else if (t === SECURE) box3(B, X, bz, Y, X + T, top, Y + T, { ...o, mat: 'secure', unit: true, skip: { ...skipFull, ny: true } });
+      facade3(B, o, X, Y, c, bz, top, outdoor, true);
+      const inn = [c + 1, c - 1, c + W, c - W].find(n => (zone[n] || z === 1) && !BLOCK_WALK[M[n]] && M[n] !== VOID), Li = inn !== undefined ? lampS(z, (inn % W + 0.5) * T, ((inn / W) | 0) * T + T / 2) : [0, 0, 0], gm = Li[0] + Li[1] + Li[2] > 0.5 ? 'glassLit' : 'glass';
+      if (horiz) { box3(B, X, bz + 34, Y + T / 2 - 2, X + T, bz + 96, Y + T / 2 + 2, { ...o, mat: gm, skip: { px: true, nx: true, py: true, ny: true } }); box3(B, X + T / 2 - 1.5, bz + 34, Y + T / 2 - 3, X + T / 2 + 1.5, bz + 96, Y + T / 2 + 3, { ...o, mat: 'fence' }); }
+      else { box3(B, X + T / 2 - 2, bz + 34, Y, X + T / 2 + 2, bz + 96, Y + T, { ...o, mat: gm, skip: { pz: true, nz: true, py: true, ny: true } }); box3(B, X + T / 2 - 3, bz + 34, Y + T / 2 - 1.5, X + T / 2 + 3, bz + 96, Y + T / 2 + 1.5, { ...o, mat: 'fence' }); }
+    } else if (t === SECURE && room.mission.scene === 'banco') { /* puerta redonda: modelo aparte */ } else if (t === SECURE) box3(B, X, bz, Y, X + T, top, Y + T, { ...o, mat: 'secure', unit: true, skip: { ...skipFull, ny: true } });
     else if (t === DEPOSIT) box3(B, X, bz, Y, X + T, top, Y + T, { ...o, mat: 'deposit', us: 40, vs: 40, skip: { ...skipFull, ny: true } });
     else if (t === CRATE) box3(B, X + 2, bz, Y + 2, X + T - 2, bz + 36, Y + T - 2, { ...o, mat: 'crate', unit: true, skip: { ny: true } });
     else if (t === LOW) {
@@ -4372,6 +4378,9 @@ function buildChunk(z, cx, cy) {
       else { box3(B, X + 16, bz, Y + 16, X + 24, bz + 92, Y + 24, { ...o, mat: 'bark', us: 32, vs: 92 }); geo3(B, 'leaves', new THREE.IcosahedronGeometry(36 + hash(x, y, 2) * 10, 1), m4.makeTranslation(X + 20, bz + 120, Y + 20), WHITE, z, bz); }
     }
     if (doorCells.has(z + ':' + c)) box3(B, X, bz + 100, Y, X + T, top, Y + T, { ...o, mat: 'plaster', vy0: bz, skip: { ...skipFull } }); // dintel sobre las puertas
+    else if (z === 0 && t === FLOOR && !zone[c] && ((isFull(M[c - 1]) || M[c - 1] === GLASS || M[c - 1] === FLOOR && isFull(M[c - 2])) && (isFull(M[c + 1]) || M[c + 1] === GLASS || M[c + 1] === FLOOR && isFull(M[c + 2])) && zone[c - W] !== zone[c + W] || (isFull(M[c - W]) || M[c - W] === FLOOR && isFull(M[c - 2 * W])) && (isFull(M[c + W]) || M[c + W] === FLOOR && isFull(M[c + 2 * W])) && zone[c - 1] !== zone[c + 1]) && !border(x, y)) {
+      box3(B, X, bz + 104, Y, X + T, top, Y + T, { ...o, mat: 'brick', mats: { py: 'roof' }, vy0: bz }); box3(B, X - 1, bz + 100, Y - 1, X + T + 1, bz + 106, Y + T + 1, { ...o, mat: 'stone' }); // hueco de la calle: dintel de ladrillo con su piedra
+    }
     if (t === FLOOR && room.win && room.win.has(z + ':' + c)) { // ventana rota: alféizar bajo y dintel
       const mats = { px: sideMat(c + 1, 'plaster'), nx: sideMat(c - 1, 'plaster'), pz: sideMat(c + W, 'plaster'), nz: sideMat(c - W, 'plaster'), py: 'roof' };
       box3(B, X, bz, Y, X + T, bz + 14, Y + T, { ...o, mat: 'plaster', mats, skip: { ...skipFull, ny: true }, vy0: bz });
@@ -4395,10 +4404,64 @@ function bucketsToGroup(Bk) {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(b.u, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(b.c, 3)); g.setAttribute('lamp', new THREE.Float32BufferAttribute(b.l, 3));
     const mesh = new THREE.Mesh(g, G3.M[k] || G3.M.plaster);
     mesh.castShadow = k !== 'glass' && k !== 'ceiling'; mesh.receiveShadow = true;
-    if (k === 'glass') mesh.renderOrder = 2;
+    if (k === 'glass' || k === 'glassLit') { mesh.renderOrder = 2; mesh.castShadow = false; }
     grp.add(mesh);
   }
   return grp;
+}
+// Fachada: zócalo de piedra, cornisa arriba e imposta entre plantas en cada cara que da a la calle
+function facade3(B, o, X, Y, c, bz, top, outdoor, win) {
+  for (const [dx, dy] of DIR4) {
+    if (!outdoor(c + dy * W + dx)) continue;
+    const band = (y0, y1, out, mat = 'stone') => {
+      const x0 = dx > 0 ? X + T : dx < 0 ? X - out : X - (dy ? 0.5 : 0), x1 = dx > 0 ? X + T + out : dx < 0 ? X : X + T + (dy ? 0.5 : 0);
+      const z0 = dy > 0 ? Y + T : dy < 0 ? Y - out : Y - 0.5, z1 = dy > 0 ? Y + T + out : dy < 0 ? Y : Y + T + 0.5;
+      box3(B, x0, bz + y0, z0, x1, bz + y1, z1, { ...o, mat });
+    };
+    if (!win) band(0, 12, 2.5); // zócalo
+    else band(30, 34, 5); // alféizar que sobresale
+    band(top - bz - 7, top - bz + 1, 4); // cornisa
+    if (top - bz > WALL_H + 2) band(WALL_H - 4, WALL_H + 2, 3); // imposta entre la planta baja y la primera
+  }
+}
+// Puerta de la cámara del banco: marco de acero con hueco redondo, puerta maciza con pasadores y volante; gira sobre su bisagra
+function makeVaultDoor3(d) {
+  const V = room.vault || { x0: 0, x1: 0, y0: 0, y1: 0 }, bz = d.z * FLOOR_H, c = d.cells[0];
+  const top = d.z === 0 && maps[1] && maps[1][c] !== VOID ? FLOOR_H : WALL_H, R = 37, cy = 52;
+  const g = new THREE.Group(), steel = new THREE.MeshPhongMaterial({ map: G3.tx.steel, color: 0x8a929c, shininess: 25, specular: 0x2a2a2a, emissive: 0x0a0b0d });
+  const chrome = new THREE.MeshPhongMaterial({ color: 0x9aa2ac, shininess: 40, specular: 0x3a3a3a, emissive: 0x0c0d0f }), dark = new THREE.MeshLambertMaterial({ color: 0x1a1d22 });
+  const sh = new THREE.Shape(); sh.moveTo(-T, 0); sh.lineTo(T, 0); sh.lineTo(T, top); sh.lineTo(-T, top); sh.closePath();
+  const hole = new THREE.Path(); hole.absarc(0, cy, R + 1.5, 0, Math.PI * 2, true); sh.holes.push(hole);
+  const fg = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: false, curveSegments: 40 }); fg.rotateY(Math.PI / 2); fg.translate(-T / 2, 0, 0);
+  const frame = new THREE.Mesh(fg, steel); frame.castShadow = frame.receiveShadow = true; g.add(frame);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R + 3, 3, 10, 48), chrome); ring.rotation.y = Math.PI / 2; ring.position.set(T / 2 + 1, cy, 0); g.add(ring); // aro del marco
+  const hinge = new THREE.Group(); hinge.position.set(T / 2 - 4, cy, -R); g.add(hinge);
+  const door = new THREE.Group(); door.position.set(-6, 0, R); hinge.add(door);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 16, 48), steel); disc.rotation.z = Math.PI / 2; disc.castShadow = true; door.add(disc);
+  for (const [rr, tt] of [[R - 6, 1.6], [R - 16, 1.2]]) { const t = new THREE.Mesh(new THREE.TorusGeometry(rr, tt, 8, 40), chrome); t.rotation.y = Math.PI / 2; t.position.x = 8.5; door.add(t); } // anillos
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, b = new THREE.Mesh(G3.cyl, chrome); b.scale.set(3.2, 10, 3.2); b.position.set(0, Math.sin(a) * (R + 2), Math.cos(a) * (R + 2)); b.rotation.x = -a; door.add(b); } // pasadores
+  const wheel = new THREE.Group(); wheel.position.x = 13; door.add(wheel);
+  const tw = new THREE.Mesh(new THREE.TorusGeometry(13, 1.8, 8, 32), chrome); tw.rotation.y = Math.PI / 2; wheel.add(tw);
+  for (let i = 0; i < 3; i++) { const sp = new THREE.Mesh(G3.box, chrome); sp.scale.set(1.6, 26, 2); sp.rotation.x = i * Math.PI / 3; wheel.add(sp); }
+  const hub = new THREE.Mesh(G3.cyl, chrome); hub.scale.set(5, 5, 5); hub.rotation.z = Math.PI / 2; wheel.add(hub);
+  const pad = new THREE.Mesh(G3.box, dark); pad.scale.set(1.5, 9, 6); pad.position.set(8.8, 24, -18); door.add(pad); // teclado
+  for (const hy of [-24, 24]) { const h = new THREE.Mesh(G3.cyl, chrome); h.scale.set(4, 14, 4); h.position.set(T / 2 - 2, cy + hy, -R - 1); g.add(h); } // bisagras
+  // orientación: el lado de fuera de la cámara mira hacia +x local
+  const out = d.v ? (d.x < V.x0 * T ? -1 : 1) : (d.y < V.y0 * T ? -1 : 1);
+  g.rotation.y = d.v ? (out > 0 ? 0 : Math.PI) : (out > 0 ? -Math.PI / 2 : Math.PI / 2);
+  g.position.set(d.x, bz, d.y);
+  g.userData = { hinge, wheel, k: d.open ? 1 : 0 };
+  return g;
+}
+function makeSign3(F) { // letrero iluminado sobre la puerta principal, con el nombre del sitio
+  const txt = { banco: 'BANCO NORTE', oficinas: 'OFICINAS', galeria: 'GALERÍA DE ARTE', joyeria: 'JOYERÍA', casino: 'CASINO', museo: 'MUSEO', almacen: 'ALMACENES DEL PUERTO', datos: 'DATA CENTER' }[room.mission.scene];
+  if (!txt) return null;
+  const tex = canvasTex(512, 96, (g, w, h) => { g.fillStyle = '#0e1116'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c9a64a'; g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8); g.font = '700 56px "Saira Stencil One", Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffe9b0'; g.shadowColor = '#ffb040'; g.shadowBlur = 16; g.fillText(txt, w / 2, h / 2 + 3); }, false);
+  const g = new THREE.Group(), x = (F.x + 1) * T, y = (F.y + 1) * T;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(108, 19), new THREE.MeshBasicMaterial({ map: tex })); sign.position.set(x, 111, y + 26); g.add(sign); // de pie sobre el borde de la marquesina
+  const canopy = new THREE.Mesh(G3.box, new THREE.MeshLambertMaterial({ color: 0x23272e })); canopy.scale.set(110, 3, 26); canopy.position.set(x, 100, y + 13); canopy.castShadow = true; g.add(canopy); // marquesina
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: G3.glowTex, color: 0xffc070, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.35, transparent: true })); s.scale.set(180, 70, 1); s.position.set(x, 111, y + 30); g.add(s);
+  return g;
 }
 function makeFlight3(F) { // peldaños macizos hasta la primera planta y barandilla alrededor del hueco de arriba
   const Bk = {}, B = k => Bk[k] || (Bk[k] = GB()), x0 = F.x0 * T, x1 = (F.x1 + 1) * T, y0 = F.y0 * T, y1 = (F.y1 + 1) * T, len = F.vert ? y1 - y0 : x1 - x0, n = 15;
@@ -4468,6 +4531,8 @@ function build3D() {
   for (const d of room.doors) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: G3.glowTex, color: 0xff3a30, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.set(14, 14, 1); s.position.set(d.x + (d.v ? 0 : 0), d.z * FLOOR_H + 104, d.y); st.add(d.m3 = s); }
   if (room.loot) st.add(room.loot.m3 = makeLoot3(room.loot));
   for (const F of room.flights || []) st.add(makeFlight3(F));
+  if (room.mission.scene === 'banco') for (const d of room.doors) st.add(d.v3 = makeVaultDoor3(d));
+  if (room.frontDoor && !room.boss) { const sg = makeSign3(room.frontDoor); if (sg) st.add(sg); }
   if (!room.road && !room.boss) { const c = makeCar3(room.mission.car); c.position.set(room.exit.x, 0, room.exit.y); c.rotation.y = Math.PI / 2; st.add(room.exitM3 = c); }
   G3.S.add(st);
   const cx = W * T / 2, cy = H * T / 2;
@@ -4786,7 +4851,7 @@ function render3D() {
   // lámparas (encendidas o rotas)
   for (const l of room.lamps) { const u = l.m3 && l.m3.userData; if (!u || u.was === l.on) continue; u.was = l.on; u.bulb.color.copy(l.on ? u.on : new THREE.Color(0x15171a)); u.s.visible = l.on; }
   for (const d of room.idoors) if (d.m3) for (const { pv, sd } of d.m3.userData.leaves) { const base = d.v ? (sd < 0 ? Math.PI / 2 : -Math.PI / 2) : (sd < 0 ? 0 : Math.PI); pv.rotation.y = -(base + d.swing * Math.PI / 2 * (d.v ? -sd : sd)); }
-  for (const d of room.doors) if (d.m3) d.m3.visible = !d.open && Math.sin(room.time * 5) > 0;
+  for (const d of room.doors) { if (d.m3) d.m3.visible = !d.open && Math.sin(room.time * 5) > 0; const u = d.v3 && d.v3.userData; if (u) { const k0 = u.k; u.k = Math.min(1, u.k + (d.open ? dt * 0.6 : 0)); const spin = Math.min(1, u.k * 3), swing = Math.max(0, (u.k - 0.3) / 0.7); u.wheel.rotation.x = -spin * Math.PI * 3; u.hinge.rotation.y = swing * swing * 1.9; void k0; } } // el volante gira y luego la puerta se abre hacia fuera
   let ci = 0;
   for (const k of room.cams) {
     if (!k.m3) continue;

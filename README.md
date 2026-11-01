@@ -17,7 +17,7 @@ Sin compilación: `index.html` + `game.js`, y [Three.js](https://threejs.org) r1
 
 ```
 keytool -genkeypair -keystore apagon.jks -alias apagon -keyalg RSA -keysize 2048 -validity 10000   # una vez
-ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=2.1 CODE=9 android/build.sh   # → android/out/apagon.apk
+ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=2.2 CODE=10 android/build.sh   # → android/out/apagon.apk
 ```
 
 Guarda el keystore y su contraseña. Para instalar una versión nueva encima de la anterior hay que firmarla con la misma clave y con un `CODE` mayor.
@@ -146,7 +146,7 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
   - con el código, que está en una nota en un cajón, en la tarjeta de un supervisor o en la terminal de seguridad;
   - hackeándola, y el progreso se guarda si lo dejas a medias;
   - en asalto, con C4.
-  Hackear pita, y los guardias cercanos pueden oírlo.
+  Hackear pita, y los guardias cercanos pueden oírlo. En el banco, la puerta es una de verdad, redonda: marco de acero con hueco circular y puerta maciza con anillos, volante, teclado y doce pasadores. Al abrirla, el volante gira y la puerta se abre hacia fuera sobre sus bisagras.
 - **Interiores:** cada sala tiene su uso, su suelo, el acabado de sus paredes (madera en los vestíbulos, papel pintado en las salas, paneles en los servidores, bloques en los almacenes) y su luz (plafones en el techo, una lámpara de pie o a oscuras). Hay cuadros colgados, sillas en los puestos y monitores encendidos.
 - **Plantas y escalera:** algunos edificios tienen primera planta. La escalera es un tramo recto que se sube andando: la vista sube contigo, a mitad de tramo pasas a la otra planta y arriba hay un hueco de verdad con barandilla. Solo se entra y se sale por sus extremos. Cada planta tiene sus guardias, y los ruidos de la otra les llegan muy amortiguados.
 - **Saltar por la ventana:** rompe una ventana de la primera planta que dé a la calle o al césped y salta. Caes abajo, te haces algo de daño (10) y el golpe se oye.
@@ -215,6 +215,7 @@ En algunas misiones, al huir te persiguen para recuperar el botín. Vas asomado 
 ### Gráficos y sonido
 
 - **Primera persona en 3D (Three.js):** la partida se sigue simulando en el plano (casillas, visión, ruido, balas, IA); la vista la convierte en un mundo 3D.
+  - **Edificios:** fachadas de ladrillo con zócalo de piedra, cornisa e imposta entre plantas. Las ventanas tienen alféizar, y su cristal brilla cálido si dentro hay luz. Los huecos de la calle llevan dintel, y sobre la puerta principal hay marquesina y un letrero iluminado con el nombre del sitio («BANCO NORTE», «CASINO», «MUSEO»…).
   - **Mundo:** muros, ventanas con cristal, puertas de seguridad, mesas, estanterías, racks, cajas de seguridad, contenedores, setos y árboles salen del mapa con su altura y sus texturas. Las fachadas son de ladrillo por fuera y de yeso por dentro, y hay techos y escaleras con su hueco.
   - **Destrucción:** el mapa se construye por trozos, y al romper una pared o una ventana solo se rehace el trozo afectado.
   - **Suelo:** usa el mismo horneado de siempre, así que la sangre, los casquillos, los cascotes y los charcos quedan pintados en él.
