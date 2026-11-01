@@ -6,12 +6,14 @@ const assert = require('assert');
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   const pg = await ctx.newPage(); const errs = []; pg.on('pageerror', e => errs.push(e.message));
+  await pg.addInitScript(() => { try { if (!localStorage.getItem('apagon-ajustes')) localStorage.setItem('apagon-ajustes', JSON.stringify({ gfx: 'baja', shadows: false })); } catch (e) { /* sin almacenamiento */ } }); // 3D en calidad baja: WebGL por software
   await pg.addInitScript(() => {
     const g = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
     window.__pad = g; navigator.getGamepads = () => [g];
     window.__press = async (i, ms = 120) => { g.buttons[i] = { pressed: true, value: 1 }; await new Promise(r => setTimeout(r, ms)); g.buttons[i] = { pressed: false, value: 0 }; await new Promise(r => setTimeout(r, 120)); };
   });
-  await pg.goto('file://' + path.resolve(__dirname, '../index.html'));
+  const server = await require('./serve')();
+  await pg.goto(server.url);
   await pg.evaluate(() => dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: __pad })));
   assert.match(await pg.textContent('#padNote'), /Mando conectado: Xbox Wireless Controller/);
   await pg.evaluate(() => __press(0)); // A salta la carga
@@ -28,16 +30,17 @@ const assert = require('assert');
   await pg.evaluate(() => __press(0)); await pg.evaluate(() => __press(0));
   await pg.waitForFunction(() => __apagon.state === 'play', null, { timeout: 4000 });
   assert(await pg.evaluate(() => __apagon.padMode && document.getElementById('acts').hidden), 'con mando no salen los botones táctiles');
-  // moverse con el stick izquierdo
-  const x0 = await pg.evaluate(() => { __apagon.room.enemies.length = 0; return __apagon.room.p.x; });
-  await pg.evaluate(() => { __pad.axes[0] = 1; }); await pg.waitForTimeout(600); await pg.evaluate(() => { __pad.axes[0] = 0; });
-  const x1 = await pg.evaluate(() => __apagon.room.p.x);
-  assert(x1 - x0 > 20, 'el stick izquierdo mueve');
-  // apuntar con el stick derecho y disparar con RT
-  await pg.evaluate(() => { __pad.axes[2] = 0; __pad.axes[3] = -1; }); await pg.waitForTimeout(300);
-  const a = await pg.evaluate(() => __apagon.room.p.a); assert(Math.abs(a + Math.PI / 2) < 0.3, 'el stick derecho apunta: ' + a);
+  // moverse con el stick izquierdo (hacia delante: adonde miras, en primera persona)
+  const p0 = await pg.evaluate(() => { const A = __apagon, p = A.room.p; A.room.enemies.length = 0; A.useFloor(p.z); let best = 0, ba = p.a; for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, d = A.castRay(p.x, p.y, Math.cos(a), Math.sin(a), 400); if (d > best) { best = d; ba = a; } } p.a = ba; return { x: p.x, y: p.y, a: p.a }; });
+  await pg.evaluate(() => { __pad.axes[1] = -1; }); await pg.waitForTimeout(600); await pg.evaluate(() => { __pad.axes[1] = 0; });
+  const p1 = await pg.evaluate(() => ({ x: __apagon.room.p.x, y: __apagon.room.p.y }));
+  assert((p1.x - p0.x) * Math.cos(p0.a) + (p1.y - p0.y) * Math.sin(p0.a) > 20, 'el stick izquierdo mueve hacia delante');
+  // mirar con el stick derecho y disparar con RT
+  const a0 = await pg.evaluate(() => __apagon.room.p.a);
+  await pg.evaluate(() => { __pad.axes[2] = 1; __pad.axes[3] = 0; }); await pg.waitForTimeout(300); await pg.evaluate(() => { __pad.axes[2] = 0; });
+  const a = await pg.evaluate(() => __apagon.room.p.a); assert(a - a0 > 0.3, 'el stick derecho gira la vista: ' + (a - a0));
   const ammo0 = await pg.evaluate(() => __apagon.run.weapons[0].ammo);
-  await pg.evaluate(() => { __pad.buttons[7] = { pressed: true, value: 1 }; }); await pg.waitForTimeout(400); await pg.evaluate(() => { __pad.buttons[7] = { pressed: false, value: 0 }; __pad.axes[3] = 0; });
+  await pg.evaluate(() => { __pad.buttons[7] = { pressed: true, value: 1 }; }); await pg.waitForTimeout(400); await pg.evaluate(() => { __pad.buttons[7] = { pressed: false, value: 0 }; });
   assert((await pg.evaluate(() => __apagon.run.weapons[0].ammo)) < ammo0, 'RT dispara');
   // B sigilo, Start pausa, B vuelve
   await pg.evaluate(() => __press(1)); assert(await pg.evaluate(() => document.getElementById('bSneak').classList.contains('on')), 'B activa el sigilo');
@@ -77,6 +80,7 @@ const assert = require('assert');
   await pg.evaluate(() => { __pad.buttons[7] = { pressed: true, value: 1 }; }); await pg.waitForTimeout(400); await pg.evaluate(() => { __pad.buttons[7] = { pressed: false, value: 0 }; });
   assert(await pg.evaluate(a => __apagon.run.weapons[__apagon.run.cur].ammo < a, am), 'RT dispara desde el techo');
   assert.deepStrictEqual(errs, [], 'errores en consola');
+  server.close();
   console.log('mando OK');
   await b.close();
 })().catch(e => { console.error(e.message); process.exit(1); });

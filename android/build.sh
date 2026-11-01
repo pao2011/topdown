@@ -7,7 +7,7 @@ SDK=${ANDROID_SDK:?define ANDROID_SDK}; BT=$SDK/build-tools/34.0.0; JAR=$SDK/pla
 : "${KEYSTORE:?define KEYSTORE}" "${KS_PASS:?define KS_PASS}"
 VERSION=${VERSION:-1.0}; CODE=${CODE:-1}
 rm -rf out && mkdir -p out/classes out/assets
-cp ../index.html ../game.js out/assets/
+cp ../index.html ../game.js out/assets/ && mkdir -p out/assets/vendor && cp ../vendor/three.min.js out/assets/vendor/
 "$BT/aapt2" compile --dir res -o out/res.zip
 "$BT/aapt2" link -o out/base.apk -I "$JAR" --manifest AndroidManifest.xml -A out/assets out/res.zip \
   --min-sdk-version 24 --target-sdk-version 34 --version-code "$CODE" --version-name "$VERSION"

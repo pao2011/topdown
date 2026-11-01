@@ -1616,7 +1616,7 @@ try {
 function setSlot(n) { slot = n; try { localStorage.setItem('apagon-ranura-actual', n); } catch (e) { /* sin almacenamiento */ } }
 function save() {
   if (run && run.tutorial) return; // el tutorial no toca tu partida
-  try { const { snap, ...rest } = run; localStorage.setItem(SLOT_KEY(slot), JSON.stringify({ run: rest, shop: state === 'shop' || state === 'win', t: Date.now() })); } catch (e) { /* sin almacenamiento: se juega sin guardar */ }
+  try { const { snap, ...rest } = run; localStorage.setItem(SLOT_KEY(slot), JSON.stringify({ run: rest, shop: state === 'shop' || state === 'win', t: Date.now() })); } catch (e) { window.__saveErr = String(e); /* sin almacenamiento: se juega sin guardar */ }
 }
 function loadSave(n = slot) {
   try {
@@ -3889,7 +3889,7 @@ function drawHud() {
   ctx.fillText(room.tutorial ? 'ENTRENAMIENTO' : `MISIÓN ${run.level} · ${room.mission.name.toUpperCase()} · ${room.enemies.filter(e => !hidden(e)).length} HOSTILES`, uw / 2, y);
   ctx.font = '700 16px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = heat >= 2 && Math.sin(room.time * 8) > 0 ? '#ffd98a' : col;
   ctx.fillText(label, uw / 2, y + 14);
-  if (!room.boss) for (let i = 0; i < 4; i++) { ctx.fillStyle = i <= heat ? col : 'rgba(125,140,160,0.3)'; ctx.fillRect(uw / 2 - 31 + i * 16, y + 24, 14, 3); } // pips de alerta
+  if (!room.boss) for (let i = 0; i < 4; i++) { ctx.fillStyle = i <= heat ? col : 'rgba(125,140,160,0.3)'; ctx.fillRect(uw / 2 - 31 + i * 16, y + 32, 14, 3); } // pips de alerta
   if (room.boss) {
     const b = room.boss, bw2 = Math.min(300, uw - 320);
     ctx.font = '700 12px "Saira Semi Condensed", sans-serif'; ctx.fillStyle = '#ff5444';
@@ -4028,7 +4028,7 @@ function init3D() {
   const cam = G3.cam = new THREE.PerspectiveCamera(settings.fov || 75, 1, 2, 5000); cam.rotation.order = 'YXZ'; S.add(cam);
   G3.amb = new THREE.AmbientLight(0x30405a, 0.42); S.add(G3.amb);
   G3.hemi = new THREE.HemisphereLight(0x40506e, 0x0a0c10, 0.32); S.add(G3.hemi);
-  const spot = G3.spot = new THREE.SpotLight(0xffe6b8, 1.6, 520, 0.6, 0.6, 1.4); // linterna: va con la cámara
+  const spot = G3.spot = new THREE.SpotLight(0xffe6b8, 1.15, 520, 0.6, 0.6, 1.5); // linterna: va con la cámara
   spot.position.set(6, -6, 4); spot.target.position.set(0, -8, -100); cam.add(spot); cam.add(spot.target);
   spot.castShadow = true; spot.shadow.mapSize.set(touchMode ? 512 : 1024, touchMode ? 512 : 1024); spot.shadow.camera.near = 8; spot.shadow.camera.far = 600; spot.shadow.bias = -0.0015;
   G3.halo = new THREE.PointLight(0xb8c8ff, 0.55, 120, 1.4); cam.add(G3.halo);
@@ -4068,7 +4068,7 @@ function init3D() {
     paint: lampMat({ vertexColors: true }, 'vc2'), screen: new THREE.MeshLambertMaterial({ color: 0x15202c, emissive: 0x3a7ab0 }), felt: lampMat({ color: 0x1f6a3a }),
     velvet: lampMat({ color: 0x4a1820 }), slot: new THREE.MeshLambertMaterial({ color: 0x3a2050, emissive: 0x6a3a10 }),
   };
-  G3.box = new THREE.BoxGeometry(1, 1, 1);
+  G3.box = new THREE.BoxGeometry(1, 1, 1); G3.unitBox = G3.box.toNonIndexed();
   G3.sphere = new THREE.SphereGeometry(1, 10, 8);
   G3.cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
   G3.glowTex = radialTex([[0, 'rgba(255,255,255,1)'], [0.25, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0)']]);
@@ -4098,7 +4098,7 @@ function init3D() {
   // arma en primera persona: escena aparte (no se mete en las paredes) con su propia luz
   G3.VS = new THREE.Scene();
   G3.vcam = new THREE.PerspectiveCamera(60, 1, 0.5, 300);
-  G3.vamb = new THREE.AmbientLight(0xffffff, 0.35); G3.VS.add(G3.vamb);
+  G3.vamb = new THREE.AmbientLight(0xffffff, 0.35); G3.VS.add(G3.vamb); G3.vspot = new THREE.PointLight(0xffe6b8, 0.6, 80); G3.vspot.position.set(4, 6, 8); G3.VS.add(G3.vspot);
   G3.vdir = new THREE.DirectionalLight(0xffe8c8, 0.7); G3.vdir.position.set(-0.4, 1, 0.6); G3.VS.add(G3.vdir);
   G3.vm = new THREE.Group(); G3.VS.add(G3.vm);
   G3.vflash = new THREE.Sprite(new THREE.SpriteMaterial({ map: G3.fireTex, color: 0xffe0a0, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -4399,50 +4399,68 @@ function makeCar3(kind, paint, cop) { // coche mirando hacia +x: carrocería, ca
   return g;
 }
 
-// ---- Personas: cuerpo de cajas con piernas y brazos que se mueven, cabeza con gorra, casco, capucha o pelo
+// ---- Personas: cuerpo de cajas con piernas y brazos que se mueven, cabeza con gorra, casco, capucha o pelo.
+// Cada parte que se mueve es una sola malla (las cajas se funden con su color por vértice): pocas llamadas de dibujo por persona
+function boxesGeo(list) { // [{ s:[sx,sy,sz], p:[x,y,z], c:'#rrggbb', r?:[rx,ry,rz], g?:geometría unidad }]
+  const P = [], N = [], C = [], m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), nm = new THREE.Matrix3(), col = new THREE.Color();
+  for (const b of list) {
+    const g = b.g || G3.unitBox, pa = g.attributes.position.array, na = g.attributes.normal.array;
+    e.set(...(b.r || [0, 0, 0])); q.setFromEuler(e); m.compose(new THREE.Vector3(...b.p), q, new THREE.Vector3(...b.s)); nm.getNormalMatrix(m); col.set(b.c);
+    for (let i = 0; i < pa.length; i += 3) {
+      v.set(pa[i], pa[i + 1], pa[i + 2]).applyMatrix4(m); P.push(v.x, v.y, v.z);
+      v.set(na[i], na[i + 1], na[i + 2]).applyMatrix3(nm).normalize(); N.push(v.x, v.y, v.z); C.push(col.r, col.g, col.b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  return geo;
+}
+function rigMat() { // color por vértice; la emisión (luz de lámpara, calor de la mira térmica) se multiplica por ese color
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;'); };
+  m.customProgramCacheKey = () => 'rig';
+  return m;
+}
+function rigMesh(list, mat, par) { const o = new THREE.Mesh(boxesGeo(list), mat); o.castShadow = true; o.userData.own = true; par.add(o); return o; }
 function makeRig3(L, r, opts = {}) {
-  const s = r / 13, g = new THREE.Group(), mats = []; g.rotation.order = 'YXZ';
-  const mt = (c, e) => { const m = new THREE.MeshLambertMaterial({ color: c }); m.userData.base = new THREE.Color(c); m.userData.e = e || 0; mats.push(m); return m; };
-  const P = (geo, m, sx, sy, sz, x, y, z, par = g) => { const o = new THREE.Mesh(geo, m); o.scale.set(sx * s, sy * s, sz * s); o.position.set(x * s, y * s, z * s); o.castShadow = true; par.add(o); return o; };
-  const legsM = mt(L.legs), bodyM = mt(L.body), trimM = mt(L.trim), skinM = mt(opts.skin || SKIN[0]), hatM = mt(L.hat || '#222'), boot = mt('#101114');
-  const legs = [-1, 1].map(sd => { const pv = new THREE.Group(); pv.position.set(0, 33 * s, sd * 5 * s); g.add(pv); P(G3.box, legsM, 8, 32, 8, 0, -16, 0, pv); P(G3.box, boot, 11, 6, 9, 2, -30, 0, pv); return pv; });
-  P(G3.box, bodyM, 12, 28, 22, 0, 47, 0); P(G3.box, trimM, 14, 19, 18, 0.5, 49, 0);
-  if (L.pads) for (const sd of [-1, 1]) P(G3.box, trimM, 10, 5, 7, 0, 60, sd * 11);
-  if (L.star) P(G3.box, mt('#e8c45a', 0.5), 1, 4, 4, 7.6, 55, -5);
-  const head = new THREE.Group(); head.position.set(0, 66 * s, 0); g.add(head);
-  P(G3.box, skinM, 10, 12, 10, 0, 0, 0, head);
-  const hd = L.head;
-  if (hd === 'cap' || hd === 'police') { P(G3.box, hatM, 11, 4, 11, 0, 5.5, 0, head); P(G3.box, hatM, 5, 1.2, 9, 7, 3.6, 0, head); if (hd === 'police') P(G3.box, mt('#e8c45a', 0.5), 0.8, 2, 2, 5.6, 5.5, 0, head); }
-  else if (hd === 'helmet' || hd === 'visor') { P(G3.box, hatM, 12.5, 8, 12.5, 0, 4, 0, head); if (hd === 'visor') P(G3.box, mt('#8fb4d8', 0.2), 1, 6, 10, 6.4, 0, 0, head); }
-  else if (hd === 'mask') { P(G3.box, hatM, 10.6, 12.6, 10.6, 0, 0, 0, head); P(G3.box, skinM, 1, 2.5, 7, 5.4, 1.5, 0, head); }
-  else if (hd === 'hood') { P(G3.box, hatM, 12, 14, 12, -1, 1, 0, head); P(G3.box, skinM, 1, 8, 8, 5.6, -1, 0, head); }
-  else if (hd === 'hair') { P(G3.box, hatM, 10.6, 4, 10.6, -0.3, 5, 0, head); P(G3.box, hatM, 3, 9, 10.6, -4, 0, 0, head); }
-  else if (hd === 'beanie') P(G3.box, hatM, 10.8, 6, 10.8, 0, 5, 0, head);
-  const arms = [-1, 1].map(sd => { const pv = new THREE.Group(); pv.position.set(0, 58 * s, sd * 13 * s); g.add(pv); P(G3.box, bodyM, 6, 22, 6, 0, -11, 0, pv); P(G3.box, skinM, 5, 5, 5, 0, -24, 0, pv); return pv; });
+  const s = r / 13, g = new THREE.Group(), mat = rigMat(); g.rotation.order = 'YXZ';
+  const B = (sx, sy, sz, x, y, z, c, extra) => ({ s: [sx * s, sy * s, sz * s], p: [x * s, y * s, z * s], c, ...extra });
+  const skin = opts.skin || SKIN[0], hat = L.hat || '#222';
+  const body = [B(12, 28, 22, 0, 47, 0, L.body), B(13, 19, 18, 0.5, 49, 0, L.trim), B(10, 12, 10, 0, 66, 0, skin)];
+  if (L.pads) for (const sd of [-1, 1]) body.push(B(10, 5, 7, 0, 60, sd * 11, L.trim));
+  if (L.star) body.push(B(1, 4, 4, 6.8, 55, -5, '#e8c45a'));
+  const hd = L.head, H = (sx, sy, sz, x, y, z, c) => body.push(B(sx, sy, sz, x, 66 + y, z, c));
+  if (hd === 'cap' || hd === 'police') { H(11, 4, 11, 0, 5.5, 0, hat); H(5, 1.2, 9, 7, 3.6, 0, hat); if (hd === 'police') H(0.8, 2, 2, 5.6, 5.5, 0, '#e8c45a'); }
+  else if (hd === 'helmet' || hd === 'visor') { H(12.5, 8, 12.5, 0, 4, 0, hat); if (hd === 'visor') H(1, 6, 10, 6.4, 0, 0, '#8fb4d8'); }
+  else if (hd === 'mask') { H(10.6, 12.6, 10.6, 0, 0, 0, hat); H(1, 2.5, 7, 5.4, 1.5, 0, skin); }
+  else if (hd === 'hood') { H(12, 14, 12, -1, 1, 0, hat); H(1, 8, 8, 5.6, -1, 0, skin); }
+  else if (hd === 'hair') { H(10.6, 4, 10.6, -0.3, 5, 0, hat); H(3, 9, 10.6, -4, 0, 0, hat); }
+  else if (hd === 'beanie') H(10.8, 6, 10.8, 0, 5, 0, hat);
+  if (hd !== 'mask') for (const sd of [-1, 1]) H(0.6, 1.4, 1.6, 5.2, 1.5, sd * 2.4, '#141414'); // ojos
+  if (opts.shield) body.push(B(3, 48, 28, 18, 40, 0, '#a0b4cf'));
+  rigMesh(body, mat, g);
+  const legs = [-1, 1].map(sd => { const pv = new THREE.Group(); pv.position.set(0, 33 * s, sd * 5 * s); g.add(pv); rigMesh([B(8, 32, 8, 0, -16, 0, L.legs), B(11, 6, 9, 2, -30, 0, '#101114')], mat, pv); return pv; });
+  const arms = [-1, 1].map(sd => { const pv = new THREE.Group(); pv.position.set(0, 58 * s, sd * 13 * s); g.add(pv); rigMesh([B(6, 22, 6, 0, -11, 0, L.body), B(5, 5, 5, 0, -24, 0, skin)], mat, pv); return pv; });
   let gun = null;
-  if (L.gun && !opts.noGun) { gun = new THREE.Group(); gun.position.set(0, 56 * s, 2 * s); g.add(gun); const len = L.gun[0] * 1.15 / s; P(G3.box, mt('#1b1f24'), len, 4, 3.4, 13 + len / 2, -4, 0, gun); P(G3.box, mt('#1b1f24'), 3, 6, 3, 15, -8, 0, gun); }
-  if (opts.shield) P(G3.box, mt('#a0b4cf', 0.15), 3, 48, 28, 18, 40, 0);
-  g.userData = { legs, arms, head, gun, s };
-  return { g, mats, s, legs, arms, head, gun };
+  if (L.gun && !opts.noGun) { gun = new THREE.Group(); gun.position.set(0, 56 * s, 0); g.add(gun); const len = L.gun[0] * 1.15 / s; rigMesh([B(len, 4, 3.4, 13 + len / 2, -4, 0, '#1b1f24'), B(3, 6, 3, 15, -8, 0, '#1b1f24')], mat, gun); }
+  return { g, mats: [mat], s, legs, arms, head: null, gun };
 }
 function makeDog3() {
-  const g = new THREE.Group(); g.rotation.order = 'YXZ'; const mats = [], mt = c => { const m = new THREE.MeshLambertMaterial({ color: c }); m.userData.base = new THREE.Color(c); m.userData.e = 0; mats.push(m); return m; };
-  const fur = mt('#6b4f35'), dark = mt('#3d2c1e'), P = (m, sx, sy, sz, x, y, z, par = g) => { const o = new THREE.Mesh(G3.box, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); o.castShadow = true; par.add(o); return o; };
-  P(fur, 28, 12, 11, 0, 22, 0); P(dark, 20, 3, 8, -1, 28.5, 0); P(fur, 11, 10, 9, 17, 29, 0); P(dark, 7, 5, 6, 24, 27, 0); P(mt('#8a2a22'), 2, 9, 10, 12, 27, 0);
-  for (const sd of [-1, 1]) P(dark, 3, 5, 2, 14, 35, sd * 3);
-  const legs = [[10, -4], [10, 4], [-10, -4], [-10, 4]].map(([x, z]) => { const pv = new THREE.Group(); pv.position.set(x, 18, z); g.add(pv); P(dark, 4, 17, 4, 0, -8.5, 0, pv); return pv; });
-  const tail = new THREE.Group(); tail.position.set(-14, 26, 0); g.add(tail); P(dark, 11, 3, 3, -5, 2, 0, tail);
-  return { g, mats, s: 1, legs, tail, dog: true };
+  const g = new THREE.Group(), mat = rigMat(); g.rotation.order = 'YXZ';
+  const B = (sx, sy, sz, x, y, z, c) => ({ s: [sx, sy, sz], p: [x, y, z], c });
+  rigMesh([B(28, 12, 11, 0, 22, 0, '#6b4f35'), B(20, 3, 8, -1, 28.5, 0, '#3d2c1e'), B(11, 10, 9, 17, 29, 0, '#6b4f35'), B(7, 5, 6, 24, 27, 0, '#4a3624'), B(2, 9, 10, 12, 27, 0, '#8a2a22'), B(3, 5, 2, 14, 35, -3, '#3d2c1e'), B(3, 5, 2, 14, 35, 3, '#3d2c1e'), B(1, 1.5, 1.5, 22, 31, -2.5, '#000'), B(1, 1.5, 1.5, 22, 31, 2.5, '#000')], mat, g);
+  const legs = [[10, -4], [10, 4], [-10, -4], [-10, 4]].map(([x, z]) => { const pv = new THREE.Group(); pv.position.set(x, 18, z); g.add(pv); rigMesh([B(4, 17, 4, 0, -8.5, 0, '#3d2c1e')], mat, pv); return pv; });
+  const tail = new THREE.Group(); tail.position.set(-14, 26, 0); g.add(tail); rigMesh([B(11, 3, 3, -5, 2, 0, '#3d2c1e')], mat, tail);
+  return { g, mats: [mat], s: 1, legs, tail, dog: true };
 }
 function makeDrone3() {
-  const g = new THREE.Group(); g.rotation.order = 'YXZ'; const mats = [], mt = c => { const m = new THREE.MeshLambertMaterial({ color: c }); m.userData.base = new THREE.Color(c); m.userData.e = 0; mats.push(m); return m; };
-  const body = mt('#3a414a'), arm = mt('#2a2f36'), P = (geo, m, sx, sy, sz, x, y, z) => { const o = new THREE.Mesh(geo, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o; };
-  P(G3.box, body, 14, 5, 12, 0, 0, 0); P(G3.box, arm, 30, 2, 3, 0, 1, 0).rotation.y = Math.PI / 4; P(G3.box, arm, 30, 2, 3, 0, 1, 0).rotation.y = -Math.PI / 4;
+  const g = new THREE.Group(), mat = rigMat(); g.rotation.order = 'YXZ';
+  const B = (sx, sy, sz, x, y, z, c, r) => ({ s: [sx, sy, sz], p: [x, y, z], c, r });
+  rigMesh([B(14, 5, 12, 0, 0, 0, '#3a414a'), B(30, 2, 3, 0, 1, 0, '#2a2f36', [0, Math.PI / 4, 0]), B(30, 2, 3, 0, 1, 0, '#2a2f36', [0, -Math.PI / 4, 0]), B(5, 5, 5, 7, -1, 0, '#050607')], mat, g);
   const rot = new THREE.MeshBasicMaterial({ color: 0xaab4be, transparent: true, opacity: 0.35, depthWrite: false });
-  const rotors = [[-10, -10], [10, -10], [-10, 10], [10, 10]].map(([x, z]) => P(G3.cyl, rot, 7, 0.6, 7, x, 3, z));
-  P(G3.sphere, mt('#050607'), 2.5, 2.5, 2.5, 7, -1, 0);
-  const led = new THREE.MeshBasicMaterial({ color: 0xff3a3a }); P(G3.box, led, 2, 2, 2, -7, 1, 0);
-  return { g, mats, s: 1, rotors, led, drone: true };
+  const rotors = [[-10, -10], [10, -10], [-10, 10], [10, 10]].map(([x, z]) => { const o = new THREE.Mesh(G3.cyl, rot); o.scale.set(7, 0.6, 7); o.position.set(x, 3, z); g.add(o); return o; });
+  const led = new THREE.MeshBasicMaterial({ color: 0xff3a3a }), lo = new THREE.Mesh(G3.box, led); lo.scale.set(2, 2, 2); lo.position.set(-7, 1, 0); g.add(lo);
+  return { g, mats: [mat], s: 1, rotors, led, drone: true, extra: [rot, led] };
 }
 function rigFor(o, corpse) {
   let R = G3.rigs.get(o);
@@ -4455,8 +4473,8 @@ function rigFor(o, corpse) {
   return R;
 }
 function shadeRig(R, x, y, z, hot) { // luz horneada del sitio donde está (y calor de la mira térmica)
-  const L = lampS(z, x, y), k = 0.95;
-  for (const m of R.mats) { const b = m.userData.base; m.emissive.setRGB(b.r * L[0] * k + (hot ? 0.9 : 0) + b.r * m.userData.e, b.g * L[1] * k + (hot ? 0.35 : 0) + b.g * m.userData.e, b.b * L[2] * k + (hot ? 0.1 : 0) + b.b * m.userData.e); }
+  const L = lampS(z, x, y), k = 1.1;
+  R.mats[0].emissive.setRGB(L[0] * k + (hot ? 2.2 : 0), L[1] * k + (hot ? 0.8 : 0), L[2] * k + (hot ? 0.2 : 0));
 }
 function poseHuman(R, e, dt) {
   const d = Math.hypot(e.x - (e.px3 ?? e.x), e.y - (e.py3 ?? e.y)); e.px3 = e.x; e.py3 = e.y;
@@ -4469,20 +4487,20 @@ function poseHuman(R, e, dt) {
   const up = sub ? -30 * R.s : 0; R.g.position.y += up;
   const armA = sub ? -0.5 : panic ? 2.9 : aim ? 1.45 : R.gun ? 0.75 : sw * 0.8;
   R.arms[0].rotation.z = panic ? 2.9 : sub ? -0.5 : R.gun ? armA : -sw * 0.8; R.arms[1].rotation.z = panic ? 2.9 : sub ? -0.5 : R.gun ? armA - 0.15 : sw * 0.8;
-  R.arms[0].rotation.x = R.gun && !panic && !sub ? 0.35 : 0; R.arms[1].rotation.x = R.gun && !panic && !sub ? -0.25 : 0;
+  const inward = R.gun && !panic && !sub ? 0.5 : 0; R.arms[0].rotation.y = -inward; R.arms[1].rotation.y = inward * 0.8;
   if (R.gun) { R.gun.visible = !sub && !panic; R.gun.rotation.z = armA - Math.PI / 2 + (aim ? 0.05 : 0); }
-  R.head.rotation.y = e.state === 'patrol' || e.state === 'search' ? Math.sin(room.time * 0.8 + e.x) * 0.25 : 0;
 }
 
 // ---- Arma en primera persona
 const VM_SHAPE = { pistol: 'p', mpistol: 'p', revolver: 'r', crossbow: 'x', shotgun: 's', autosg: 's', gl: 'g', smg: 'm', smgs: 'm', rifle: 'a', burst: 'a', dmr: 'l', amr: 'l', lmg: 'h' };
 function buildVM() {
   const vm = G3.vm; while (vm.children.length) { const c = vm.children.pop(); dispose3(c); }
-  const w = curW(), s = wstats(w), kind = VM_SHAPE[w.id] || 'p', camo = new THREE.MeshLambertMaterial({ color: gunColor() }), metal = new THREE.MeshLambertMaterial({ color: 0x23272d }), wood = new THREE.MeshLambertMaterial({ color: 0x5a3a22 });
-  const L = playerLook(), sleeve = new THREE.MeshLambertMaterial({ color: L.body }), glove = new THREE.MeshLambertMaterial({ color: 0x1a1c20 });
+  const w = curW(), s = wstats(w), kind = VM_SHAPE[w.id] || 'p', ph = (c, sh = 60) => new THREE.MeshPhongMaterial({ color: c, shininess: sh, specular: 0x555555 }); // brillo metálico
+  const camo = ph(new THREE.Color(gunColor()).offsetHSL(0, 0, 0.08)), metal = ph(0x3a3f47, 90), wood = ph(0x6a4428, 20);
+  const L = playerLook(), sleeve = ph(L.body, 8), glove = ph(0x24272c, 15);
   const gun = new THREE.Group(), P = (m, sx, sy, sz, x, y, z, par = gun) => { const o = new THREE.Mesh(G3.box, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); par.add(o); return o; };
   const long = 'malhsxg'.includes(kind), len = { p: 7, r: 9, x: 12, s: 22, g: 16, m: 14, a: 22, l: 28, h: 24 }[kind];
-  P(camo, 2.4, 3, long ? 12 : 7, 0, 0, -2); // cajón
+  P(camo, 2.4, 3, long ? 12 : 7, 0, 0, -2); P(metal, 2.5, 0.9, long ? 11 : 6.5, 0, 1.6, -2.2); P(metal, 0.5, 0.9, 0.5, 0, 2.5, -2 - (long ? 5.5 : 3)); // cajón, corredera y mira
   P(metal, 1.2, 1.2, len, 0, 0.6, -2 - len / 2 - (long ? 4 : 2)); // cañón
   P(camo, 2, 4, 2.4, 0, -2.6, long ? 1 : 0.5).rotation.x = 0.25; // empuñadura
   if (kind === 'm' || kind === 'a' || kind === 'h') P(metal, 1.6, kind === 'h' ? 5 : 4.5, 2.4, 0, -3.2, -4.5).rotation.x = -0.15; // cargador
@@ -4510,7 +4528,7 @@ function updateVM(dt) {
   const bob = Math.min(1, p.speed / 150), t = room.time, spr = p.sprint ? 1 : 0;
   const rl = p.reloadT > 0 ? Math.sin(Math.PI * (1 - p.reloadT / s.reload)) : 0, thr = p.nadeT > 0.2 ? (p.nadeT - 0.2) / 0.4 : 0;
   const gx = 9 + Math.sin(G3.walk * 0.5) * 0.9 * bob + spr * 2, gy = -10 + Math.abs(Math.cos(G3.walk * 0.5)) * 0.9 * bob - rl * 6 - G3.swap * 14 - thr * 10 - spr * 2 + Math.sin(t * 1.6) * 0.25;
-  G3.gun.position.set(gx, gy, -18 + G3.recoil * 2.2);
+  G3.gun.position.set(gx - 1, gy + 1.2, -19 + G3.recoil * 2.2);
   G3.gun.rotation.set(G3.recoil * 0.12 + rl * 0.4 - spr * 0.25, spr * 0.5 + G3.look * 0.4, rl * 0.7 + spr * 0.3 + G3.look * 0.15);
   const sw = p.swingT > 0 ? 1 - p.swingT / 0.18 : -1;
   G3.knife.visible = sw >= 0; G3.gun.visible = !G3.knife.visible && !p.dead;
@@ -4519,7 +4537,7 @@ function updateVM(dt) {
   G3.vflash.visible = fl;
   if (fl) { const m = G3.gun.userData.muzzle.clone(); G3.gun.localToWorld(m); G3.vflash.position.copy(m); const k = s.silenced ? 4 : s.pellets > 1 ? 13 : 9; G3.vflash.scale.set(k, k, 1); G3.vflash.material.rotation = Math.random() * 6; p.flashT3 -= dt; }
   const L = lampS(p.z, p.x, p.y), lightK = (run.light ? 0.55 : 0.15) + (L[0] + L[1] + L[2]) / 3 * 0.9 + (p.muzzleT > 0 ? 0.6 : 0);
-  G3.vamb.intensity = 0.18 + lightK * 0.5; G3.vdir.intensity = 0.25 + lightK * 0.6;
+  G3.vamb.intensity = 0.16 + lightK * 0.45; G3.vdir.intensity = 0.2 + lightK * 0.55; G3.vspot.intensity = run.light ? 0.7 : 0.1;
 }
 
 // ---- Cada fotograma: cámara, piezas que se mueven, efectos y luces
@@ -4545,7 +4563,7 @@ function demoCam(dt) { // menú: la cámara recorre despacio pasillos y salas de
       const c = Math.floor(Math.random() * W * H);
       if (maps[0][c] !== FLOOR || !zone[c]) continue;
       const q = center(c), a = Math.floor(Math.random() * 8) * Math.PI / 4, d = castRay(q.x, q.y, Math.cos(a), Math.sin(a), 600);
-      if (d < 260) continue;
+      if (d < 260 || castRay(q.x, q.y, -Math.sin(a), Math.cos(a), 60) < 55 || castRay(q.x, q.y, Math.sin(a), -Math.cos(a), 60) < 55) continue; // ni de cara a una pared ni rozándola
       D = G3.demo = { x: q.x, y: q.y, a, d: d - 90, t: 0, T: 9 }; break;
     }
     if (!D) D = G3.demo = { x: W * T / 2, y: H * T / 2, a: 0, d: 0, t: 0, T: 9 };
@@ -4578,8 +4596,8 @@ function render3D() {
     C3.rotation.set(G3.pitch + (G3.recoil || 0) * 0.02 + (p.dead ? -0.4 : 0), -p.a - Math.PI / 2, p.dead ? 0.6 : Math.sin(G3.walk * 0.5) * Math.min(1, p.speed / 150) * 0.012);
     G3.fade = 1;
   }
-  G3.spot.visible = !p.dead && run && run.light && !room.demo; G3.halo.visible = !room.demo;
-  G3.halo.intensity = run && run.light ? 0.45 : 0.6; G3.halo.distance = run && run.light ? 110 : 140;
+  G3.spot.visible = !p.dead && run && run.light && !room.demo; G3.halo.visible = true;
+  G3.halo.intensity = room.demo ? 0.5 : run && run.light ? 0.45 : 0.6; G3.halo.distance = room.demo ? 260 : run && run.light ? 110 : 140;
   // lámparas (encendidas o rotas)
   for (const l of room.lamps) { const u = l.m3 && l.m3.userData; if (!u || u.was === l.on) continue; u.was = l.on; u.bulb.color.copy(l.on ? u.on : new THREE.Color(0x15171a)); u.s.visible = l.on; }
   for (const d of room.idoors) if (d.m3) for (const { pv, sd } of d.m3.userData.leaves) { const base = d.v ? (sd < 0 ? Math.PI / 2 : -Math.PI / 2) : (sd < 0 ? 0 : Math.PI); pv.rotation.y = -(base + d.swing * Math.PI / 2 * (d.v ? -sd : sd)); }
@@ -4623,7 +4641,7 @@ function render3D() {
     }
     shadeRig(R, b.x, b.y, b.z, false);
   }
-  for (const [o, R] of G3.rigs) if (!R.used) { G3.dyn.remove(R.g); R.mats.forEach(m => m.dispose()); G3.rigs.delete(o); }
+  for (const [o, R] of G3.rigs) if (!R.used) { G3.dyn.remove(R.g); dispose3(R.g); R.mats.forEach(m => m.dispose()); (R.extra || []).forEach(m => m.dispose()); G3.rigs.delete(o); }
   // objetos: munición, C4, granadas, monedas, coches de la calle
   const seen = new Set();
   const obj = (o, make) => { let m = G3.objs.get(o); if (!m) { m = make(); G3.objs.set(o, m); G3.dyn.add(m); } seen.add(o); return m; };
@@ -4653,7 +4671,7 @@ function render3D() {
   for (const f of room.fx) {
     const k = f.t / f.life, bz = f.z * FLOOR_H;
     if (f.k === 'muzzle') { if (Math.hypot(f.x - p.x, f.y - p.y) < 30 && !room.demo) continue; const sp = sprite3(si++, G3.fireTex, 0xffd8a0, true); sp.position.set(f.x, bz + GUN_Y, f.y); sp.scale.setScalar(f.s * 16); sp.material.opacity = 1 - k; }
-    else if (f.k === 'fire') { const sp = sprite3(si++, G3.fireTex, 0xffffff, true); sp.position.set(f.x, bz + 40 + k * 20, f.y); sp.scale.setScalar(f.r * 2 * (0.35 + 0.65 * Math.sqrt(k))); sp.material.opacity = 1 - k; }
+    else if (f.k === 'fire') { const sp = sprite3(si++, G3.fireTex, 0xffffff, true); sp.position.set(f.x, bz + 40 + k * 20, f.y); sp.scale.setScalar(f.r * 2 * (0.35 + 0.65 * Math.sqrt(k))); sp.material.opacity = 1 - k; const core = sprite3(si++, G3.glowTex, 0xfff2c8, true); core.position.copy(sp.position); core.scale.setScalar(f.r * (0.6 + 0.5 * k)); core.material.opacity = Math.max(0, 1 - k * 1.6); }
     else if (f.k === 'smoke') { const sp = sprite3(si++, G3.smokeTex, f.t < 0.4 ? 0xffa060 : 0xffffff, false); const r = f.r0 + (f.r1 - f.r0) * Math.pow(k, 0.6); sp.position.set(f.x, bz + 30 + k * 70, f.y); sp.scale.setScalar(r * 2.6); sp.material.opacity = 0.55 * (1 - k); }
     else if (f.k === 'puff') { const sp = sprite3(si++, G3.smokeTex, 0xffffff, false); sp.position.set(f.x, bz + GUN_Y, f.y); sp.scale.setScalar(f.r * (1 + k) * 2); sp.material.opacity = 0.45 * (1 - k); }
     else if (f.k === 'ring') { const sp = sprite3(si++, G3.glowTex, 0xffe8d0, true); sp.position.set(f.x, bz + 20, f.y); sp.scale.setScalar(f.r * 2 * k); sp.material.opacity = 0.35 * (1 - k); }
@@ -5095,7 +5113,7 @@ function show(id) {
   ambience(id === null);
   document.body.classList.toggle('playing', id === null);
   if (id !== null && document.pointerLockElement && document.exitPointerLock) { G3.locked = false; document.exitPointerLock(); }
-  if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; } // un dedo que se levanta con un menú encima no deja el stick pegado
+  if (id !== null) { sticks.L = sticks.R = null; mouse.down = false; mouse.active = false; } // un dedo que se levanta con un menú encima no deja el stick pegado; el ratón cuenta cuando se mueve en la partida
   for (const o of ['menu', 'shop', 'pause', 'over', 'win', 'brief', 'results', 'settings', 'slots', 'story', 'padmap']) $(o).hidden = o !== id;
   $('hud').hidden = id !== null;
 }
@@ -5151,7 +5169,8 @@ const release = e => {
 };
 addEventListener('pointerup', release);
 addEventListener('pointercancel', release);
-addEventListener('contextmenu', e => e.preventDefault()); // la pulsación larga no abre menús del sistema
+addEventListener('contextmenu', e => e.preventDefault());
+document.documentElement.addEventListener('mouseleave', () => { mouse.active = false; }); // sin bloqueo: si el ratón sale de la ventana, deja de girar // la pulsación larga no abre menús del sistema
 const dropInput = () => { sticks.L = sticks.R = null; mouse.down = false; for (const k in keys) keys[k] = false; };
 addEventListener('blur', dropInput);
 document.addEventListener('visibilitychange', () => { if (document.hidden) { dropInput(); pause(); } }); // al cambiar de app, pausa
@@ -5426,7 +5445,7 @@ showMenu();
   const el = $('boot'), bar = $('bootBar'), msg = $('bootMsg'), t0 = performance.now(), MIN = matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 2100;
   const msgs = ['Cortando la luz…', 'Repasando los planos…', 'Cargando el equipo…', 'Esperando a la noche…'];
   let ready = false, gone = false;
-  const done = () => { if (gone) return; gone = true; bar.style.width = '100%'; setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 800); }, 220); };
+  const done = () => { if (gone) return; gone = true; bar.style.width = '100%'; if (state === 'menu') refreshMenu(); setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 800); }, 220); }; // vuelve a leer las partidas: algún navegador tarda en tenerlas listas al arrancar
   const tick = () => {
     if (gone) return;
     const k = Math.min(1, (performance.now() - t0) / MIN);

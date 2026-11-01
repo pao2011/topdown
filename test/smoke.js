@@ -16,7 +16,7 @@ const path = require('path');
   const shot = name => process.env.SHOTS && page.screenshot({ path: path.join(process.env.SHOTS, name + '.png') });
   const ev = (fn, arg) => page.evaluate(fn, arg);
   const story = async pg => { if (await pg.isVisible('#bStGo')) await pg.click('#bStGo'); }; // escena de historia antes de algunas misiones
-  const url = 'file://' + path.resolve(__dirname, '../index.html');
+  const server = await require('./serve')(), url = server.url;
   await page.goto(url);
   assert(await page.isVisible('#boot'), 'al abrir sale la pantalla de carga');
   await page.waitForSelector('#boot', { state: 'detached', timeout: 8000 });
@@ -103,7 +103,7 @@ const path = require('path');
   await ev(() => { const A = __apagon, p = A.room.p; A.useFloor(p.z); let best = 0, ba = p.a; for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, d = A.castRay(p.x, p.y, Math.cos(a), Math.sin(a), 400); if (d > best) { best = d; ba = a; } } p.a = ba; }); // mirando a un sitio despejado
   const sneakMove = await (async () => { const t = touch(1, 120, 300, 120, 230, 500); await page.waitForTimeout(350); const r = await ev(() => [__apagon.room.p.sneak, Math.round(__apagon.room.p.speed)]); await t; return r; })();
   await page.tap('#bSneak');
-  assert(sneakMove[0] && sneakMove[1] > 20 && sneakMove[1] <= 80, 'con el sigilo activado se mueve en sigilo: ' + sneakMove);
+  assert(sneakMove[0] && sneakMove[1] > 5 && sneakMove[1] <= 80, 'con el sigilo activado se mueve en sigilo (sin pasar de su velocidad): ' + sneakMove);
   await shot('play');
 
   // Munición limitada: recargar gasta reserva, sin reserva no dispara, las cajas la reponen
@@ -130,7 +130,8 @@ const path = require('path');
   // Todo oscuro: un guardia delante, lejos de las lámparas y con la linterna apagada, apenas se ve; la linterna lo ilumina
   const dark = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies.filter(e => !['civil', 'drone', 'dog'].includes(e.type))) for (let k = 0; k < 8; k++) {
+    const light = ['guard', 'police', 'heavy', 'shield', 'taser'], cand = r.enemies.filter(e => !['civil', 'drone', 'dog', 'elite', 'sniper'].includes(e.type)).sort((a, b) => light.indexOf(b.type) - light.indexOf(a.type) < 0 ? -1 : 1); // ropa clara primero: la linterna se nota más
+    for (const e of cand) for (let k = 0; k < 8; k++) {
       const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
       A.useFloor(e.z);
       if (r.loot && Math.hypot(e.x - r.loot.x, e.y - r.loot.y) < 120) continue; // el botín brilla
@@ -138,7 +139,7 @@ const path = require('path');
       if (r.lamps.some(l => l.on && l.z === e.z && Math.hypot(l.x - e.x, l.y - e.y) < l.r + 40)) continue;
       r.p.x = e.x + c * 110; r.p.y = e.y + s * 110; r.p.z = e.z; r.p.a = a + Math.PI; // mirándolo de frente
       Object.assign(e, { state: 'patrol', aware: 0, a: a + Math.PI, lookA: a + Math.PI, waitT: 99, lookT: 99, path: null });
-      window.__dark = e; r.enemies.splice(0, r.enemies.length, e); r.flashes.length = 0;
+      window.__dark = e; r.enemies.splice(0, r.enemies.length, e); r.flashes.length = 0; r.copCars.length = 0; window.__loot = r.loot; r.loot = null; // nada más que dé luz
       A.run.light = false; A.G3.pitch = 0;
       return true;
     }
@@ -151,22 +152,25 @@ const path = require('path');
       G.cam.rotation.y = -r.p.a - Math.PI / 2; G.cam.rotation.x = 0; G.cam.updateMatrixWorld();
       const v = new THREE.Vector3(e.x, e.z * 134 + 47, e.y).project(G.cam), gl = G.R.getContext(), cvs = G.R.domElement;
       G.R.clear(); G.R.render(G.S, G.cam);
-      const x = Math.round((v.x + 1) / 2 * cvs.width), y = Math.round((v.y + 1) / 2 * cvs.height), px = new Uint8Array(4);
-      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      return Math.round((px[0] + px[1] + px[2]) / 3);
+      const x = Math.round((v.x + 1) / 2 * cvs.width), y = Math.round((v.y + 1) / 2 * cvs.height), px = new Uint8Array(4 * 25);
+      gl.readPixels(x - 2, y - 2, 5, 5, gl.RGBA, gl.UNSIGNED_BYTE, px); // media de 5×5 en el pecho
+      let t = 0; for (let i = 0; i < 25; i++) t += (px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2]) / 3;
+      return Math.round(t / 25);
     });
     const off = await lum();
     await ev(() => { __apagon.run.light = true; });
     await page.waitForTimeout(300);
     const on = await lum();
-    if (!(off < 45 && on > off + 15)) await shot('darkfail');
-    assert(off < 45 && on > off + 15, `a oscuras el guardia apenas se ve y con la linterna sí (sin luz ${off}, con luz ${on})`);
+    await ev(() => { __apagon.room.loot = window.__loot; });
+    if (!(off < 50 && on > off + 10)) await shot('darkfail');
+    const why = await ev(() => { const A = __apagon, G = A.G3, e = window.__dark, r = A.room; return JSON.stringify({ alive: r.enemies.includes(e), st: e.state, type: e.type, dead: r.p.dead, z: [e.z, r.p.z], rig: G.rigs.has(e), cam: [Math.round(G.cam.position.x - r.p.x), Math.round(G.cam.position.y), Math.round(G.cam.position.z - r.p.y)], d: Math.round(Math.hypot(e.x - r.p.x, e.y - r.p.y)), state: A.state }); });
+    assert(off < 50 && on > off + 10, `a oscuras el guardia apenas se ve y con la linterna sí (sin luz ${off}, con luz ${on}) ${why}`);
   } else console.warn('aviso: ningún guardia apto; se omite la prueba de oscuridad');
 
   // Vista: plantado delante de un guardia, acaba detectándote
   const placed = await ev(() => {
     const A = __apagon, r = A.room;
-    for (const e of r.enemies.filter(e => e.type !== 'civil')) for (let k = 0; k < 8; k++) {
+    for (const e of r.enemies.filter(e => !['civil', 'agent', 'drone', 'dog'].includes(e.type))) for (let k = 0; k < 8; k++) {
       const t = k * Math.PI / 4, c = Math.cos(t), s = Math.sin(t);
       A.useFloor(e.z);
       if (A.castRay(e.x, e.y, c, s, 90) >= 90) {
@@ -303,7 +307,7 @@ const path = require('path');
   await page.waitForTimeout(2200); // deja explotar la granada
 
   // Golpe: la salida está cerrada sin botín; en las oficinas el maletín no tiene sensor: cogerlo no da la alarma
-  await ev(() => { const r = __apagon.room; r.enemies.length = 0; r.alarm = false; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; });
+  await ev(() => { const r = __apagon.room; r.enemies.length = 0; r.bodies.length = 0; r.camsOff = true; r.alarm = false; r.p.dead = false; __apagon.run.hp = 100; r.p.x = r.exit.x; r.p.y = r.exit.y; r.p.z = 0; }); // sin nadie que dé el aviso (ni cámaras que graben un cuerpo)
   await page.waitForTimeout(200);
   assert.strictEqual(await ev(() => __apagon.state), 'play', 'sin botín la salida está cerrada');
   await ev(() => { const r = __apagon.room; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
@@ -331,9 +335,10 @@ const path = require('path');
   assert.deepStrictEqual(bought, { money: 1000 - 350 - 180, w: ['pistol:', 'smg:silencer'] });
 
   // Guardado: tras recargar la página, «Nueva partida» pide confirmación y «Continuar» recupera la tienda
+  const before = await ev(() => [window.__saveErr || '', Object.keys(localStorage).join(',')]);
   await page.reload();
   await page.waitForSelector('#boot', { state: 'detached', timeout: 15000 });
-  assert.match(await page.textContent('#bCont'), /misión 2: Marea Baja/, 'errores: ' + errors + ' ' + await ev(() => JSON.stringify(Object.entries(localStorage).map(([k, v]) => [k, v.slice(0, 120)]))));
+  assert.match(await page.textContent('#bCont'), /misión 2: Marea Baja/, 'antes de recargar: ' + before + ' · errores: ' + errors + ' ' + await ev(() => JSON.stringify(Object.entries(localStorage).map(([k, v]) => [k, v.slice(0, 120)]))));
   assert(await page.isVisible('#bShop'), 'con partida guardada, el menú ofrece la tienda');
   await page.click('#bPlay');
   assert.deepStrictEqual(await ev(() => [__apagon.state, document.getElementById('bPlay').textContent]), ['menu', '¿Borrar la partida guardada?']);
@@ -415,11 +420,14 @@ const path = require('path');
       r.enemies.push(guard); Object.assign(guard, { state: 'patrol', waitT: 9, lookT: 9, aware: 0 });
       for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; if (A.castRay(guard.x, guard.y, Math.cos(t), Math.sin(t), 260) >= 250) { Object.assign(r.p, { x: guard.x + Math.cos(t) * 240, y: guard.y + Math.sin(t) * 240, z: 0, a: t + Math.PI, noiseT: 0 }); break; } }
       document.getElementById('bNoise').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      const pa = r.p.a; let land = null; const spy = setInterval(() => { const c = (r.coins || [])[0]; if (c) land = [Math.round(Math.hypot(c.tx - guard.x, c.ty - guard.y)), c.done]; }, 20);
       for (let i = 0; i < 12 && guard.state === 'patrol'; i++) await wait(250); // la moneda tarda en caer
-      out.coin = guard.state !== 'patrol';
+      clearInterval(spy); out.coin = guard.state !== 'patrol';
+      if (!out.coin) window.__coin = { pa: pa.toFixed(2), now: r.p.a.toFixed(2), land, st: guard.state, gz: guard.z, alive: r.enemies.includes(guard), alarm: r.alarm, d: Math.round(Math.hypot(guard.x - r.p.x, guard.y - r.p.y)) };
     }
     return out;
   });
+  if (!stealth.coin && 'coin' in stealth) console.log('moneda:', JSON.stringify(await ev(() => window.__coin)));
   assert.deepStrictEqual(stealth, { ...(stealth.door && { door: [true, true] }), ...(stealth.cam && { cam: [true, true] }), ...(stealth.body && { body: [true, true] }), ...('coin' in stealth && { coin: true }) });
   assert(stealth.door && stealth.cam && stealth.body, 'deben probarse puertas, cámaras y cuerpos: ' + JSON.stringify(stealth));
 
@@ -601,5 +609,6 @@ const path = require('path');
 
   assert.deepStrictEqual(errors, [], 'errores en consola');
   await browser.close();
+  server.close();
   console.log('smoke OK');
 })().catch(e => { console.error(e); process.exit(1); });

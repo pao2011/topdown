@@ -1,38 +1,38 @@
 # Apagón
 
-Shooter táctico top-down para el navegador, en móvil o PC. Una campaña de 24 golpes con historia. Un coche te deja frente a oficinas, almacenes, galerías, bancos, joyerías, casinos, museos, centros de datos, un tren de mercancías o un yate. Entras de noche con una linterna de haz cónico, robas el botín, saqueas lo que encuentras y escapas en el coche de extracción antes de que llegue la policía (a veces con una persecución por carretera). Puedes ir en sigilo, a tiros o abriendo paredes. Entre misiones compras armas, mejoras, consumibles, habilidades y ropa.
+Shooter táctico en primera persona (3D) para el navegador, en móvil o PC. Una campaña de 24 golpes con historia. Un coche te deja frente a oficinas, almacenes, galerías, bancos, joyerías, casinos, museos, centros de datos, un tren de mercancías o un yate. Entras de noche, viéndolo todo con tus ojos y con una linterna de haz cónico, robas el botín, saqueas lo que encuentras y escapas en el coche de extracción antes de que llegue la policía (a veces con una persecución por carretera). Puedes ir en sigilo, a tiros o abriendo paredes. Entre misiones compras armas, mejoras, consumibles, habilidades y ropa.
 
-Sin dependencias ni compilación: `index.html` + `game.js`.
+Sin compilación: `index.html` + `game.js`, y [Three.js](https://threejs.org) r149 incluido en `vendor/three.min.js` (licencia MIT en `vendor/THREE-LICENSE`), así que funciona sin conexión. Si el navegador no tiene WebGL, el juego se queda en la vista cenital de las versiones anteriores.
 
 ## Jugar
 
 - **En local:** abre `index.html` en el navegador o sirve la carpeta (`python3 -m http.server`) y entra desde el móvil con la IP del ordenador.
-- **Publicado:** en GitHub, *Settings → Pages → Deploy from a branch* y elige la rama con el código y la carpeta `/`. En móvil se juega en horizontal; en PC con teclado y ratón, y la vista y el HUD se adaptan al tamaño de la pantalla.
+- **Publicado:** en GitHub, *Settings → Pages → Deploy from a branch* y elige la rama con el código y la carpeta `/`. En móvil se juega en horizontal; en PC con teclado y ratón (al hacer clic, el ratón queda capturado para mirar; `Esc` lo suelta y pausa), y la vista y el HUD se adaptan al tamaño de la pantalla.
 - **Pantallas:** al abrir hay una pantalla de carga (el nombre se enciende como un fluorescente). En móvil en horizontal, el menú, el briefing y los resultados se reparten en dos columnas para caber sin desplazarse.
 - **Primera vez:** el botón «Tutorial» del menú enseña lo básico en un mapa pequeño, en diez pasos guiados.
 
 ## Android (APK)
 
-`android/` tiene un envoltorio mínimo: una actividad con un WebView a pantalla completa y en horizontal que carga el mismo `index.html` y `game.js`. La partida se guarda igual, en el almacenamiento del WebView, y el botón atrás pausa. Se compila sin Gradle, solo con las herramientas del SDK (build-tools 34 y plataforma android-34) y Java:
+`android/` tiene un envoltorio mínimo: una actividad con un WebView a pantalla completa y en horizontal que carga el mismo `index.html`, `game.js` y `vendor/three.min.js`. La partida se guarda igual, en el almacenamiento del WebView, y el botón atrás pausa. Se compila sin Gradle, solo con las herramientas del SDK (build-tools 34 y plataforma android-34) y Java:
 
 ```
 keytool -genkeypair -keystore apagon.jks -alias apagon -keyalg RSA -keysize 2048 -validity 10000   # una vez
-ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=1.3 CODE=4 android/build.sh   # → android/out/apagon.apk
+ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=2.0 CODE=8 android/build.sh   # → android/out/apagon.apk
 ```
 
 Guarda el keystore y su contraseña. Para instalar una versión nueva encima de la anterior hay que firmarla con la misma clave y con un `CODE` mayor.
 
 ## Controles
 
-Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego cambia solo según lo último que toques, y los botones táctiles se ocultan con teclado o mando.
+Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego cambia solo según lo último que toques, y los botones táctiles se ocultan con teclado o mando. Te mueves hacia donde miras: el stick o `WASD` van adelante, atrás y de lado. Con el sigilo activado, además te agachas.
 
 | Acción | Táctil | Teclado / ratón | Mando (por defecto) |
 |---|---|---|---|
 | Moverte en sigilo, sin ruido | Stick izquierdo con poco recorrido, o botón Sigilo | `WASD` con el sigilo activado (`C`) | Stick izquierdo con poco recorrido, o `B` para fijar el sigilo |
 | Caminar (los pasos se oyen) | Stick izquierdo a fondo | `WASD` | Stick izquierdo a fondo |
 | Correr (más rápido, mucho ruido, gasta aguante) | Stick izquierdo más allá del borde | `WASD` + `Mayús` | Mantener `LT` mientras te mueves |
-| Apuntar la linterna | Stick derecho | Ratón | Stick derecho |
-| Disparar | Stick derecho hasta el borde | Clic izquierdo | `RT` |
+| Mirar (y apuntar la linterna) | Arrastrar en la mitad derecha de la pantalla | Ratón (o `←` `→` para girar) | Stick derecho |
+| Disparar | Botón rojo Disparar (si arrastras desde él, también miras) | Clic izquierdo | `RT` |
 | Usar: registrar, hackear, arrastrar y esconder cuerpos (volver a pulsar cancela) | Botón Usar (aparece al acercarte) | `Espacio` | `A` |
 | Cuchillo: casi silencioso; a los civiles los reduce sin matarlos | Cuchillo | `E` / clic derecho | `RB` |
 | Granada: vuela en arco, rebota, abre paredes | Granada | `G` | `LB` |
@@ -47,6 +47,8 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
 | Inhibidor de cámaras (si lo compraste) | Botón del inhibidor | `J` | `R3` (pulsar el stick derecho) |
 | Lista de objetivos | Tocar la lista | `O` | `Select` / `View` |
 | Pausa | Botón Pausa | `Esc` | `Start` / `Menu` |
+
+**Ayuda de apuntado:** en táctil y con mando, al disparar la mira se deja llevar un poco hacia el guardia iluminado más cercano. La granada llega más lejos cuanto más arriba mires.
 
 **En la persecución:** el stick derecho (o el ratón) mueve la mira y `RT` (o el clic) dispara. Con el mando y en táctil hay ayuda de apuntado: la mira se deja llevar hacia el perseguidor más cercano. El stick izquierdo (o `WASD`) le dice al conductor que cambie de carril, acelere o frene, y la granada (`LB` o `G`) vuela hasta el punto bajo la mira.
 
@@ -194,7 +196,7 @@ En algunas misiones, al huir te persiguen para recuperar el botín. Vas asomado 
 
 ### Ajustes y guardado
 
-- **Ajustes,** desde el menú y la pausa: volumen de música y de efectos, vibración, sensibilidad de la mira y mira láser. Se guardan aparte de la partida.
+- **Ajustes,** desde el menú y la pausa: volumen de música y de efectos, sensibilidad de la mira, campo de visión, calidad gráfica (alta, media o baja: la resolución del 3D, para móviles lentos), sombras de la linterna, vibración y mira láser. Se guardan aparte de la partida.
 - **Ranuras de guardado:** tres partidas independientes.
   - Cada una se guarda sola al entrar en cada misión y en la tienda.
   - «Continuar» retoma la ranura activa, y «Nueva partida» pide confirmación.
@@ -202,9 +204,17 @@ En algunas misiones, al huir te persiguen para recuperar el botín. Vas asomado 
 
 ### Gráficos y sonido
 
-- **Mapa:** se hornea por misión con texturas de suelo, grano y la luz de las lámparas con sus sombras. Los muros tienen altura y sombras en dos capas: nítidas al pie y una penumbra larga y difuminada.
-- **Personajes:** vistos desde arriba, con piernas que se mueven, brazos con el arma y chaleco, casco, gorra o máscara según el tipo. Los cadáveres quedan tendidos sobre un charco de sangre que se extiende, con salpicaduras alargadas y rastro.
-- **Efectos:** balas trazadoras, fogonazos, casquillos que tintinean al caer y explosiones con bola de fuego, onda, brasas, cascotes y humo.
+- **Primera persona en 3D (Three.js):** la partida se sigue simulando en el plano (casillas, visión, ruido, balas, IA); la vista la convierte en un mundo 3D.
+  - **Mundo:** muros, ventanas con cristal, puertas de seguridad, mesas, estanterías, racks, cajas de seguridad, contenedores, setos y árboles salen del mapa con su altura y sus texturas. Las fachadas son de ladrillo por fuera y de yeso por dentro, y hay techos y escaleras con su hueco.
+  - **Destrucción:** el mapa se construye por trozos, y al romper una pared o una ventana solo se rehace el trozo afectado.
+  - **Suelo:** usa el mismo horneado de siempre, así que la sangre, los casquillos, los cascotes y los charcos quedan pintados en él.
+  - **Luz:** la de las lámparas se hornea en suelos, paredes, techos y personas. La linterna (con sombras, si las activas), el halo, los fogonazos, las explosiones, el brillo del botín y las sirenas son luces de verdad. Fuera, cielo con estrellas, luna, niebla y la silueta de la ciudad.
+  - **Personas:** guardias, policías, civiles, perros, drones y jefes hechos de bloques, con piernas que andan, brazos que sujetan el arma, gorra, casco, capucha, máscara o pelo. Los cadáveres quedan tendidos sobre su charco. Arriba de la cabeza, `?` (sospecha) y `!` (te han visto), solo si los ves.
+  - **Arma en primera persona:** cada arma con su forma (silenciador y láser incluidos) y con retroceso, balanceo al andar, recarga, cambio de arma, cuchillo y lanzamiento.
+  - **HUD:** mira que se abre con la dispersión y marca los impactos. Minimapa que gira contigo (muros, objetivo, tu ruido, y los guardias y cámaras que ves con su cono). Rombo con la distancia al objetivo (o flecha si queda detrás) y avisos alrededor de la mira hacia quien te oye o te ve.
+  - **Efectos:** trazadoras, fogonazos, casquillos, chispas, humo, bola de fuego y lluvia que solo cae donde no hay techo. Los conos de visión de guardias y cámaras se ven en el suelo cuando les da tu luz.
+  - **Menú:** de fondo, la cámara recorre despacio los pasillos de un edificio.
+- **Persecución:** sigue en su perspectiva propia, asomado por el techo del coche.
 - **Sonido:** sintetizado, con reverberación y panorama.
 - **Música:** también sintetizada.
   - En el menú, synthwave oscura.
@@ -218,7 +228,9 @@ SHOTS=capturas node test/smoke.js   # además guarda capturas
 node test/pad.js                    # el mando, con un gamepad simulado
 ```
 
-`test/pad.js` comprueba que se detecta el mando, que se navega por los menús con la cruceta, que se mueve, apunta y dispara, el sigilo con `B`, la pausa con `Start`, los deslizadores de Ajustes, la reasignación de botones (con intercambio y guardado) y la mira y el disparo en la persecución.
+Las pruebas dibujan el 3D en calidad baja (el WebGL por software de Chromium sin pantalla va justo de relleno; la lógica es la misma).
+
+`test/pad.js` comprueba que se detecta el mando, que se navega por los menús con la cruceta, que se mueve hacia delante, gira la vista y dispara, el sigilo con `B`, la pausa con `Start`, los deslizadores de Ajustes, la reasignación de botones (con intercambio y guardado) y la mira y el disparo en la persecución.
 
 La prueba de humo comprueba:
 
@@ -246,14 +258,14 @@ La prueba de humo comprueba:
   - Ráfaga de la carabina y lanzagranadas que abre paredes.
   - Escalera, C4 y ventanas.
   - Todos los tipos de enemigo, el escudo y el perro.
-  - El aviso de dirección y la oscuridad.
+  - El aviso de dirección. Oscuridad en 3D: se lee el píxel de un guardia en el lienzo WebGL, que apenas se ve sin luz y se ilumina con la linterna.
   - La IA reacciona, y el cuchillo elimina por la espalda.
 - **Jefe:** con él vivo la salida está bloqueada; al vencerlo sale la pantalla de victoria.
 - **Partida:**
-  - Sticks táctiles y munición limitada.
+  - Que el juego arranca en 3D. Controles táctiles: el stick avanza hacia donde miras, arrastrar a la derecha gira la vista y el botón dispara. Munición limitada.
   - Consumibles: las vendas curan 25.
   - Ajustes y ranuras.
   - Tienda, reintento, guardado y continuar.
   - Una partida corrupta no se ofrece.
 - **Tutorial:** se completan los diez pasos y vuelve al menú con el aviso.
-- **PC:** sin botones táctiles, el clic dispara y se apunta hacia el ratón.
+- **PC:** sin botones táctiles, el ratón gira la vista y el clic dispara.
