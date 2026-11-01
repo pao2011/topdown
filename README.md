@@ -17,7 +17,7 @@ Sin compilación: `index.html` + `game.js`, y [Three.js](https://threejs.org) r1
 
 ```
 keytool -genkeypair -keystore apagon.jks -alias apagon -keyalg RSA -keysize 2048 -validity 10000   # una vez
-ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=2.0 CODE=8 android/build.sh   # → android/out/apagon.apk
+ANDROID_SDK=/ruta/al/sdk KEYSTORE=apagon.jks KS_PASS=... VERSION=2.1 CODE=9 android/build.sh   # → android/out/apagon.apk
 ```
 
 Guarda el keystore y su contraseña. Para instalar una versión nueva encima de la anterior hay que firmarla con la misma clave y con un `CODE` mayor.
@@ -30,11 +30,12 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
 |---|---|---|---|
 | Moverte en sigilo, sin ruido | Stick izquierdo con poco recorrido, o botón Sigilo | `WASD` con el sigilo activado (`C`) | Stick izquierdo con poco recorrido, o `B` para fijar el sigilo |
 | Caminar (los pasos se oyen) | Stick izquierdo a fondo | `WASD` | Stick izquierdo a fondo |
-| Correr (más rápido, mucho ruido, gasta aguante) | Stick izquierdo más allá del borde | `WASD` + `Mayús` | Mantener `LT` mientras te mueves |
+| Correr (más rápido, mucho ruido, gasta aguante) | Stick izquierdo más allá del borde | `WASD` + `Mayús` | Pulsar `L3` (se apaga al pararte) |
 | Mirar (y apuntar la linterna) | Arrastrar en la mitad derecha de la pantalla | Ratón (o `←` `→` para girar) | Stick derecho |
 | Disparar | Botón rojo Disparar (si arrastras desde él, también miras) | Clic izquierdo | `RT` |
+| Apuntar con la mira: zum, mucha más precisión y andas más despacio (los rifles de tirador, con mira telescópica) | Botón Apuntar (se activa y se desactiva) | Mantener el clic derecho | Mantener `LT` |
 | Usar: registrar, hackear, arrastrar y esconder cuerpos (volver a pulsar cancela) | Botón Usar (aparece al acercarte) | `Espacio` | `A` |
-| Cuchillo: casi silencioso; a los civiles los reduce sin matarlos | Cuchillo | `E` / clic derecho | `RB` |
+| Cuchillo: casi silencioso; a los civiles los reduce sin matarlos | Cuchillo | `E` | `RB` |
 | Granada: vuela en arco, rebota, abre paredes | Granada | `G` | `LB` |
 | C4: plantar (casi sin ruido) y, la segunda vez, detonar | C4 | `B` | Cruceta `↑` |
 | Moneda: la lanzas y los guardias van a mirar donde cae | Ruido | `Q` | Cruceta `←` |
@@ -43,7 +44,7 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
 | Recargar (también es automática) | Recargar | `R` | `X` |
 | Cambiar de arma | Recuadro del arma | `1`-`5`, rueda o `Tab` | `Y` |
 | Activar o desactivar el sigilo | Botón Sigilo | `C` | `B` |
-| Láser de la mira | Ajustes | `L` | `L3` (pulsar el stick izquierdo) |
+| Láser de la mira | Ajustes | `L` | Sin botón por defecto (se puede asignar) |
 | Inhibidor de cámaras (si lo compraste) | Botón del inhibidor | `J` | `R3` (pulsar el stick derecho) |
 | Lista de objetivos | Tocar la lista | `O` | `Select` / `View` |
 | Pausa | Botón Pausa | `Esc` | `Start` / `Menu` |
@@ -88,6 +89,13 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
   - Viene en coches patrulla con sirena que paran en la calle.
   - Los policías se distinguen de los guardias por el uniforme azul y la estrella dorada.
   - Después llegan refuerzos cada pocos segundos, también agentes de asalto con casco.
+- **Cuándo se alertan (realista):**
+  - En una entrada a la fuerza (asalto), la alarma ya ha saltado: todos van a por ti.
+  - **Lugares públicos** (banco, oficinas, galería, joyería, casino, museo, la fiesta del yate): puedes pasear por la zona pública como un cliente más. Eso es la calle, el patio y lo que se alcanza por la puerta principal sin cruzar puertas interiores, como el vestíbulo. Nadie te detecta ahí, y las cámaras no te graban como intruso.
+  - **Zona restringida:** tras las puertas interiores, las puertas de servicio de la fachada, la primera planta y la cámara. Si un guardia te ve, primero te echa («¡Eh! ¡Aquí no puede estar!») y, si sigues, te ataca.
+  - **Delito a la vista,** en cualquier zona: disparar, acuchillar, apuntar a alguien con la mira, registrar, hackear, arrastrar un cuerpo o cargar con el botín. Los guardias atacan enseguida y los civiles huyen a llamar a la policía. Un cuerpo a la vista sigue dando la alerta.
+  - **Recintos cerrados de noche** (almacén, centro de datos, tren): dentro de la valla todo es restringido.
+  - El HUD indica en qué zona estás, y el minimapa tiñe de rojo lo restringido.
 - **El botín no siempre hace saltar la alarma:** en bancos, galerías, centros de datos, joyerías, museos y casinos tiene sensor y al cogerlo suena. En el resto, solo suena si te detectan.
 
 ### Objetivos
@@ -127,7 +135,7 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
 ### Escenarios
 
 - **Lugares:**
-  - oficinas, almacén del puerto, galería de arte, banco y centro de datos;
+  - oficinas (recepción con mostrador y sofás, despachos con puestos y sillas, salas de reuniones, de descanso y almacenes), almacén del puerto, galería de arte, banco (vestíbulo con ventanillas, columnas y bancos a lo ancho de la fachada) y centro de datos;
   - joyería: vitrinas y parqué;
   - casino: moqueta, mesas de juego y tragaperras;
   - museo: salas con piezas en peanas;
@@ -139,7 +147,9 @@ Hay tres formas de jugar: pantalla táctil, teclado y ratón, o mando. El juego 
   - hackeándola, y el progreso se guarda si lo dejas a medias;
   - en asalto, con C4.
   Hackear pita, y los guardias cercanos pueden oírlo.
-- **Plantas:** algunos edificios tienen primera planta. Al pisar la escalera subes y la planta baja queda apagada debajo. Cada planta tiene sus guardias, y los ruidos de la otra les llegan muy amortiguados.
+- **Interiores:** cada sala tiene su uso, su suelo, el acabado de sus paredes (madera en los vestíbulos, papel pintado en las salas, paneles en los servidores, bloques en los almacenes) y su luz (plafones en el techo, una lámpara de pie o a oscuras). Hay cuadros colgados, sillas en los puestos y monitores encendidos.
+- **Plantas y escalera:** algunos edificios tienen primera planta. La escalera es un tramo recto que se sube andando: la vista sube contigo, a mitad de tramo pasas a la otra planta y arriba hay un hueco de verdad con barandilla. Solo se entra y se sale por sus extremos. Cada planta tiene sus guardias, y los ruidos de la otra les llegan muy amortiguados.
+- **Saltar por la ventana:** rompe una ventana de la primera planta que dé a la calle o al césped y salta. Caes abajo, te haces algo de daño (10) y el golpe se oye.
 - **Lluvia:** algunas misiones son de noche lluviosa, con:
   - cortinas de lluvia y salpicaduras donde hay luz;
   - charcos que reflejan farolas y linterna;
@@ -209,8 +219,8 @@ En algunas misiones, al huir te persiguen para recuperar el botín. Vas asomado 
   - **Destrucción:** el mapa se construye por trozos, y al romper una pared o una ventana solo se rehace el trozo afectado.
   - **Suelo:** usa el mismo horneado de siempre, así que la sangre, los casquillos, los cascotes y los charcos quedan pintados en él.
   - **Luz:** la de las lámparas se hornea en suelos, paredes, techos y personas. La linterna (con sombras, si las activas), el halo, los fogonazos, las explosiones, el brillo del botín y las sirenas son luces de verdad. Fuera, cielo con estrellas, luna, niebla y la silueta de la ciudad.
-  - **Personas:** guardias, policías, civiles, perros, drones y jefes hechos de bloques, con piernas que andan, brazos que sujetan el arma, gorra, casco, capucha, máscara o pelo. Los cadáveres quedan tendidos sobre su charco. Arriba de la cabeza, `?` (sospecha) y `!` (te han visto), solo si los ves.
-  - **Arma en primera persona:** cada arma con su forma (silenciador y láser incluidos) y con retroceso, balanceo al andar, recarga, cambio de arma, cuchillo y lanzamiento.
+  - **Personas:** guardias, policías, civiles, perros, drones y jefes con formas redondeadas (cabeza esférica, tronco que se estrecha y brazos y piernas en cápsula), con piernas que andan, brazos que sujetan el arma, gorra, casco, capucha, máscara o pelo. Los cadáveres quedan tendidos sobre su charco. Arriba de la cabeza, `?` (sospecha) y `!` (te han visto), solo si los ves.
+  - **Arma en primera persona:** cada arma con su forma (silenciador y láser incluidos) y con retroceso, balanceo al andar, recarga, cambio de arma, cuchillo y lanzamiento. Al apuntar, el arma va al centro con el alza delante del ojo; con los rifles de tirador se ve la mira telescópica, con su retícula.
   - **HUD:** mira que se abre con la dispersión y marca los impactos. Minimapa que gira contigo (muros, objetivo, tu ruido, y los guardias y cámaras que ves con su cono). Rombo con la distancia al objetivo (o flecha si queda detrás) y avisos alrededor de la mira hacia quien te oye o te ve.
   - **Efectos:** trazadoras, fogonazos, casquillos, chispas, humo, bola de fuego y lluvia que solo cae donde no hay techo. Los conos de visión de guardias y cámaras se ven en el suelo cuando les da tu luz.
   - **Menú:** de fondo, la cámara recorre despacio los pasillos de un edificio.
@@ -256,7 +266,8 @@ La prueba de humo comprueba:
   - Caer repite solo la persecución, y al perderlos pasas a la tienda.
 - **Armas y mundo:**
   - Ráfaga de la carabina y lanzagranadas que abre paredes.
-  - Escalera, C4 y ventanas.
+  - Escalera que se sube andando (y por el lado no se entra), saltar por una ventana rota del primer piso, C4 y ventanas.
+  - Zonas del banco: en la pública un guardia no te detecta; en la restringida te avisa y luego ataca. Los civiles no se asustan por verte, pero huyen si disparas.
   - Todos los tipos de enemigo, el escudo y el perro.
   - El aviso de dirección. Oscuridad en 3D: se lee el píxel de un guardia en el lienzo WebGL, que apenas se ve sin luz y se ilumina con la linterna.
   - La IA reacciona, y el cuchillo elimina por la espalda.
@@ -268,4 +279,4 @@ La prueba de humo comprueba:
   - Tienda, reintento, guardado y continuar.
   - Una partida corrupta no se ofrece.
 - **Tutorial:** se completan los diez pasos y vuelve al menú con el aviso.
-- **PC:** sin botones táctiles, el ratón gira la vista y el clic dispara.
+- **PC:** sin botones táctiles, el ratón gira la vista, el clic dispara y el clic derecho apunta (con zum).

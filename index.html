@@ -267,9 +267,9 @@ body.chase #bNoise, body.chase #bBreach, body.chase #bKnife, body.chase #bSneak 
 body.fps.playing #c { cursor: none; }
 .btn.fire { background: rgba(120, 30, 24, .55); border-color: rgba(255, 110, 90, .6); color: #ffb0a0; }
 .btn.fire.press { background: rgba(255, 84, 68, .45); border-color: var(--alarm); }
-body:not(.fps) #bFire { display: none; }
+body:not(.fps) #bFire, body:not(.fps) #bAim { display: none; }
 body.fps #acts { grid-template-columns: auto auto auto; gap: 18px 12px; }
-body.chase #bFire { display: none; }
+body.chase #bFire, body.chase #bAim { display: none; }
 #hud { position: relative; z-index: 5; }
 @media (max-height: 560px) and (orientation: landscape) { .set-panel { width: min(860px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 10px 26px; align-content: center; } .set-panel > h2, .set-panel > .row { grid-column: 1 / -1; } .set-panel .set { font-size: 14px; gap: 10px; } }
 @media (max-height: 340px) and (orientation: landscape) { .set-panel { gap: 7px 22px; } .set-panel .set { font-size: 13px; } .set-panel .bf-title { font-size: 24px !important; } }
@@ -303,6 +303,7 @@ body.chase #bFire { display: none; }
     <button id="bNade" class="btn" aria-label="Granada"><svg viewBox="0 0 24 24"><circle cx="11" cy="14" r="6"/><path d="M11 8V5h4l3 3"/></svg><b id="nadeN">2</b><small>Granada</small></button>
     <button id="bSneak" class="btn" aria-label="Sigilo: activar o desactivar" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 19c2-5 5-8 9-8"/><circle cx="15" cy="6" r="2.2"/><path d="M14 11l3 4-2 4M10 14l-3 5"/></svg><small>Sigilo</small></button>
     <button id="bFire" class="btn big fire" aria-label="Disparar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg><small>Disparar</small></button>
+    <button id="bAim" class="btn" aria-label="Apuntar con la mira (activar o desactivar)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg><small>Apuntar</small></button>
     <button id="bKnife" class="btn big" aria-label="Cuchillo"><svg viewBox="0 0 24 24"><path d="M4 20l5-5"/><path d="M8 16l4 4"/><path d="M10 14L20 4c1 4-1 8-5 11z"/></svg><small>Cuchillo</small></button>
   </div>
   <div id="objs"><button id="bObjs" aria-expanded="false">Objetivos <span id="objsN"></span></button><ul id="objsList" hidden></ul></div>
@@ -344,8 +345,8 @@ body.chase #bFire { display: none; }
       <div><dt>Cuchillo</dt><dd>Casi no hace ruido. Por la espalda o sin que te hayan detectado, elimina al instante.</dd></div>
       <div><dt>Ruido y granadas</dt><dd>El ruido atrae guardias hacia donde estás. Una granada se oye en todo el edificio.</dd></div>
       <div><dt>Luz y sombra</dt><dd>Con la linterna apagada cuesta más verte. Dispara a las lámparas para crear sombras. En los setos no te ven; sobre mesas y coches sí.</dd></div>
-      <div><dt>Teclado y ratón</dt><dd><kbd>WASD</kbd> mover · ratón mirar · clic disparar · <kbd>←</kbd><kbd>→</kbd> girar · <kbd>Mayús</kbd> correr · <kbd>C</kbd> sigilo (activa/desactiva) · <kbd>Espacio</kbd> usar · <kbd>E</kbd>/clic derecho cuchillo · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> moneda · <kbd>H</kbd> consumible · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>L</kbd> láser · <kbd>J</kbd> inhibidor · <kbd>O</kbd> objetivos · <kbd>Esc</kbd> pausa</dd></div>
-      <div><dt>Mando</dt><dd>Se detecta solo al conectarlo (USB o Bluetooth) y pulsar un botón. <kbd>Stick izq.</kbd> mover (poco recorrido = sigilo) · <kbd>LT</kbd> correr · <kbd>Stick der.</kbd> mirar · <kbd>RT</kbd> disparar · <kbd>A</kbd> usar · <kbd>B</kbd> sigilo · <kbd>X</kbd> recargar · <kbd>Y</kbd> cambiar arma · <kbd>RB</kbd> cuchillo · <kbd>LB</kbd> granada · cruceta <kbd>↑</kbd> C4 · <kbd>←</kbd> moneda · <kbd>↓</kbd> consumible · <kbd>→</kbd> linterna · <kbd>L3</kbd> láser · <kbd>R3</kbd> inhibidor · <kbd>Select</kbd> objetivos · <kbd>Start</kbd> pausa. Así vienen por defecto: se pueden reasignar en Ajustes → Botones del mando. En los menús: cruceta o stick para moverte, <kbd>A</kbd> aceptar, <kbd>B</kbd> volver.</dd></div>
+      <div><dt>Teclado y ratón</dt><dd><kbd>WASD</kbd> mover · ratón mirar · clic disparar · <kbd>←</kbd><kbd>→</kbd> girar · <kbd>Mayús</kbd> correr · <kbd>C</kbd> sigilo (activa/desactiva) · <kbd>Espacio</kbd> usar · <kbd>E</kbd> cuchillo · clic derecho apuntar · <kbd>G</kbd> granada · <kbd>B</kbd> C4 (plantar / detonar) · <kbd>Q</kbd> moneda · <kbd>H</kbd> consumible · <kbd>F</kbd> linterna · <kbd>R</kbd> recargar · <kbd>1-5</kbd>, rueda o <kbd>Tab</kbd> arma · <kbd>L</kbd> láser · <kbd>J</kbd> inhibidor · <kbd>O</kbd> objetivos · <kbd>Esc</kbd> pausa</dd></div>
+      <div><dt>Mando</dt><dd>Se detecta solo al conectarlo (USB o Bluetooth) y pulsar un botón. <kbd>Stick izq.</kbd> mover (poco recorrido = sigilo) · <kbd>L3</kbd> esprintar (pulsar) · <kbd>Stick der.</kbd> mirar · <kbd>LT</kbd> apuntar · <kbd>RT</kbd> disparar · <kbd>A</kbd> usar · <kbd>B</kbd> sigilo · <kbd>X</kbd> recargar · <kbd>Y</kbd> cambiar arma · <kbd>RB</kbd> cuchillo · <kbd>LB</kbd> granada · cruceta <kbd>↑</kbd> C4 · <kbd>←</kbd> moneda · <kbd>↓</kbd> consumible · <kbd>→</kbd> linterna · <kbd>R3</kbd> inhibidor (el láser, en Ajustes) · <kbd>Select</kbd> objetivos · <kbd>Start</kbd> pausa. Así vienen por defecto: se pueden reasignar en Ajustes → Botones del mando. En los menús: cruceta o stick para moverte, <kbd>A</kbd> aceptar, <kbd>B</kbd> volver.</dd></div>
       <div><dt>Enemigos</dt><dd>Los perros te huelen de cerca aunque vayas a oscuras. El francotirador te avisa en rojo antes de disparar: corre para esquivarlo. El escudo para las balas de frente: rodéalo o usa una granada. En las misiones 8 y 16 te espera el Alcaide.</dd></div>
       <div><dt>Munición y guardado</dt><dd>La munición es limitada: recoge cajas (los guardias sueltan algunas) o cómprala en la tienda, con tipos especiales para cada arma. La partida se guarda sola al empezar cada misión y en la tienda.</dd></div>
     </dl>

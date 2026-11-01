@@ -32,7 +32,7 @@ const path = require('path');
         const d = A.bfs(A.cellOf(r.start.x, r.start.y));
         let du = null;
         if (r.maps[1]) { A.useFloor(1); du = A.bfs(r.stairs[0]); A.useFloor(0); }
-        return { d, ok: (o, z) => z ? du && du[A.cellOf(o.x, o.y)] >= 0 && d[r.stairs[0]] > 0 : d[A.cellOf(o.x, o.y)] >= 0 };
+        return { d, ok: (o, z) => z ? du && du[A.cellOf(o.x, o.y)] >= 0 && d[r.flights[0].bot[0]] > 0 : d[A.cellOf(o.x, o.y)] >= 0 }; // arriba: se llega al rellano de abajo de la escalera
       };
       const shut = reach(), sealed = !r.doors.length || !shut.ok(r.loot, r.loot.z), out0 = shut.d[A.cellOf(r.exit.x, r.exit.y)] > 5; // la salida nunca exige pasar por la cámara
       for (const dr of r.doors) for (const c of dr.cells) r.maps[dr.z][c] = 0; // abierta con el código o hackeada
@@ -176,7 +176,7 @@ const path = require('path');
       if (A.castRay(e.x, e.y, c, s, 90) >= 90) {
         r.p.x = e.x + c * 70; r.p.y = e.y + s * 70; r.p.z = e.z;
         Object.assign(e, { state: 'patrol', aware: 0, path: null, a: t, waitT: 5, lookA: t, lookT: 5 });
-        window.__target = e;
+        window.__target = e; if (r.rz) r.rz[e.z].fill(1); // donde no debes estar
         r.enemies.splice(0, r.enemies.length, e); // solo él: que no lo distraigan los disparos de otros
         return 0;
       }
@@ -242,7 +242,7 @@ const path = require('path');
       A.useFloor(e.z);
       if (A.castRay(e.x, e.y, -Math.cos(t), -Math.sin(t), 75) < 75 || r.maps[e.z][A.cellOf(e.x - Math.cos(t) * 60, e.y - Math.sin(t) * 60)] === 8) continue; // sobre una escalera cambiarías de planta
       Object.assign(e, { type: 'dog', r: 10, hp: 45, state: 'patrol', aware: 0, alertLvl: 0, a: t, lookA: t, waitT: 9, lookT: 9 });
-      A.run.light = false; r.p.x = e.x - Math.cos(t) * 60; r.p.y = e.y - Math.sin(t) * 60; r.p.z = e.z; r.p.vx = r.p.vy = 0;
+      A.run.light = false; r.p.x = e.x - Math.cos(t) * 60; r.p.y = e.y - Math.sin(t) * 60; r.p.z = e.z; r.p.vx = r.p.vy = 0; if (r.rz) r.rz[e.z].fill(1); // en zona restringida (al cliente de un sitio público no lo muerde)
       await new Promise(f => setTimeout(f, 1200));
       A.run.light = true; A.run.hp = 100;
       return e.state === 'combat' ? e.state : JSON.stringify({ st: e.state, aware: e.aware, d: Math.hypot(e.x - r.p.x, e.y - r.p.y), ez: e.z, pz: r.p.z, dead: r.p.dead, alive: r.enemies.includes(e), state: A.state });
@@ -376,7 +376,9 @@ const path = require('path');
     const c = r.enemies.find(e => e.type === 'civil'); if (!c) return null;
     r.enemies.splice(0, r.enemies.length, c); A.run.hp = 999; A.useFloor(c.z);
     for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4; if (A.castRay(c.x, c.y, Math.cos(t), Math.sin(t), 90) >= 90) { Object.assign(r.p, { x: c.x + Math.cos(t) * 70, y: c.y + Math.sin(t) * 70, z: c.z }); Object.assign(c, { a: t, lookA: t, waitT: 9, lookT: 9 }); break; } }
-    A.run.light = true; for (let i = 0; i < 20 && c.state !== "panic"; i++) await wait(250); const seen = c.state;
+    A.run.light = true; await wait(1500); const calm = c.state !== 'panic' || r.rz[r.p.z][A.cellOf(r.p.x, r.p.y)] === 1; // en la zona pública, verte no basta
+    r.p.a = c.a; A.shoot(); // un disparo (hacia otro lado): eso sí
+    for (let i = 0; i < 20 && c.state !== "panic"; i++) await wait(250); const seen = calm ? c.state : 'no-calm';
     r.enemies.forEach(e => { if (e.callT > 0) e.callT = 0.05; }); await wait(200);
     const called = r.alarm && !r.police;
     r.policeT = 0.05; await wait(300);
@@ -390,7 +392,8 @@ const path = require('path');
   // cuerpos que se arrastran y se esconden, y una moneda que atrae a un guardia
   const stealth = await ev(async () => {
     const A = __apagon, wait = ms => new Promise(f => setTimeout(f, ms)), out = {};
-    A.run.level = 2; A.startRoom(); const r = A.room, guard = r.enemies.find(e => e.z === 0 && e.type === 'guard'), foe = r.enemies.find(e => e.z === 0 && !e.type.startsWith('civ'));
+    A.run.level = 2; A.startRoom(); const r = A.room, guards = r.enemies.filter(e => e.z === 0 && ['guard', 'heavy', 'elite', 'shield'].includes(e.type)), foe = r.enemies.find(e => e.z === 0 && !e.type.startsWith('civ'));
+    let guard = guards[0];
     r.enemies.length = 0; A.run.hp = 999; A.run.light = true;
     const d = r.idoors.find(d => d.z === 0);
     if (d) {
@@ -418,7 +421,9 @@ const path = require('path');
     }
     if (guard) {
       r.enemies.push(guard); Object.assign(guard, { state: 'patrol', waitT: 9, lookT: 9, aware: 0 });
-      for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; if (A.castRay(guard.x, guard.y, Math.cos(t), Math.sin(t), 260) >= 250) { Object.assign(r.p, { x: guard.x + Math.cos(t) * 240, y: guard.y + Math.sin(t) * 240, z: 0, a: t + Math.PI, noiseT: 0 }); break; } }
+      let spot = null; A.useFloor(0); // un guardia con hueco despejado delante para tirarle la moneda
+      for (const gg of guards) { for (let i = 0; i < 8 && !spot; i++) { const t = i * Math.PI / 4; if (A.castRay(gg.x, gg.y, Math.cos(t), Math.sin(t), 210) >= 200) spot = { g: gg, t }; } if (spot) break; }
+      if (spot) { guard = spot.g; r.enemies.splice(0, r.enemies.length, guard); Object.assign(guard, { state: 'patrol', waitT: 9, lookT: 9, aware: 0 }); Object.assign(r.p, { x: guard.x + Math.cos(spot.t) * 180, y: guard.y + Math.sin(spot.t) * 180, z: 0, a: spot.t + Math.PI, noiseT: 0 }); }
       document.getElementById('bNoise').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       const pa = r.p.a; let land = null; const spy = setInterval(() => { const c = (r.coins || [])[0]; if (c) land = [Math.round(Math.hypot(c.tx - guard.x, c.ty - guard.y)), c.done]; }, 20);
       for (let i = 0; i < 12 && guard.state === 'patrol'; i++) await wait(250); // la moneda tarda en caer
@@ -437,19 +442,45 @@ const path = require('path');
   const plan = await ev(() => { const A = __apagon, c = A.run.plan, cost = [c.entry, ...c.tools].reduce((a, k) => a + ({ sewer: 120, pick: 120, disguise: 200 }[k] || 0), 0); A.run.money -= cost; c.paid = [c.entry, ...c.tools]; A.startRoom(); const r = A.room; return { money: A.run.money, inside: A.zoneAt(Math.floor(r.p.y / 40) * r.W + Math.floor(r.p.x / 40)) === 1, pick: r.pick, disguise: r.disguise }; });
   assert.deepStrictEqual(plan, { money: 560, inside: true, pick: true, disguise: true });
 
-  // Primera planta: al pisar la escalera subes; al volver a pisarla, bajas
+  // Escalera de verdad: se sube andando (la altura crece por el tramo y a mitad pasas a la primera planta) y se baja igual; por el lado no se entra
   const upSeed = await ev(() => { const A = __apagon; for (let s = 1; s < 300; s++) if (A.buildRoom(3, s + 3 * 977).maps.length === 2) return s; return -1; });
   assert(upSeed > 0, 'debe haber salas con primera planta');
   await page.evaluate(s => { const A = __apagon; A.run.level = 3; A.run.seed = s; A.startRoom(); }, upSeed);
-  const climb = await ev(async () => {
-    const r = __apagon.room, c = r.stairs[0], wait = ms => new Promise(f => setTimeout(f, ms));
-    r.enemies.length = 0;
-    r.p.x = (c % r.W) * 40 + 20; r.p.y = ((c / r.W) | 0) * 40 + 20; r.p.onStairs = false;
-    await wait(150); const z1 = r.p.z;
-    r.p.onStairs = false; await wait(150);
-    return [z1, r.p.z];
+  await ev(() => {
+    const A = __apagon, r = A.room, F = r.flights[0], p = r.p, dir = F.vert ? [0, F.up] : [F.up, 0];
+    r.enemies.length = 0; r.cams.length = 0;
+    const [a, b] = F.bot, bx = ((a % r.W) + (b % r.W) + 1) / 2 * 40, by = (((a / r.W) | 0) + ((b / r.W) | 0) + 1) / 2 * 40;
+    Object.assign(p, { x: bx, y: by, z: 0, a: Math.atan2(dir[1], dir[0]), vx: 0, vy: 0 });
   });
-  assert.deepStrictEqual(climb, [1, 0], 'la escalera lleva arriba y abajo');
+  const pz = () => ev(() => [__apagon.room.p.z, Math.round(__apagon.room.p.hz || 0)]);
+  const climb = [];
+  await page.keyboard.down('KeyW'); await page.waitForFunction(() => __apagon.room.p.hz > 5, null, { timeout: 6000 }).catch(() => {}); climb.push(...await pz()); // a medio camino
+  await page.waitForFunction(() => __apagon.room.p.hz >= 134, null, { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(300); await page.keyboard.up('KeyW'); climb.push(...await pz()); // arriba
+  await page.keyboard.down('KeyS'); await page.waitForFunction(() => __apagon.room.p.z === 0 && !__apagon.room.p.hz, null, { timeout: 8000 }).catch(() => {}); await page.keyboard.up('KeyS'); climb.push(...await pz()); // y abajo
+  assert(climb[0] === 0 && climb[1] > 5 && climb[1] < 67, 'a medio tramo, subiendo: ' + climb);
+  assert(climb[2] === 1 && climb[3] === 134, 'arriba, en la primera planta: ' + climb);
+  assert(climb[4] === 0 && climb[5] === 0, 'y bajando, en la planta baja: ' + climb);
+  // Saltar por una ventana rota del primer piso: caes a la calle (y te haces algo de daño)
+  const win = await ev(() => { const A = __apagon, r = A.room, W = r.W; A.useFloor(1);
+    for (let c = 0; c < W * r.H; c++) if (r.maps[1][c] === 5) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const out = c + dy * W + dx, inn = c - dy * W - dx;
+      if (r.maps[1][out] === 9 && r.maps[1][inn] === 0 && !r.zone[out] && r.maps[0][out] === 0) { const x = (c % W) * 40 + 20, y = ((c / W) | 0) * 40 + 20; Object.assign(r.p, { z: 1, hz: 134, x: x - dx * 40, y: y - dy * 40, a: Math.atan2(dy, dx) }); A.run.hp = 100;
+        r.bullets.push({ x: r.p.x + dx * 20, y: r.p.y + dy * 20, z: 1, vx: dx * 900, vy: dy * 900, dmg: 26, mine: true, life: 1 }); return true; } }
+    return false; });
+  if (win) {
+    await page.waitForFunction(() => { const A = __apagon, p = A.room.p; return A.room.maps[1][A.cellOf(p.x + Math.cos(p.a) * 40, p.y + Math.sin(p.a) * 40)] === 0; }, null, { timeout: 4000 });
+    await page.keyboard.down('KeyW'); await page.waitForFunction(() => __apagon.room.p.z === 0 && __apagon.room.p.fallV === undefined && !__apagon.room.p.hz, null, { timeout: 6000 }).catch(() => {}); await page.keyboard.up('KeyW');
+    assert.deepStrictEqual(await ev(() => [__apagon.room.p.z, Math.round(__apagon.run.hp)]), [0, 90], 'por la ventana rota del primer piso se salta a la calle');
+  } else console.warn('aviso: sin ventana del primer piso sobre la calle');
+  // Zonas (banco): en la zona pública un guardia no te detecta; en la restringida te avisa y luego te ataca
+  const zones = await ev(async () => { const A = __apagon, wait = ms => new Promise(f => setTimeout(f, ms)); A.run.level = 5; A.startRoom(); const r = A.room, p = r.p, out = {};
+    const pub = [], res = []; for (let c = 0; c < r.W * r.H; c++) if (r.zone[c] && r.maps[0][c] === 0) (r.rz[0][c] ? res : pub).push(c);
+    const g = r.enemies.find(e => ['guard', 'heavy', 'elite', 'shield'].includes(e.type)); r.enemies.splice(0, r.enemies.length, g); r.cams.length = 0; g.z = 0;
+    const place = cell => { A.useFloor(0); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, q = { x: (cell % r.W) * 40 + 20, y: ((cell / r.W) | 0) * 40 + 20 }; if (A.castRay(q.x, q.y, Math.cos(a), Math.sin(a), 100) >= 100 && !(r.rz[0][A.cellOf(q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80)] ^ r.rz[0][cell])) { Object.assign(g, { x: q.x, y: q.y, a, lookA: a, state: 'patrol', aware: 0, waitT: 99, lookT: 99, path: null, warnedT: 0 }); Object.assign(p, { x: q.x + Math.cos(a) * 80, y: q.y + Math.sin(a) * 80, z: 0, hz: 0, a: a + Math.PI }); return true; } } return false; };
+    out.pub = pub.length > 20 && !!pub.find(place); await wait(2500); out.calm = g.state;
+    out.res = !!res.find(place); await wait(300); for (let i = 0; i < 16 && g.state !== 'combat'; i++) await wait(250); out.warned = r.texts.some(t => /no puede estar/.test(t.text)) || g.warnedT === 1; out.hostile = g.state;
+    return out; });
+  assert.deepStrictEqual(zones, { pub: true, calm: 'patrol', res: true, warned: true, hostile: 'combat' }, 'zonas pública y restringida en el banco');
+
 
   // Persecución (misión 4): al subir al coche te persiguen; el stick derecho dispara a sus coches; al perderlos, tienda
   await ev(() => { const A = __apagon; A.run.level = 4; A.startRoom(); const r = A.room; r.enemies.length = 0; r.p.x = r.loot.x; r.p.y = r.loot.y; r.p.z = r.loot.z; });
@@ -591,9 +622,12 @@ const path = require('path');
   assert(await dp.evaluate(a => __apagon.room.p.a - a > 0.2, pa0), 'mover el ratón gira la vista');
   await dp.mouse.down(); await dp.waitForTimeout(400); await dp.mouse.up();
   assert(await dp.evaluate(() => __apagon.run.weapons[0].ammo < 12), 'el clic debe disparar');
+  await dp.mouse.down({ button: 'right' }); await dp.waitForTimeout(500);
+  assert(await dp.evaluate(() => __apagon.room.p.adsK > 0.8 && __apagon.G3.zoom > 1.3), 'el clic derecho apunta con la mira (zum)');
+  await dp.mouse.up({ button: 'right' });
   if (process.env.SHOTS) await dp.screenshot({ path: path.join(process.env.SHOTS, 'desktop.png') });
   // Consumibles: con vendas y herido, H cura poco a poco
-  await dp.evaluate(() => { const A = __apagon; A.room.enemies.length = 0; A.run.items = { vendas: 1 }; A.run.hp = 50; });
+  await dp.evaluate(() => { const A = __apagon; A.room.enemies.length = 0; A.room.bullets.length = 0; A.room.nades.length = 0; A.run.items = { vendas: 1 }; A.run.hp = 50; });
   await dp.keyboard.press('KeyH');
   await dp.waitForFunction(() => !__apagon.room.heal && __apagon.run.hp > 50, null, { timeout: 6000 }).catch(() => {});
   assert.deepStrictEqual(await dp.evaluate(() => [Math.round(__apagon.run.hp), __apagon.run.items.vendas]), [75, 0], 'las vendas curan 25');
